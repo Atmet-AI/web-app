@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import packageJson from "@/package.json"
 
 import { SearchForm } from "@/components/search-form"
 import {
@@ -157,6 +158,19 @@ const navItems = [
     icon: IconApps,
   },
 ]
+
+function AppVersionMarker() {
+  return (
+    <div className="flex items-center gap-1.5 px-4 py-3">
+      <span className="whitespace-nowrap text-[10px] text-sidebar-foreground/55">
+        Version {packageJson.version}
+      </span>
+      <Badge variant="blue" size="sm" className="pointer-events-none shrink-0">
+        Alpha
+      </Badge>
+    </div>
+  )
+}
 const baseSettingsSections = [
   "Account",
   "Workspace",
@@ -6757,6 +6771,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           </div>
                         ))}
                       </nav>
+                      <div>
+                        <AppVersionMarker />
+                      </div>
                     </aside>
 
                     <div className="flex min-w-0 flex-1 flex-col">
@@ -6808,6 +6825,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         )}
                       </div>
                     </nav>
+                    <div>
+                      <AppVersionMarker />
+                    </div>
                   </aside>
 
                   <div className="flex min-w-0 flex-1 flex-col">

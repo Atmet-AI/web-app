@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import packageJson from "@/package.json"
 
 import {
   DropdownMenu,
@@ -169,10 +170,31 @@ export function VersionSwitcher({
                 </Badge>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Crown className="h-4 w-4 opacity-80" />
-                Upgrade plan (soon)
+              <DropdownMenuItem className="justify-between gap-3" disabled>
+                <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+                  <Crown className="h-4 w-4 opacity-80" />
+                  Upgrade plan
+                </span>
+                <Badge
+                  variant="red"
+                  size="sm"
+                  className="pointer-events-none shrink-0"
+                >
+                  Coming later
+                </Badge>
               </DropdownMenuItem>
+              <div className="flex items-center gap-1.5 px-1.5 py-1">
+                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                  Version {packageJson.version}
+                </span>
+                <Badge
+                  variant="blue"
+                  size="sm"
+                  className="pointer-events-none shrink-0"
+                >
+                  Alpha
+                </Badge>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
           <button
