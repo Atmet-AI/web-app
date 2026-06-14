@@ -887,7 +887,7 @@ export default function AI_Prompt({
         continue;
       }
 
-      let removeStart = range.start;
+      const removeStart = range.start;
       let removeEnd = range.end;
 
       if (isBackspaceAfterMentionSpace || inputValue[removeEnd] === " ") {
