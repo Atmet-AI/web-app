@@ -3,6 +3,8 @@ import Image from "next/image"
 
 import { AuthModeSwitch } from "@/components/auth-mode-switch"
 import { AuthPageTransition } from "@/components/auth-page-transition"
+import { AuthCapabilityShowcase } from "@/components/auth-capability-showcase"
+import { FlickeringGrid } from "@/components/ui/flickering-grid"
 
 export default function AuthLayout({
   children,
@@ -47,7 +49,30 @@ export default function AuthLayout({
         <AuthModeSwitch />
       </section>
 
-      <aside aria-hidden="true" className="hidden bg-sidebar dark:bg-black lg:block" />
+      <aside
+        aria-label="What Atmet can do"
+        className="relative hidden overflow-hidden bg-sidebar dark:bg-black lg:block"
+      >
+        <FlickeringGrid
+          color="rgb(0, 0, 0)"
+          squareSize={3}
+          gridGap={4}
+          flickerChance={0.25}
+          maxOpacity={0.18}
+          aria-hidden="true"
+          className="absolute inset-0 [mask-image:linear-gradient(to_bottom,black_0%,transparent_36%,transparent_64%,black_100%)] dark:hidden"
+        />
+        <FlickeringGrid
+          color="rgb(255, 255, 255)"
+          squareSize={3}
+          gridGap={4}
+          flickerChance={0.25}
+          maxOpacity={0.16}
+          aria-hidden="true"
+          className="absolute inset-0 hidden [mask-image:linear-gradient(to_bottom,black_0%,transparent_36%,transparent_64%,black_100%)] dark:block"
+        />
+        <AuthCapabilityShowcase />
+      </aside>
     </div>
   )
 }

@@ -590,6 +590,11 @@
     color: #0085ef !important;
   }
 
+  .dark .ui-badge-blue {
+    background-color: color-mix(in srgb, #0085ef 18%, transparent) !important;
+    color: #46b4ff !important;
+  }
+
   .ui-badge-green {
     @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300;
   }

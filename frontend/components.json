@@ -26,6 +26,7 @@
     "@kokonutui": "https://kokonutui.com/r/{name}.json",
     "@ss-components": "https://shadcnstudio.com/r/components/{name}.json",
     "@reui": "https://reui.io/r/{style}/{name}.json",
-    "@spell": "https://spell.sh/r/{name}.json"
+    "@spell": "https://spell.sh/r/{name}.json",
+    "@magicui": "https://magicui.design/r/{name}"
   }
 }
