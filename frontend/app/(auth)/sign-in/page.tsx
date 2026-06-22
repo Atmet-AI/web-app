@@ -158,7 +158,7 @@ export default function SignInPage() {
 
       localStorage.setItem("atmet_token", payload.token)
       localStorage.setItem("atmet_user", JSON.stringify(payload.user))
-      router.push("/onboarding")
+      router.replace("/ai-core")
     } catch {
       showToast("Something went wrong. Please try again.")
     } finally {
