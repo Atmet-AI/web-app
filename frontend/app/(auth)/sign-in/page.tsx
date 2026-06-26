@@ -144,8 +144,14 @@ export default function SignInPage() {
         return
       }
 
-      window.dispatchEvent(new CustomEvent("atmet-user-updated"))
-      router.push("/ai-core")
+      if (!payload.success || !payload.token || !payload.user) {
+        showToast("Something went wrong. Please try again.")
+        return
+      }
+
+      localStorage.setItem("atmet_token", payload.token)
+      localStorage.setItem("atmet_user", JSON.stringify(payload.user))
+      router.replace("/ai-core")
     } catch {
       showToast("Something went wrong. Please try again.")
     } finally {
