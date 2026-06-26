@@ -1,25 +1,70 @@
-import { NextResponse } from "next/server"
+import { type NextRequest } from "next/server"
+import { getUser } from "@/lib/api/auth"
+import { getWorkspaceId } from "@/lib/api/workspace"
+import { ok, Errors } from "@/lib/api/response"
+import { getCatalogIntegration } from "@/lib/integrations-catalog"
 
-import { disconnectIntegration, getIntegration } from "@/lib/integrations-store"
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const auth = await getUser()
+  if (!auth.ok) return auth.response
 
-export async function GET(_: Request, context: { params: Promise<{ slug: string }> }) {
-  const { slug } = await context.params
-  const integration = getIntegration(slug)
+  const ws = getWorkspaceId(request)
+  const { slug } = await params
 
-  if (!integration) {
-    return NextResponse.json({ message: "Integration not found." }, { status: 404 })
+  const catalog = getCatalogIntegration(slug)
+  if (!catalog) return Errors.notFound("Integration")
+
+  if (!ws.ok) {
+    return ok({
+      integration: {
+        ...catalog,
+        connected: false,
+      },
+    })
   }
 
-  return NextResponse.json(integration)
+  const { supabase } = auth
+
+  const { data: db } = await supabase
+    .from("integration")
+    .select("status, connected_at")
+    .eq("workspace_id", ws.workspaceId)
+    .eq("slug", slug)
+    .maybeSingle()
+
+  return ok({
+    integration: {
+      ...catalog,
+      connected: !!db,
+      status: db?.status ?? undefined,
+      connected_at: db?.connected_at ?? undefined,
+    },
+  })
 }
 
-export async function DELETE(_: Request, context: { params: Promise<{ slug: string }> }) {
-  const { slug } = await context.params
-  const result = disconnectIntegration(slug)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const auth = await getUser()
+  if (!auth.ok) return auth.response
 
-  if (!result.success) {
-    return NextResponse.json({ success: false, message: "Integration not found." }, { status: 404 })
-  }
+  const ws = getWorkspaceId(request)
+  if (!ws.ok) return ws.response
 
-  return NextResponse.json({ success: true })
+  const { supabase } = auth
+  const { slug } = await params
+
+  const { error } = await supabase
+    .from("integration")
+    .delete()
+    .eq("workspace_id", ws.workspaceId)
+    .eq("slug", slug)
+
+  if (error) return Errors.internal()
+
+  return ok({ success: true })
 }

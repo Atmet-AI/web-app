@@ -32,9 +32,19 @@ export default function ForgotPasswordPage() {
     if (isSubmitting) return
 
     setIsSubmitting(true)
-    await new Promise((resolve) => window.setTimeout(resolve, 500))
-    setIsSubmitting(false)
-    setIsSubmitted(true)
+    try {
+      await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      })
+      // Always show success — don't leak whether the email exists
+      setIsSubmitted(true)
+    } catch {
+      setError("Something went wrong. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (

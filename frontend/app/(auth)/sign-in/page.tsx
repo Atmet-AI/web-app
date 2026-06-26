@@ -123,27 +123,20 @@ export default function SignInPage() {
       })
 
       const payload = (await response.json()) as {
-        success?: boolean
-        error?: string
-        token?: string
-        user?: {
-          id: string
-          name: string
-          email: string
-          role: string
-        }
+        data?: { user: { id: string; email: string; full_name: string | null } }
+        error?: { code: string; message: string }
       }
 
       if (!response.ok) {
-        if (payload.error === "invalid_credentials") {
+        const code = payload.error?.code ?? ""
+
+        if (code === "unauthorized") {
           setErrors({ password: "Incorrect email or password" })
           return
         }
 
-        if (payload.error === "unverified_email") {
-          setErrors({
-            email: "Please verify your email first.",
-          })
+        if (code === "forbidden") {
+          setErrors({ email: "Please verify your email first." })
           return
         }
 

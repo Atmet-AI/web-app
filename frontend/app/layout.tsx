@@ -8,6 +8,7 @@ import { PlatformNavbar } from "@/components/platform-navbar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { WorkspaceProvider } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 
 const fontSans = Geist({
@@ -41,6 +42,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
+          <WorkspaceProvider>
           <TooltipProvider>
             <SidebarProvider>
               <Suspense fallback={null}>
@@ -54,6 +56,7 @@ export default function RootLayout({
               </SidebarInset>
             </SidebarProvider>
           </TooltipProvider>
+          </WorkspaceProvider>
         </ThemeProvider>
       </body>
     </html>

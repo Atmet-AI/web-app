@@ -1,4 +1,7 @@
-import { NextResponse } from "next/server"
+import { type NextRequest } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { ok, Errors } from "@/lib/api/response"
+import { signInSchema } from "@/lib/validations/auth"
 
 import {
   TEMP_AUTH_COOKIE,
@@ -13,8 +16,8 @@ type SignInPayload = {
   password?: string
 }
 
-export async function POST(request: Request) {
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  const { email, password } = parsed.data
+  const supabase = await createClient()
 
   const body = (await request.json()) as SignInPayload
   const email = body.email?.trim().toLowerCase()

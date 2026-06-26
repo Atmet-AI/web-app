@@ -28,6 +28,7 @@ import {
 import { ContextMenu5Wrapper } from "@/components/examples/c-context-menu-5"
 import { Badge } from "@/registry/spell-ui/badge"
 import { cn } from "@/lib/utils"
+import { useWorkspace } from "@/lib/workspace-context"
 import { getWorkflowProject, type WorkflowProject } from "@/lib/workflow-projects"
 import {
   WORKFLOW_OPEN_LOG_EVENT,
@@ -66,6 +67,7 @@ type WorkflowNode = {
   usedApps: string[]
   usedSkills: string[]
   files: string[]
+  chatId?: string
   x: number
   y: number
 }
@@ -304,41 +306,22 @@ function getOrthogonalWirePath(
 }
 
 function buildNodes(project: WorkflowProject): WorkflowNode[] {
-  const lastRanSamples = ["Just now", "3 min ago", "11 min ago", "1 hr ago"]
-  const skillPool = [
-    "Summarization",
-    "Entity Extraction",
-    "Risk Scoring",
-    "Route to Owner",
-    "Compliance QA",
-    "Action Planner",
-  ]
-
   return project.steps.map((step, index) => ({
     id: `${project.id}-node-${index + 1}`,
-    nodeType: "Action",
+    nodeType: step.nodeType ?? "Action",
     stepName: step.name,
     status: step.status,
     executionStatus: "idle",
     owner: step.owner,
-    provider: index % 2 === 0 ? "Anthropic" : "ChatGPT",
-    model: index % 2 === 0 ? "Claude Opus 4.1" : "GPT-5.2",
-    prompt: `Execute "${step.name}" for ${project.title}. Return concise, structured output that can be passed to the next workflow node.`,
-    tokenCount: 290 + index * 38,
-    lastRan: lastRanSamples[index % lastRanSamples.length],
-    usedApps:
-      index % 2 === 0
-        ? [index % 3 === 0 ? "Slack" : "Notion", "Airtable", "ChatGPT"]
-        : ["GitHub", "Asana", "Anthropic"],
-    usedSkills: [
-      skillPool[(index + 1) % skillPool.length],
-      skillPool[(index + 3) % skillPool.length],
-    ],
-    files: [
-      `${step.name.replace(/\s+/g, "_")}_input.pdf`,
-      `${step.name.replace(/\s+/g, "_")}_notes.txt`,
-      `${step.name.replace(/\s+/g, "_")}_output.json`,
-    ],
+    provider: step.provider ?? "",
+    model: step.model ?? "",
+    prompt: step.prompt ?? "",
+    tokenCount: step.tokenCount ?? 0,
+    lastRan: "—",
+    usedApps: step.usedApps ?? [],
+    usedSkills: step.usedSkills ?? [],
+    files: step.files ?? [],
+    chatId: step.chatId,
     x: snapCanvasCoord(WORKSPACE_OFFSET_X + 110),
     y: snapCanvasCoord(WORKSPACE_OFFSET_Y + 150 + index * 300),
   }))
@@ -362,16 +345,49 @@ function getRunScheduleIntervalMs(runSchedule: WorkflowRunSchedule) {
   return null
 }
 
+function getStepsFromAutomationBlueprint(scriptKey: string | null | undefined) {
+  if (!scriptKey) return null
+
+  try {
+    const parsed = JSON.parse(scriptKey) as {
+      source?: string
+      steps?: WorkflowProject["steps"]
+    }
+
+    if (parsed.source !== "chat-agent" || !Array.isArray(parsed.steps)) {
+      return null
+    }
+
+    const steps = parsed.steps.filter(
+      (step) =>
+        step &&
+        typeof step.name === "string" &&
+        (step.status === "Done" ||
+          step.status === "In review" ||
+          step.status === "Pending") &&
+        typeof step.owner === "string"
+    )
+
+    return steps.length > 0 ? steps : null
+  } catch {
+    return null
+  }
+}
+
 export default function WorkflowProjectPage() {
+  const { apiFetch } = useWorkspace()
   const params = useParams<{ projectId: string }>()
   const projectId = Array.isArray(params?.projectId)
     ? params.projectId[0]
     : params?.projectId
 
-  const project = useMemo(
+  const fixtureProject = useMemo(
     () => (projectId ? getWorkflowProject(projectId) : undefined),
     [projectId]
   )
+  const [databaseProject, setDatabaseProject] = useState<WorkflowProject | null>(null)
+  const [isLoadingProject, setIsLoadingProject] = useState(false)
+  const project = fixtureProject ?? databaseProject
 
   const [nodes, setNodes] = useState<WorkflowNode[]>([])
   const [edges, setEdges] = useState<WorkflowEdge[]>([])
@@ -431,6 +447,69 @@ export default function WorkflowProjectPage() {
     pointerOffsetY: number
   } | null>(null)
   const pointerCanvasPointRef = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    if (!projectId || fixtureProject) {
+      setDatabaseProject(null)
+      setIsLoadingProject(false)
+      return
+    }
+
+    setIsLoadingProject(true)
+    apiFetch(`/api/automations/${projectId}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            automation?: {
+              id: string
+              name: string
+              description: string | null
+              status: "active" | "inactive" | "draft"
+              created_by: string
+              script_key: string | null
+            }
+          }
+        } | null) => {
+          const automation = payload?.data?.automation
+          if (!automation) {
+            setDatabaseProject(null)
+            return
+          }
+
+          const blueprintSteps = getStepsFromAutomationBlueprint(automation.script_key)
+
+          setDatabaseProject({
+            id: automation.id,
+            title: automation.name,
+            description: automation.description ?? "",
+            icon: "checklist",
+            tags: [automation.status],
+            members: [
+              {
+                name: "Automation owner",
+                initials: "AO",
+                tone: "bg-cyan-100 text-cyan-700",
+              },
+            ],
+            steps: blueprintSteps ?? [
+              {
+                name: automation.name,
+                status:
+                  automation.status === "active"
+                    ? "Done"
+                    : automation.status === "draft"
+                      ? "In review"
+                      : "Pending",
+                owner: "Automation owner",
+              },
+            ],
+          })
+        }
+      )
+      .catch(() => setDatabaseProject(null))
+      .finally(() => setIsLoadingProject(false))
+  }, [apiFetch, fixtureProject, projectId])
 
   const setNodeHeightRef = useCallback((nodeId: string, element: HTMLDivElement | null) => {
     if (!element) return
@@ -1759,6 +1838,16 @@ export default function WorkflowProjectPage() {
     runSchedule,
   ])
 
+  if (!project && isLoadingProject) {
+    return (
+      <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 items-center justify-center bg-background px-4 py-10">
+        <div className="rounded-xl border border-border bg-card px-5 py-4 text-center">
+          <p className="text-sm font-medium text-foreground">Loading workflow...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!project) {
     return (
       <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 items-center justify-center bg-background px-4 py-10">
@@ -2276,14 +2365,16 @@ export default function WorkflowProjectPage() {
                     <div className="pt-5">
                       <AIPrompt
                         chatId={
-                          projectId
+                          chatNode.chatId ??
+                          (projectId
                             ? `workflow-node-chat-${projectId}-${nodeId}`
-                            : `workflow-node-chat-${nodeId}`
+                            : `workflow-node-chat-${nodeId}`)
                         }
                         persistChatListEntry={false}
                         hideGreeting
                         glassComposer
                         userFullName={chatNode.owner}
+                        enableCreateAgent={false}
                       />
                     </div>
                   </div>
@@ -2415,7 +2506,7 @@ export default function WorkflowProjectPage() {
                         {index + 1}. {node.stepName}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {node.provider} · {node.owner} · {node.tokenCount} tokens
+                        {[node.provider, node.owner, node.tokenCount ? `${node.tokenCount} tokens` : null].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -2445,10 +2536,6 @@ export default function WorkflowProjectPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
-              For production, connect this panel to backend execution IDs, structured logs,
-              latencies, and failure traces for each node run.
-            </div>
           </div>
         </DialogContent>
       </Dialog>

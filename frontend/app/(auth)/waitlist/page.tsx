@@ -185,9 +185,33 @@ export default function WaitlistPage() {
     if (Object.keys(nextErrors).length > 0 || isSubmitting) return
 
     setIsSubmitting(true)
-    await new Promise((resolve) => window.setTimeout(resolve, 500))
-    setIsSubmitting(false)
-    setIsSubmitted(true)
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: form.fullName.trim(),
+          email: form.email.trim().toLowerCase(),
+          profileType: form.profileType || undefined,
+          company: form.company.trim() || undefined,
+          companySize: form.companySize || undefined,
+          role: form.role || undefined,
+          country: form.country || undefined,
+          referral: form.referral || undefined,
+          notes: form.notes.trim() || undefined,
+        }),
+      })
+      const payload = (await res.json()) as { error?: { message: string } }
+      if (!res.ok) {
+        setErrors({ email: payload.error?.message ?? "Something went wrong. Please try again." })
+        return
+      }
+      setIsSubmitted(true)
+    } catch {
+      setErrors({ email: "Network error. Please try again." })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (

@@ -34,6 +34,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/registry/spell-ui/badge";
 import {
@@ -48,6 +49,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Kbd } from "@/components/ui/kbd";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/lib/workspace-context";
 import {
   Artifact,
   ArtifactAction,
@@ -140,15 +142,6 @@ type AssistantContentSegment =
   | { type: "text"; value: string }
   | { type: "code"; language: string; value: string };
 
-type StoredChatItem = {
-  id: string;
-  title: string;
-  updatedAt: number;
-  pinned?: boolean;
-  path?: string;
-};
-
-const AI_CORE_CHATS_STORAGE_KEY = "ai-core-chats";
 const AI_CORE_CHATS_UPDATED_EVENT = "ai-core-chats-updated";
 
 type AIPromptProps = {
@@ -163,9 +156,11 @@ type AIPromptProps = {
   onConversationActivityChange?: (isActive: boolean) => void;
   onAddUserToChat?: () => void;
   userFullName?: string;
+  enableCreateAgent?: boolean;
 };
 
 const AI_MODELS = [
+  "Atmet",
   "Gemini 3",
   "GPT-5-mini",
   "Claude 4.5 Sonnet",
@@ -173,15 +168,6 @@ const AI_MODELS = [
   "GPT-5-1",
 ] as const;
 
-const SKILLS = [
-  "No skill",
-  "Summarize",
-  "Code Review",
-  "Automation Builder",
-  "Data Analysis",
-] as const;
-
-const APPS = ["Slack", "Notion", "Google Drive", "Gmail"] as const;
 
 export default function AI_Prompt({
   chatId = null,
@@ -195,7 +181,9 @@ export default function AI_Prompt({
   onConversationActivityChange,
   onAddUserToChat,
   userFullName = "Amir Haddad",
+  enableCreateAgent = true,
 }: AIPromptProps) {
+  const router = useRouter();
   const [value, setValue] = useState("");
   const [composerScrollTop, setComposerScrollTop] = useState(0);
   const [activeTab] = useState<"automation" | "chat">("automation");
@@ -203,6 +191,9 @@ export default function AI_Prompt({
   const [selectedSkill, setSelectedSkill] = useState("No skill");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isResponding, setIsResponding] = useState(false);
+  const [resolvedChatId, setResolvedChatId] = useState<string | null>(chatId ?? null);
+  const [creatingAgentMessageId, setCreatingAgentMessageId] = useState<number | null>(null);
+  const [createAgentError, setCreateAgentError] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachmentDraft[]>([]);
   const [assistantFeedback, setAssistantFeedback] = useState<
@@ -223,6 +214,7 @@ export default function AI_Prompt({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachedFilesRef = useRef<AttachmentDraft[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const nextMessageIdRef = useRef(Date.now());
   const activeChatIdRef = useRef<string | null>(null);
   const activeChatTitleRef = useRef<string | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement>(null);
@@ -231,7 +223,7 @@ export default function AI_Prompt({
     minHeight: 72,
     maxHeight: 300,
   });
-  const [selectedModel, setSelectedModel] = useState("Claude 4.5 Sonnet");
+  const [selectedModel, setSelectedModel] = useState("Atmet");
   const fixedSkillName = useMemo(() => {
     if (!fixedCommandBadge) return null;
     const normalized = fixedCommandBadge.trim().replace(/^\//, "").trim();
@@ -241,80 +233,83 @@ export default function AI_Prompt({
     () => (fixedSkillName ? `/${fixedSkillName} ` : ""),
     [fixedSkillName]
   );
+  const firstName = useMemo(
+    () => userFullName.trim().split(/\s+/)[0] || "Amir",
+    [userFullName]
+  );
+  const { apiFetch } = useWorkspace();
+
+  type Integration = { slug: string; name: string; logo: string; connected: boolean };
+  const [availableIntegrations, setAvailableIntegrations] = useState<Integration[]>([]);
+  const [availableSkillNames, setAvailableSkillNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    apiFetch("/api/integrations")
+      .then((r) => r.json())
+      .then((res: { data?: { integrations?: Integration[] } }) => {
+        if (res.data?.integrations) setAvailableIntegrations(res.data.integrations);
+      })
+      .catch(() => {});
+    apiFetch("/api/skills")
+      .then((r) => r.json())
+      .then((res: { data?: { skills?: Array<{ id: string; name: string }> } }) => {
+        if (res.data?.skills) setAvailableSkillNames(res.data.skills.map((s) => s.name));
+      })
+      .catch(() => {});
+  }, [apiFetch]);
+
+  const appNames = useMemo(() => availableIntegrations.map((i) => i.name), [availableIntegrations]);
+  const integrationByName = useMemo(
+    () => new Map(availableIntegrations.map((i) => [i.name.toLowerCase(), i])),
+    [availableIntegrations]
+  );
   const mentionableSkills = useMemo(() => {
-    const baseSkills = SKILLS.filter((skill) => skill !== "No skill");
+    const baseSkills = availableSkillNames;
     if (!fixedSkillName) return baseSkills;
     if (baseSkills.some((skill) => skill.toLowerCase() === fixedSkillName.toLowerCase())) {
       return baseSkills;
     }
     return [fixedSkillName, ...baseSkills];
-  }, [fixedSkillName]);
-  const firstName = useMemo(
-    () => userFullName.trim().split(/\s+/)[0] || "Amir",
-    [userFullName]
-  );
+  }, [fixedSkillName, availableSkillNames]);
 
-  const APP_LOGOS: Record<
-    string,
-    { label: string; bgClass: string; textClass: string }
-  > = {
-    Slack: {
-      label: "S",
-      bgClass: "bg-violet-500/15",
-      textClass: "text-violet-700 dark:text-violet-300",
-    },
-    Notion: {
-      label: "N",
-      bgClass: "bg-foreground/10",
-      textClass: "text-foreground",
-    },
-    "Google Drive": {
-      label: "D",
-      bgClass: "bg-emerald-500/15",
-      textClass: "text-emerald-700 dark:text-emerald-300",
-    },
-    Gmail: {
-      label: "G",
-      bgClass: "bg-rose-500/15",
-      textClass: "text-rose-700 dark:text-rose-300",
-    },
-  };
+  const createClientMessageId = useCallback(() => {
+    nextMessageIdRef.current += 1;
+    return nextMessageIdRef.current;
+  }, []);
 
   const renderAppLogo = (app: string, size: "sm" | "md" | "mention" = "sm") => {
-    const meta = APP_LOGOS[app];
+    const integration = integrationByName.get(app.toLowerCase());
     const baseSize =
       size === "md"
-        ? "h-5 w-5 text-[11px]"
+        ? "h-5 w-5"
         : size === "mention"
-          ? "h-[1.18em] w-[1.18em] text-[0.8em] leading-none"
-          : "h-4 w-4 text-[10px]";
+          ? "h-[1.18em] w-[1.18em]"
+          : "h-4 w-4";
     const radiusClass = size === "mention" ? "rounded-[0.36em]" : "rounded-sm";
 
-    if (!meta) {
+    if (integration?.logo) {
       return (
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center justify-center border border-border/40 bg-muted/70 font-semibold text-muted-foreground",
-            radiusClass,
-            baseSize
-          )}
-        >
-          {app[0]}
-        </span>
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={integration.logo}
+          alt={integration.name}
+          className={cn("inline-block shrink-0 object-contain", radiusClass, baseSize)}
+        />
       );
     }
 
+    const textSize =
+      size === "md" ? "text-[11px]" : size === "mention" ? "text-[0.8em] leading-none" : "text-[10px]";
     return (
       <span
         className={cn(
-          "inline-flex shrink-0 items-center justify-center font-semibold",
+          "inline-flex shrink-0 items-center justify-center border border-border/40 bg-muted/70 font-semibold text-muted-foreground",
           radiusClass,
-          meta.bgClass,
-          meta.textClass,
-          baseSize
+          baseSize,
+          textSize
         )}
       >
-        {meta.label}
+        {app[0]}
       </span>
     );
   };
@@ -427,13 +422,22 @@ export default function AI_Prompt({
     const source =
       commandMenu.type === "skill"
         ? mentionableSkills
-        : APPS;
+        : appNames;
 
     const query = commandMenu.query.trim().toLowerCase();
     return source.filter((item) => item.toLowerCase().includes(query));
-  }, [commandMenu, mentionableSkills]);
+  }, [commandMenu, mentionableSkills, appNames]);
 
   const MODEL_ICONS: Record<string, React.ReactNode> = {
+    Atmet: (
+      <Image
+        src="/Logos/Favicon Atmet.png"
+        alt=""
+        width={16}
+        height={16}
+        className="h-4 w-4 rounded-sm object-contain"
+      />
+    ),
     "GPT-5-mini": OPENAI_SVG,
     "Gemini 3": (
       <svg
@@ -592,15 +596,45 @@ export default function AI_Prompt({
 
   useEffect(() => {
     activeChatIdRef.current = chatId ?? null;
+    setResolvedChatId(chatId ?? null);
 
     if (!chatId) {
       activeChatTitleRef.current = null;
       return;
     }
 
-    const existingChat = readStoredChats().find((chat) => chat.id === chatId);
-    activeChatTitleRef.current = existingChat?.title ?? null;
+    activeChatTitleRef.current = null;
   }, [chatId]);
+
+  useEffect(() => {
+    if (!chatId) {
+      setMessages([]);
+      return;
+    }
+
+    let isCancelled = false;
+    void apiFetch(`/api/chats/${chatId}/messages`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { messages?: Array<{ id: string; role: "user" | "assistant"; content: string }> } } | null) => {
+        if (isCancelled) return;
+        setMessages(
+          (payload?.data?.messages ?? [])
+            .filter((message) => message.role === "user" || message.role === "assistant")
+            .map((message, index) => ({
+              id: index + 1,
+              role: message.role,
+              content: message.content,
+            }))
+        );
+      })
+      .catch(() => {
+        if (!isCancelled) setMessages([]);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiFetch, chatId]);
 
   useEffect(() => {
     const copyTimers = copyTimersRef.current;
@@ -683,13 +717,13 @@ export default function AI_Prompt({
   const extractMentionedApps = useCallback(
     (text: string) => {
       const lowerText = text.toLowerCase();
-      return APPS.filter((app) => {
+      return appNames.filter((app) => {
         const escaped = app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").toLowerCase();
         const pattern = new RegExp(`(^|\\s)@${escaped}(?=\\s|$)`, "i");
         return pattern.test(lowerText);
       });
     },
-    []
+    [appNames]
   );
 
   useEffect(() => {
@@ -765,7 +799,7 @@ export default function AI_Prompt({
     }
 
     const mentionTokens = [
-      ...APPS.map((app) => `@${app}`),
+      ...appNames.map((app) => `@${app}`),
       ...mentionableSkills.map((skill) => `/${skill}`),
     ].sort((a, b) => b.length - a.length);
 
@@ -792,7 +826,7 @@ export default function AI_Prompt({
     inputValue: string,
     cursorPosition: number
   ): { nextValue: string; nextCursor: number } => {
-    const escapedApps = APPS.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
+    const escapedApps = appNames.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
       (a, b) => b.length - a.length
     );
     const escapedSkills = mentionableSkills
@@ -840,7 +874,7 @@ export default function AI_Prompt({
   };
 
   const getMentionRanges = (inputValue: string): Array<{ start: number; end: number }> => {
-    const escapedApps = APPS.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
+    const escapedApps = appNames.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
       (a, b) => b.length - a.length
     );
     const escapedSkills = mentionableSkills
@@ -1069,67 +1103,138 @@ export default function AI_Prompt({
     return normalized.length > 56 ? `${normalized.slice(0, 56)}...` : normalized;
   };
 
-  const readStoredChats = (): StoredChatItem[] => {
-    try {
-      const raw = window.localStorage.getItem(AI_CORE_CHATS_STORAGE_KEY);
-      if (!raw) return [];
-
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-
-      return parsed.filter(
-        (item): item is StoredChatItem =>
-          item &&
-          typeof item === "object" &&
-          typeof item.id === "string" &&
-          typeof item.title === "string" &&
-          typeof item.updatedAt === "number"
-      );
-    } catch {
-      return [];
-    }
-  };
-
   const persistActiveChat = (content: string) => {
-    if (typeof window === "undefined") return;
-
-    const now = Date.now();
-    let chatId = activeChatIdRef.current;
-    if (!chatId) {
-      chatId = `chat-${now}-${Math.random().toString(36).slice(2, 8)}`;
-      activeChatIdRef.current = chatId;
-    }
-
     if (
       !activeChatTitleRef.current ||
       activeChatTitleRef.current === "New chat"
     ) {
       activeChatTitleRef.current = toChatTitle(content);
     }
-
-    const currentChats = readStoredChats();
-    const existingChat = currentChats.find((chat) => chat.id === chatId);
-    const nextChat: StoredChatItem = {
-      id: chatId,
-      title: activeChatTitleRef.current,
-      updatedAt: now,
-      pinned: existingChat?.pinned ?? false,
-      path: `/ai-core?chat=${chatId}`,
-    };
-
-    const nextChats = [
-      nextChat,
-      ...currentChats.filter((chat) => chat.id !== chatId),
-    ];
-
-    window.localStorage.setItem(
-      AI_CORE_CHATS_STORAGE_KEY,
-      JSON.stringify(nextChats)
-    );
-    window.dispatchEvent(new CustomEvent(AI_CORE_CHATS_UPDATED_EVENT));
   };
 
-  const sendMessage = () => {
+  const streamReply = useCallback(async (chatId: string, userContent: string) => {
+    const assistantMsgId = createClientMessageId();
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantMsgId, role: "assistant", content: "" },
+    ]);
+
+    try {
+      const resp = await apiFetch(`/api/chats/${chatId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: userContent }),
+      });
+
+      if (!resp.ok || !resp.body) {
+        const payload = (await resp.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(payload?.error?.message ?? "Failed to generate a response.");
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") break;
+          try {
+            const chunk = JSON.parse(raw) as { content?: string };
+            if (chunk.content) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, content: m.content + chunk.content! }
+                    : m
+                )
+              );
+            }
+          } catch {
+            // ignore malformed SSE line
+          }
+        }
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Something went wrong. Please try again.";
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsgId
+            ? { ...m, content: message }
+            : m
+        )
+      );
+    } finally {
+      setIsResponding(false);
+    }
+  }, [apiFetch, createClientMessageId]);
+
+  const createAgentFromChat = useCallback(async (sourceMessageId: number) => {
+    const chatId = activeChatIdRef.current ?? resolvedChatId;
+    if (!chatId || chatId.startsWith("local-") || chatId.startsWith("workflow-node-chat-")) {
+      setCreateAgentError("Create a saved chat before creating an agent.");
+      return;
+    }
+
+    const transcript = messagesRef.current
+      .filter(
+        (message) =>
+          (message.role === "user" || message.role === "assistant") &&
+          message.content.trim().length > 0
+      )
+      .map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
+
+    if (transcript.length === 0) {
+      setCreateAgentError("This chat does not have enough content to create an agent.");
+      return;
+    }
+
+    setCreateAgentError(null);
+    setCreatingAgentMessageId(sourceMessageId);
+
+    try {
+      const response = await apiFetch(`/api/chats/${chatId}/agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceMessageId,
+          messages: transcript,
+        }),
+      });
+      const payload = (await response.json()) as {
+        data?: { automation?: { id: string } };
+        error?: { message?: string };
+      };
+
+      const automationId = payload.data?.automation?.id;
+      if (!response.ok || !automationId) {
+        throw new Error(payload.error?.message ?? "Failed to create agent.");
+      }
+
+      router.push(`/workflow/${automationId}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create agent.";
+      setCreateAgentError(message);
+    } finally {
+      setCreatingAgentMessageId(null);
+    }
+  }, [apiFetch, resolvedChatId, router]);
+
+  const sendMessage = useCallback(async () => {
     const content = value.trim();
     const hasUserTextBeyondLockedPrefix = lockedComposerPrefix
       ? value.slice(lockedComposerPrefix.length).trim().length > 0
@@ -1162,21 +1267,12 @@ export default function AI_Prompt({
         if (editIndex === -1) {
           return [
             ...prev,
-            {
-              id: Date.now(),
-              role: "user",
-              content,
-              attachments: attachmentData,
-            },
+            { id: createClientMessageId(), role: "user", content, attachments: attachmentData },
           ];
         }
 
         const updated = [...prev];
-        updated[editIndex] = {
-          ...updated[editIndex],
-          content,
-          attachments: attachmentData,
-        };
+        updated[editIndex] = { ...updated[editIndex], content, attachments: attachmentData };
         return updated.slice(0, editIndex + 1);
       });
 
@@ -1186,25 +1282,13 @@ export default function AI_Prompt({
       adjustHeight(true);
       setEditingMessageId(null);
       setIsResponding(true);
-
-      window.setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now(),
-            role: "assistant",
-            content: buildAssistantReply(content, attachmentData),
-          },
-        ]);
-        setIsResponding(false);
-      }, 350);
-
+      await streamReply(activeChatIdRef.current ?? `local-${createClientMessageId()}`, content);
       return;
     }
 
     setMessages((prev) => [
       ...prev,
-      { id: Date.now(), role: "user", content, attachments: attachmentData },
+      { id: createClientMessageId(), role: "user", content, attachments: attachmentData },
     ]);
     setValue(lockedComposerPrefix);
     setComposerScrollTop(0);
@@ -1212,18 +1296,57 @@ export default function AI_Prompt({
     adjustHeight(true);
     setIsResponding(true);
 
-    window.setTimeout(() => {
+    // Create chat in DB if this is the first message
+    let chatId = activeChatIdRef.current;
+    if (!chatId) {
+      try {
+        const chatTitle = toChatTitle(content);
+        const r = await apiFetch("/api/chats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: chatTitle }),
+        });
+        if (r.ok) {
+          const payload = (await r.json()) as { data?: { chat?: { id: string } } };
+          chatId = payload.data?.chat?.id ?? null;
+          if (chatId) {
+            activeChatIdRef.current = chatId;
+            setResolvedChatId(chatId);
+            activeChatTitleRef.current = chatTitle;
+            window.dispatchEvent(new CustomEvent(AI_CORE_CHATS_UPDATED_EVENT));
+          }
+        } else {
+          const payload = (await r.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          throw new Error(payload?.error?.message ?? "Failed to create chat.");
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to create chat.";
+        setMessages((prev) => [
+          ...prev,
+          { id: createClientMessageId(), role: "assistant", content: message },
+        ]);
+        setIsResponding(false);
+        return;
+      }
+    }
+
+    if (!chatId) {
       setMessages((prev) => [
         ...prev,
-        {
-          id: Date.now(),
-          role: "assistant",
-          content: buildAssistantReply(content, attachmentData),
-        },
+        { id: createClientMessageId(), role: "assistant", content: "Failed to create chat. Please try again." },
       ]);
       setIsResponding(false);
-    }, 350);
-  };
+      return;
+    }
+
+    await streamReply(chatId, content);
+  }, [
+    value, lockedComposerPrefix, attachedFiles, onConversationStart, persistChatListEntry,
+    persistActiveChat, activeTab, onAutomationConversationStart, editingMessageId,
+    adjustHeight, streamReply, apiFetch, toChatTitle, createClientMessageId,
+  ]);
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -1432,7 +1555,7 @@ export default function AI_Prompt({
   ) => {
     const useInlineMentionStyle = options?.plainInline ?? true;
     const preserveComposerCaret = options?.preserveComposerCaret ?? false;
-    const escapedApps = APPS.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
+    const escapedApps = appNames.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
       (a, b) => b.length - a.length
     );
     const escapedSkills = mentionableSkills
@@ -1442,7 +1565,7 @@ export default function AI_Prompt({
       `(@(${escapedApps.join("|")})|\\/(${escapedSkills.join("|")}))(?=\\s|$|[.,!?;:])`,
       "gi"
     );
-    const appByLower = new Map(APPS.map((app) => [app.toLowerCase(), app]));
+    const appByLower = new Map(appNames.map((app) => [app.toLowerCase(), app]));
     const skillByLower = new Map(
       mentionableSkills.map((skill) => [skill.toLowerCase(), skill])
     );
@@ -1767,39 +1890,80 @@ export default function AI_Prompt({
     });
   };
 
-  const retryAssistantMessage = (assistantMessageId: number) => {
+  const retryAssistantMessage = useCallback(async (assistantMessageId: number) => {
+    const currentMessages = messagesRef.current;
+    const assistantIndex = currentMessages.findIndex(
+      (message) => message.id === assistantMessageId && message.role === "assistant"
+    );
+    if (assistantIndex === -1) return;
+
+    const previousUserMessage = [...currentMessages]
+      .slice(0, assistantIndex)
+      .reverse()
+      .find((message) => message.role === "user");
+    if (!previousUserMessage) return;
+
+    // Clear the assistant message content and re-stream
+    setMessages((prev) =>
+      prev.map((m) => (m.id === assistantMessageId ? { ...m, content: "" } : m))
+    );
     setIsResponding(true);
 
-    window.setTimeout(() => {
-      setMessages((prev) => {
-        const assistantIndex = prev.findIndex(
-          (message) =>
-            message.id === assistantMessageId && message.role === "assistant"
-        );
-
-        if (assistantIndex === -1) return prev;
-
-        const previousUserMessage = [...prev]
-          .slice(0, assistantIndex)
-          .reverse()
-          .find((message) => message.role === "user");
-
-        if (!previousUserMessage) return prev;
-
-        const next = [...prev];
-        next[assistantIndex] = {
-          ...next[assistantIndex],
-          content: buildAssistantReply(
-            previousUserMessage.content,
-            previousUserMessage.attachments ?? []
-          ),
-        };
-
-        return next;
-      });
+    const chatId = activeChatIdRef.current;
+    if (!chatId) {
       setIsResponding(false);
-    }, 350);
-  };
+      return;
+    }
+
+    try {
+      const resp = await apiFetch(`/api/chats/${chatId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: previousUserMessage.content }),
+      });
+
+      if (!resp.ok || !resp.body) throw new Error("retry_failed");
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") break;
+          try {
+            const chunk = JSON.parse(raw) as { content?: string };
+            if (chunk.content) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessageId
+                    ? { ...m, content: m.content + chunk.content! }
+                    : m
+                )
+              );
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMessageId
+            ? { ...m, content: "Something went wrong. Please try again." }
+            : m
+        )
+      );
+    } finally {
+      setIsResponding(false);
+    }
+  }, [apiFetch]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (commandMenu && commandItems.length > 0) {
@@ -1871,12 +2035,21 @@ export default function AI_Prompt({
 
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      void sendMessage();
     }
   };
 
   const hasConversation = messages.length > 0 || isResponding;
   const showGreeting = !hideGreeting && messages.length === 0 && !isResponding;
+  const lastAssistantMessageId = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role === "assistant" && message.content.trim().length > 0) {
+        return message.id;
+      }
+    }
+    return null;
+  }, [messages]);
   const glassLayerBack =
     "bg-background/20 backdrop-blur-xl supports-[backdrop-filter]:bg-background/15";
   const glassLayerFront =
@@ -2177,7 +2350,7 @@ export default function AI_Prompt({
                             <button
                               type="button"
                               aria-label="Try again"
-                              onClick={() => retryAssistantMessage(message.id)}
+                              onClick={() => void retryAssistantMessage(message.id)}
                               className={cn(
                                 outputActionButtonBase,
                                 "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -2191,12 +2364,35 @@ export default function AI_Prompt({
                           Try again
                         </TooltipContent>
                       </Tooltip>
+                      {enableCreateAgent &&
+                      message.id === lastAssistantMessageId &&
+                      message.content.trim().length > 0 &&
+                      !isResponding ? (
+                        <button
+                          type="button"
+                          onClick={() => void createAgentFromChat(message.id)}
+                          disabled={creatingAgentMessageId !== null}
+                          className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-[min(var(--radius-md),12px)] bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-60"
+                        >
+                          {creatingAgentMessageId === message.id ? (
+                            <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Bot className="h-3.5 w-3.5" />
+                          )}
+                          Create Agent
+                        </button>
+                      ) : null}
                     </>
                   )}
                 </div>
               </div>
             </div>
           ))}
+          {createAgentError ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {createAgentError}
+            </div>
+          ) : null}
           {isResponding && (
             <div className="text-sm text-muted-foreground">
               <span>Typing...</span>
@@ -2435,21 +2631,27 @@ export default function AI_Prompt({
                           <DropdownMenuContent
                             className={cn("min-w-[12rem]", "border-border bg-popover")}
                           >
-                            {APPS.map((app) => (
-                              <DropdownMenuItem
-                                className="flex items-center justify-between gap-2"
-                                key={app}
-                                onSelect={() => insertAppMention(app)}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {renderAppLogo(app, "md")}
-                                  <span>{app}</span>
-                                </div>
-                                {connectedApps.includes(app) && (
-                                  <Check className="h-4 w-4 text-primary" />
-                                )}
+                            {availableIntegrations.length === 0 ? (
+                              <DropdownMenuItem disabled className="text-muted-foreground">
+                                No apps connected
                               </DropdownMenuItem>
-                            ))}
+                            ) : (
+                              availableIntegrations.map((integration) => (
+                                <DropdownMenuItem
+                                  className="flex items-center justify-between gap-2"
+                                  key={integration.slug}
+                                  onSelect={() => insertAppMention(integration.name)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {renderAppLogo(integration.name, "md")}
+                                    <span>{integration.name}</span>
+                                  </div>
+                                  {connectedApps.includes(integration.name) && (
+                                    <Check className="h-4 w-4 text-primary" />
+                                  )}
+                                </DropdownMenuItem>
+                              ))
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </motion.div>
@@ -2468,16 +2670,30 @@ export default function AI_Prompt({
                       <Plus className="h-4 w-4 opacity-80" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className={cn("min-w-[12rem]", "border-border bg-popover")}>
-                      {SKILLS.map((skill) => (
-                        <DropdownMenuItem
-                          className="flex items-center justify-between gap-2"
-                          key={skill}
-                          onSelect={() => setSelectedSkill(skill)}
-                        >
-                          <span>{skill}</span>
-                          {selectedSkill === skill && <Check className="h-4 w-4 text-primary" />}
+                      <DropdownMenuItem
+                        className="flex items-center justify-between gap-2"
+                        key="no-skill"
+                        onSelect={() => setSelectedSkill("No skill")}
+                      >
+                        <span>No skill</span>
+                        {selectedSkill === "No skill" && <Check className="h-4 w-4 text-primary" />}
+                      </DropdownMenuItem>
+                      {availableSkillNames.length === 0 ? (
+                        <DropdownMenuItem disabled className="text-muted-foreground">
+                          No skills created yet
                         </DropdownMenuItem>
-                      ))}
+                      ) : (
+                        availableSkillNames.map((skill) => (
+                          <DropdownMenuItem
+                            className="flex items-center justify-between gap-2"
+                            key={skill}
+                            onSelect={() => setSelectedSkill(skill)}
+                          >
+                            <span>{skill}</span>
+                            {selectedSkill === skill && <Check className="h-4 w-4 text-primary" />}
+                          </DropdownMenuItem>
+                        ))
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -2549,7 +2765,7 @@ export default function AI_Prompt({
                         : !value.trim()
                     }
                     type="button"
-                    onClick={sendMessage}
+                    onClick={() => void sendMessage()}
                     size="sm"
                   >
                     <span>Send</span>
