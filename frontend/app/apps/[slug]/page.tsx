@@ -14,16 +14,25 @@ import { Badge } from "@/registry/spell-ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Integration } from "@/lib/integrations-store"
+import { useWorkspace } from "@/lib/workspace-context"
 
 type FlashMessage = {
   type: "success" | "error"
   text: string
 }
 
+type ApiResponse<T> = {
+  data?: T
+  error?: {
+    message?: string
+  }
+}
+
 export default function AppDetailsPage() {
   const params = useParams<{ slug: string }>()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { apiFetch } = useWorkspace()
   const slug = params.slug
 
   const [integration, setIntegration] = React.useState<Integration | null>(null)
@@ -53,13 +62,13 @@ export default function AppDetailsPage() {
     setErrorMessage(null)
 
     try {
-      const response = await fetch(`/api/integrations/${slug}`, { cache: "no-store" })
+      const response = await apiFetch(`/api/integrations/${slug}`, { cache: "no-store" })
       if (!response.ok) {
         throw new Error("Failed to load integration details.")
       }
 
-      const data = (await response.json()) as Integration
-      setIntegration(data)
+      const data = (await response.json()) as { data?: { integration?: Integration } }
+      setIntegration(data.data?.integration ?? null)
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong."
       setErrorMessage(message)
@@ -67,7 +76,7 @@ export default function AppDetailsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [slug])
+  }, [apiFetch, slug])
 
   React.useEffect(() => {
     void loadIntegration()
@@ -113,7 +122,7 @@ export default function AppDetailsPage() {
     setErrorMessage(null)
 
     try {
-      const response = await fetch(`/api/integrations/${integration.slug}`, {
+      const response = await apiFetch(`/api/integrations/${integration.slug}`, {
         method: "DELETE",
       })
 
@@ -129,7 +138,7 @@ export default function AppDetailsPage() {
     } finally {
       setIsMutating(false)
     }
-  }, [integration, loadIntegration])
+  }, [apiFetch, integration, loadIntegration])
 
   const handleReconnect = React.useCallback(() => {
     if (!integration) return
@@ -150,7 +159,7 @@ export default function AppDetailsPage() {
     setOauthError(null)
 
     try {
-      const response = await fetch(`/api/integrations/${integration.slug}/oauth/init`, {
+      const response = await apiFetch(`/api/integrations/${integration.slug}/oauth/init`, {
         method: "POST",
       })
 
@@ -158,8 +167,14 @@ export default function AppDetailsPage() {
         throw new Error("Unable to start OAuth connection.")
       }
 
-      const data = (await response.json()) as { redirectUrl: string }
-      router.push(data.redirectUrl)
+      const result = (await response.json()) as ApiResponse<{ redirectUrl: string }>
+      const redirectUrl = result.data?.redirectUrl
+
+      if (!redirectUrl) {
+        throw new Error(result.error?.message ?? "Unable to start OAuth connection.")
+      }
+
+      router.push(redirectUrl)
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to start OAuth connection."
       setOauthError(message)
@@ -167,7 +182,7 @@ export default function AppDetailsPage() {
     } finally {
       setIsMutating(false)
     }
-  }, [integration, router])
+  }, [apiFetch, integration, router])
 
   const handleTestConnection = React.useCallback(async () => {
     if (!integration) return
@@ -176,7 +191,7 @@ export default function AppDetailsPage() {
     setTestMessage(null)
 
     try {
-      const response = await fetch(`/api/integrations/${integration.slug}/test`, {
+      const response = await apiFetch(`/api/integrations/${integration.slug}/test`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -184,11 +199,12 @@ export default function AppDetailsPage() {
         body: JSON.stringify({ apiKey }),
       })
 
-      const data = (await response.json()) as { success: boolean; message?: string }
+      const result = (await response.json()) as ApiResponse<{ success: boolean; message?: string }>
+      const data = result.data
 
-      if (!response.ok || !data.success) {
+      if (!response.ok || !data?.success) {
         setTestSucceeded(false)
-        setTestMessage(data.message ?? "Connection test failed.")
+        setTestMessage(result.error?.message ?? data?.message ?? "Connection test failed.")
         return
       }
 
@@ -200,7 +216,7 @@ export default function AppDetailsPage() {
     } finally {
       setIsTesting(false)
     }
-  }, [apiKey, integration])
+  }, [apiFetch, apiKey, integration])
 
   const handleSaveApiKey = React.useCallback(async () => {
     if (!integration) return
@@ -208,7 +224,7 @@ export default function AppDetailsPage() {
     setIsSavingApiKey(true)
 
     try {
-      const response = await fetch(`/api/integrations/${integration.slug}/connect`, {
+      const response = await apiFetch(`/api/integrations/${integration.slug}/connect`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -216,10 +232,11 @@ export default function AppDetailsPage() {
         body: JSON.stringify({ apiKey, keyName }),
       })
 
-      const data = (await response.json()) as { success: boolean; message?: string }
+      const result = (await response.json()) as ApiResponse<{ success: boolean; message?: string }>
+      const data = result.data
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message ?? "Failed to save integration.")
+      if (!response.ok || !data?.success) {
+        throw new Error(result.error?.message ?? data?.message ?? "Failed to save integration.")
       }
 
       setApiDrawerOpen(false)
@@ -236,7 +253,7 @@ export default function AppDetailsPage() {
     } finally {
       setIsSavingApiKey(false)
     }
-  }, [apiKey, integration, keyName, loadIntegration])
+  }, [apiFetch, apiKey, integration, keyName, loadIntegration])
 
   const handleUseTrigger = React.useCallback(
     (triggerId: string) => {

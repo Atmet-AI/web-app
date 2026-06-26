@@ -40,7 +40,7 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
     setBottomShift(Math.min(320, Math.max(0, centerToBottom)))
   }, [])
 
-  const shouldDockToBottom = hasStartedConversation && hasConversationActivity
+  const shouldDockToBottom = hasConversationActivity
 
   useEffect(() => {
     recalculateBottomShift()

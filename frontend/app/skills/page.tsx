@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { OPEN_NEW_SKILL_DIALOG_EVENT } from "@/lib/skills-events"
 import { cn } from "@/lib/utils"
+import { useWorkspace } from "@/lib/workspace-context"
 import { IconPhoto } from "@tabler/icons-react"
 import { Search, X } from "lucide-react"
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
@@ -187,7 +188,9 @@ const statusStyles: Record<SkillStatus, BadgeVariant> = {
 
 function SkillsPageContent() {
   const searchParams = useSearchParams()
-  const [skills] = useState<SkillItem[]>(INITIAL_SKILL_ITEMS)
+  const { apiFetch } = useWorkspace()
+  const [skills, setSkills] = useState<SkillItem[]>([])
+  const [isLoadingSkills, setIsLoadingSkills] = useState(true)
   const [nameFilter, setNameFilter] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -213,6 +216,32 @@ function SkillsPageContent() {
       window.removeEventListener(OPEN_NEW_SKILL_DIALOG_EVENT, openCreateSkillDialog)
     }
   }, [])
+
+  useEffect(() => {
+    setIsLoadingSkills(true)
+    apiFetch("/api/skills")
+      .then((r) => r.json())
+      .then((res: { data?: { skills: Array<{
+        id: string; name: string; description: string | null;
+        type: string; status: string; created_by: string; created_at: string;
+      }> } }) => {
+        const raw = res.data?.skills ?? []
+        // Map DB records to the UI shape the page expects
+        setSkills(raw.map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description ?? "",
+          category: (s.type === "tool" ? "Automation" : s.type === "agent" ? "Reasoning" : "Data") as SkillCategory,
+          section: "Operations" as SkillSection,
+          status: (s.status === "active" ? "Active" : "Draft") as SkillStatus,
+          updatedAt: s.created_at.slice(0, 10),
+          owner: "You",
+          isUserCreated: true,
+        })))
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingSkills(false))
+  }, [apiFetch])
 
   const closeCreateSkillDialog = useCallback(() => {
     setCreateSkillOpen(false)
@@ -326,7 +355,7 @@ function SkillsPageContent() {
           </section>
 
           <p className="text-sm text-muted-foreground">
-            {filteredSkills.length} skills
+            {isLoadingSkills ? "Loading…" : `${filteredSkills.length} skills`}
           </p>
 
         {pinnedSkills.length > 0 && (

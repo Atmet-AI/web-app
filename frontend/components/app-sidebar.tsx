@@ -5,6 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import packageJson from "@/package.json"
+import { useWorkspace } from "@/lib/workspace-context"
 
 import { SearchForm } from "@/components/search-form"
 import {
@@ -77,7 +78,6 @@ import {
   IconChevronUp,
   IconCopy,
   IconCreditCard,
-  IconDatabase,
   IconDownload,
   IconDots,
   IconFileText,
@@ -113,8 +113,8 @@ import {
   Hash,
   KeyRound,
   Languages,
+  Loader2,
   Mail,
-  MessageSquare,
   Monitor,
   MoreHorizontal,
   Palette,
@@ -185,12 +185,11 @@ const baseSettingsSections = [
   "Help Docs",
   "Contact Support",
 ] as const
-const settingsSections = baseSettingsSections
-type SettingsSection = (typeof settingsSections)[number]
+type SettingsSection = (typeof baseSettingsSections)[number]
 const adminConsoleGroups = [
   {
     label: "Overview",
-    sections: ["Admin overview", "Workspace provisioning"],
+    sections: ["Admin overview", "Workspace provisioning", "Requests"],
   },
   {
     label: "Users & workspaces",
@@ -203,21 +202,6 @@ const adminConsoleGroups = [
 ] as const
 type AdminConsoleGroup = (typeof adminConsoleGroups)[number]
 type AdminConsoleSection = AdminConsoleGroup["sections"][number]
-const currentUser = {
-  name: "Amir Haddad",
-  role: "Operations Manager",
-  initials: "AH",
-}
-const accountProfile = {
-  firstName: "Amir",
-  lastName: "Haddad",
-  email: "amir.haddad@atmet.ai",
-  phoneNumber: "+962 7 9000 1234",
-  role: "Operations Manager",
-  userId: "usr_8f29ab01c7",
-  avatarUrl:
-    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80",
-}
 type WorkspaceProfile = WorkspaceSwitcherItem & {
   primaryEmail: string
   description: string
@@ -236,58 +220,6 @@ const workspaceCountries = [
   "Australia",
   "Singapore",
 ] as const
-
-const initialWorkspaces: WorkspaceProfile[] = [
-  {
-    id: "documentation",
-    name: "Documentation",
-    primaryEmail: "workspace@atmet.ai",
-    description:
-      "Main workspace for collaboration, automations, and shared project operations.",
-    country: "Jordan",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1556155092-490a1ba16284?auto=format&fit=crop&w=256&q=80",
-    initials: "D",
-    bgClass: "bg-sky-500/20",
-    textClass: "text-sky-700 dark:text-sky-300",
-  },
-  {
-    id: "product",
-    name: "Product",
-    primaryEmail: "product@atmet.ai",
-    description:
-      "Plans releases, collects product feedback, and prioritizes roadmap delivery.",
-    country: "United Arab Emirates",
-    avatarUrl: null,
-    initials: "P",
-    bgClass: "bg-indigo-500/20",
-    textClass: "text-indigo-700 dark:text-indigo-300",
-  },
-  {
-    id: "operations",
-    name: "Operations",
-    primaryEmail: "operations@atmet.ai",
-    description:
-      "Runs operations playbooks, support workflows, and internal service quality.",
-    country: "Jordan",
-    avatarUrl: null,
-    initials: "O",
-    bgClass: "bg-emerald-500/20",
-    textClass: "text-emerald-700 dark:text-emerald-300",
-  },
-  {
-    id: "marketing",
-    name: "Marketing",
-    primaryEmail: "marketing@atmet.ai",
-    description:
-      "Owns campaign planning, brand assets, and performance reporting pipelines.",
-    country: "United States",
-    avatarUrl: null,
-    initials: "M",
-    bgClass: "bg-amber-500/20",
-    textClass: "text-amber-700 dark:text-amber-300",
-  },
-]
 
 function deriveInitialsFromName(name: string) {
   const tokens = name
@@ -558,6 +490,7 @@ const adminConsoleSectionIcons: Record<
 > = {
   "Admin overview": IconLayoutDashboard,
   "Workspace provisioning": IconBuilding,
+  "Requests": IconListDetails,
   "Users & workspaces": IconUsers,
   "Roles & permissions": IconShield,
   "Access policies": IconLock,
@@ -569,6 +502,8 @@ const adminConsoleDescriptions: Record<AdminConsoleSection, string> = {
     "Monitor workspace health, recent activity, and common admin actions.",
   "Workspace provisioning":
     "Create workspaces, assign initial users, and configure access, API, and usage defaults.",
+  "Requests":
+    "Review waitlist submissions and approve or reject access requests.",
   "Users & workspaces":
     "Manage users, workspace assignments, invitations, roles, and account status.",
   "Roles & permissions":
@@ -578,38 +513,6 @@ const adminConsoleDescriptions: Record<AdminConsoleSection, string> = {
   "Usage & limits":
     "Track usage by resource and member, then adjust workspace limits.",
 }
-const usageRangeStats = {
-  "This week": {
-    creditsUsed: 1820,
-    creditsLimit: 5000,
-    apiRequests: 124000,
-    apiLimit: 300000,
-    storageUsedGb: 38,
-    storageLimitGb: 120,
-    automationsActive: 29,
-    automationsLimit: 60,
-  },
-  "This month": {
-    creditsUsed: 7420,
-    creditsLimit: 20000,
-    apiRequests: 486000,
-    apiLimit: 1200000,
-    storageUsedGb: 42,
-    storageLimitGb: 120,
-    automationsActive: 31,
-    automationsLimit: 60,
-  },
-  "All time": {
-    creditsUsed: 52840,
-    creditsLimit: 120000,
-    apiRequests: 2860000,
-    apiLimit: 5000000,
-    storageUsedGb: 57,
-    storageLimitGb: 120,
-    automationsActive: 33,
-    automationsLimit: 60,
-  },
-} as const
 const usageLimitsRows = [
   {
     key: "credits",
@@ -649,9 +552,9 @@ type StoredChatItem = {
   path?: string
 }
 
-const AI_CORE_CHATS_STORAGE_KEY = "ai-core-chats"
 const AI_CORE_CHATS_UPDATED_EVENT = "ai-core-chats-updated"
 const OPEN_SETTINGS_PANEL_EVENT = "open-settings-panel"
+const PLATFORM_ADMIN_WORKSPACE_ID = "__platform_admin__"
 
 type OpenSettingsPanelDetail = {
   section?: SettingsSection
@@ -800,6 +703,7 @@ function applyGlobalFontScale(fontScale: FontScale) {
 }
 
 function AccountSettingsContent() {
+  const imageInputRef = React.useRef<HTMLInputElement>(null)
   const roleOptions = [
     "Operations Manager",
     "Product Manager",
@@ -808,24 +712,52 @@ function AccountSettingsContent() {
     "Marketing Manager",
     "Other",
   ] as const
+  const [userId, setUserId] = React.useState("")
+  const [userInitials, setUserInitials] = React.useState("U")
   const [savedProfile, setSavedProfile] = React.useState({
-    firstName: accountProfile.firstName,
-    lastName: accountProfile.lastName,
-    email: accountProfile.email,
-    phoneNumber: accountProfile.phoneNumber,
-    selectedRole: accountProfile.role as (typeof roleOptions)[number] | string,
+    firstName: "",
+    lastName: "",
+    email: "",
+    phoneNumber: "",
+    selectedRole: "" as (typeof roleOptions)[number] | string,
     customRole: "",
+    avatarUrl: null as string | null,
   })
-  const [firstName, setFirstName] = React.useState(accountProfile.firstName)
-  const [lastName, setLastName] = React.useState(accountProfile.lastName)
-  const [email, setEmail] = React.useState(accountProfile.email)
-  const [phoneNumber, setPhoneNumber] = React.useState(
-    accountProfile.phoneNumber
-  )
+  const [firstName, setFirstName] = React.useState("")
+  const [lastName, setLastName] = React.useState("")
+  const [email, setEmail] = React.useState("")
+  const [phoneNumber, setPhoneNumber] = React.useState("")
   const [selectedRole, setSelectedRole] = React.useState<
     (typeof roleOptions)[number] | string
-  >(accountProfile.role)
+  >("")
   const [customRole, setCustomRole] = React.useState("")
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null)
+  const [isSaving, setIsSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    fetch("/api/users/me")
+      .then((r) => r.json())
+      .then((res: { data?: { user: { id: string; full_name: string | null; email: string | null; avatar_url: string | null } } }) => {
+        const u = res.data?.user
+        if (!u) return
+        const parts = (u.full_name ?? "").trim().split(/\s+/).filter(Boolean)
+        const fn = parts[0] ?? ""
+        const ln = parts.slice(1).join(" ")
+        const initials = parts.slice(0, 2).map(p => p[0]?.toUpperCase() ?? "").join("") || "U"
+        const profile = { firstName: fn, lastName: ln, email: u.email ?? "", phoneNumber: "", selectedRole: "" as (typeof roleOptions)[number] | string, customRole: "", avatarUrl: u.avatar_url ?? null }
+        setUserId(u.id)
+        setUserInitials(initials)
+        setSavedProfile(profile)
+        setFirstName(fn)
+        setLastName(ln)
+        setEmail(u.email ?? "")
+        setPhoneNumber("")
+        setSelectedRole("")
+        setAvatarUrl(u.avatar_url ?? null)
+      })
+      .catch(() => {})
+  }, [])
+
   const displayedRole =
     selectedRole === "Other" ? customRole || "Other" : selectedRole
   const hasUnsavedChanges =
@@ -834,22 +766,77 @@ function AccountSettingsContent() {
     email !== savedProfile.email ||
     phoneNumber !== savedProfile.phoneNumber ||
     selectedRole !== savedProfile.selectedRole ||
-    customRole !== savedProfile.customRole
+    customRole !== savedProfile.customRole ||
+    avatarUrl !== savedProfile.avatarUrl
+
+  const handleProfileImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    event.currentTarget.value = ""
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("scope", "user")
+    formData.append("owner_id", userId)
+
+    const response = await fetch("/api/avatars", {
+      method: "POST",
+      body: formData,
+    }).catch(() => null)
+    if (!response?.ok) return
+
+    const payload = (await response.json()) as { data?: { url?: string } }
+    if (payload.data?.url) setAvatarUrl(payload.data.url)
+  }
+
+  const saveProfile = async () => {
+    setIsSaving(true)
+    try {
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim()
+      const response = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ full_name: fullName, avatar_url: avatarUrl }),
+      })
+      if (!response.ok) return
+      setSavedProfile({
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        selectedRole,
+        customRole,
+        avatarUrl,
+      })
+      window.dispatchEvent(new CustomEvent("atmet-user-updated"))
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
     <div className="flex min-h-full flex-col">
       <div className="space-y-6">
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={handleProfileImageUpload}
+        />
         <div className="flex items-center gap-2.5">
           <DropdownMenu>
             <div className="group/avatar-edit relative">
               <Avatar className="size-14 !rounded-lg ring-1 ring-border after:!rounded-lg">
                 <AvatarImage
-                  src={accountProfile.avatarUrl}
-                  alt={`${accountProfile.firstName} avatar`}
-                  className="!rounded-lg"
+                  src={avatarUrl ?? undefined}
+                  alt={`${firstName} ${lastName} avatar`}
+                  className="!rounded-lg object-cover"
                 />
                 <AvatarFallback className="!rounded-lg text-sm font-semibold">
-                  {currentUser.initials}
+                  {userInitials}
                 </AvatarFallback>
               </Avatar>
               <span className="pointer-events-none absolute inset-0 rounded-lg bg-background/20 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-focus-within/avatar-edit:opacity-100 group-hover/avatar-edit:opacity-100" />
@@ -871,11 +858,14 @@ function AccountSettingsContent() {
               align="start"
               className="min-w-44 rounded-lg p-1"
             >
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
                 <Camera className="h-3.5 w-3.5" />
                 Upload image
               </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive">
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setAvatarUrl(null)}
+              >
                 <Trash2 className="h-3.5 w-3.5" />
                 Delete image
               </DropdownMenuItem>
@@ -1007,7 +997,7 @@ function AccountSettingsContent() {
                 id="settings-user-id"
                 className="font-mono text-sm text-foreground"
               >
-                {accountProfile.userId}
+                {userId}
               </p>
               <Button
                 type="button"
@@ -1015,7 +1005,7 @@ function AccountSettingsContent() {
                 size="icon-xs"
                 aria-label="Copy user ID"
                 onClick={() =>
-                  void navigator.clipboard.writeText(accountProfile.userId)
+                  void navigator.clipboard.writeText(userId)
                 }
               >
                 <Copy className="h-3.5 w-3.5" />
@@ -1063,19 +1053,14 @@ function AccountSettingsContent() {
           type="button"
           size="sm"
           disabled={!hasUnsavedChanges}
-          onClick={() =>
-            setSavedProfile({
-              firstName,
-              lastName,
-              email,
-              phoneNumber,
-              selectedRole,
-              customRole,
-            })
-          }
+          onClick={() => void saveProfile()}
         >
-          <Check className="h-3.5 w-3.5" />
-          Save
+          {isSaving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Check className="h-3.5 w-3.5" />
+          )}
+          {isSaving ? "Saving" : "Save"}
         </Button>
       </div>
     </div>
@@ -1887,7 +1872,7 @@ function WorkspaceSettingsContent({
   onGoToMembers,
 }: {
   workspace: WorkspaceProfile
-  onSaveWorkspace: (workspace: WorkspaceProfile) => void
+  onSaveWorkspace: (workspace: WorkspaceProfile) => Promise<void>
   onGoToMembers: () => void
 }) {
   const imageInputRef = React.useRef<HTMLInputElement>(null)
@@ -1903,6 +1888,7 @@ function WorkspaceSettingsContent({
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(
     workspace.avatarUrl ?? null
   )
+  const [isSaving, setIsSaving] = React.useState(false)
 
   React.useEffect(() => {
     setWorkspaceName(workspace.name)
@@ -1929,20 +1915,26 @@ function WorkspaceSettingsContent({
     avatarUrl !== savedWorkspace.avatarUrl ||
     country !== savedWorkspace.country
 
-  const handleWorkspaceImageUpload = (
+  const handleWorkspaceImageUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0]
+    event.currentTarget.value = ""
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setAvatarUrl(reader.result)
-      }
-    }
-    reader.readAsDataURL(file)
-    event.currentTarget.value = ""
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("scope", "workspace")
+    formData.append("owner_id", workspace.id)
+
+    const response = await fetch("/api/avatars", {
+      method: "POST",
+      body: formData,
+    }).catch(() => null)
+    if (!response?.ok) return
+
+    const payload = (await response.json()) as { data?: { url?: string } }
+    if (payload.data?.url) setAvatarUrl(payload.data.url)
   }
   const openWorkspaceImagePicker = React.useCallback(() => {
     window.setTimeout(() => {
@@ -2149,7 +2141,8 @@ function WorkspaceSettingsContent({
           type="button"
           size="sm"
           disabled={!hasUnsavedChanges}
-          onClick={() => {
+          onClick={async () => {
+            setIsSaving(true)
             const nextWorkspace: WorkspaceProfile = {
               ...workspace,
               name: displayName,
@@ -2158,17 +2151,25 @@ function WorkspaceSettingsContent({
               country,
               initials: deriveInitialsFromName(displayName),
             }
-            setSavedWorkspace({
-              name: displayName,
-              description,
-              avatarUrl,
-              country,
-            })
-            onSaveWorkspace(nextWorkspace)
+            try {
+              await onSaveWorkspace(nextWorkspace)
+              setSavedWorkspace({
+                name: displayName,
+                description,
+                avatarUrl,
+                country,
+              })
+            } finally {
+              setIsSaving(false)
+            }
           }}
         >
-          <Check className="h-3.5 w-3.5" />
-          Save
+          {isSaving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Check className="h-3.5 w-3.5" />
+          )}
+          {isSaving ? "Saving" : "Save"}
         </Button>
       </div>
     </div>
@@ -2190,8 +2191,9 @@ function MembersSettingsContent({
   profileBackLabel?: string
   onProfileBack?: () => void
 }) {
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const roleFilters = ["All users", ...platformRoles] as const
-  const inviteRoleOptions = platformRoles
+  const inviteRoleOptions = ["Workspace Admin", "Workspace Member"] as const
   const creditsRanges = ["All time", "This month", "This week"] as const
   const seatsLimit = 10
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -2208,6 +2210,9 @@ function MembersSettingsContent({
   const [inviteInput, setInviteInput] = React.useState("")
   const [inviteEmails, setInviteEmails] = React.useState<string[]>([])
   const [inviteError, setInviteError] = React.useState("")
+  const [members, setMembers] = React.useState<WorkspaceMember[]>([])
+  const [isMembersLoading, setIsMembersLoading] = React.useState(false)
+  const workspaceMembers = members
   const roleBadgeClasses: Record<WorkspaceMember["role"], BadgeVariant> = {
     "Super Admin": "violet",
     Admin: "blue",
@@ -2218,6 +2223,73 @@ function MembersSettingsContent({
     Connected: "green",
     Disconnected: "neutral",
   }
+
+  const loadMembers = React.useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setMembers([])
+      return
+    }
+    setIsMembersLoading(true)
+    try {
+      const response = await apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
+      if (!response.ok) {
+        setMembers([])
+        return
+      }
+      const payload = (await response.json()) as {
+        data?: {
+          members?: Array<{
+            role: "owner" | "admin" | "member"
+            joined_at: string
+            user: {
+              id: string
+              email: string | null
+              full_name: string | null
+              avatar_url?: string | null
+              status: string
+            } | null
+          }>
+        }
+      }
+      setMembers(
+        (payload.data?.members ?? []).map((row) => {
+          const user = Array.isArray(row.user) ? row.user[0] : row.user
+          const name = user?.full_name || user?.email || "Unknown user"
+          const initials = deriveInitialsFromName(name)
+          const role: PlatformRole =
+            row.role === "owner"
+              ? "Super Admin"
+              : row.role === "admin"
+                ? "Workspace Admin"
+                : "Workspace Member"
+          return {
+            id: user?.id ?? `${row.role}-${row.joined_at}`,
+            name,
+            email: user?.email ?? "",
+            role,
+            profileRole: user?.status ?? "active",
+            lastLogin: row.joined_at
+              ? new Date(row.joined_at).toLocaleDateString()
+              : "Unknown",
+            initials,
+            avatarUrl: user?.avatar_url ?? "",
+            creditsUsage: {
+              allTime: 0,
+              thisMonth: 0,
+              thisWeek: 0,
+            },
+            integratedApps: [],
+          }
+        })
+      )
+    } finally {
+      setIsMembersLoading(false)
+    }
+  }, [activeWorkspaceId, apiFetch])
+
+  React.useEffect(() => {
+    void loadMembers()
+  }, [loadMembers])
 
   const filteredMembers = React.useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -2370,7 +2442,7 @@ function MembersSettingsContent({
     setIsInviteOpen(true)
   }, [quickInviteToken])
 
-  const submitInvite = () => {
+  const submitInvite = async () => {
     const tokens = inviteInput
       .split(/[\s,;]+/)
       .map((value) => value.trim().toLowerCase())
@@ -2389,7 +2461,30 @@ function MembersSettingsContent({
       return
     }
 
+    if (!activeWorkspaceId) {
+      setInviteError("Select a workspace before inviting members.")
+      return
+    }
+
+    const role = inviteRole === "Workspace Admin" ? "admin" : "member"
+    const results = await Promise.all(
+      merged.map((email) =>
+        apiFetch(`/api/workspaces/${activeWorkspaceId}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, role }),
+        })
+      )
+    )
+
+    const failed = results.filter((response) => !response.ok).length
+    if (failed > 0) {
+      setInviteError(`${failed} invite${failed === 1 ? "" : "s"} could not be sent.`)
+      return
+    }
+
     closeInviteModal()
+    void loadMembers()
   }
 
   return (
@@ -2732,7 +2827,24 @@ function MembersSettingsContent({
                               <User className="h-3.5 w-3.5" />
                               Go to profile
                             </DropdownMenuItem>
-                            <DropdownMenuItem variant="destructive">
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={async (event) => {
+                                event.stopPropagation()
+                                if (!activeWorkspaceId) return
+                                const confirmed = window.confirm(`Remove ${member.name} from this workspace?`)
+                                if (!confirmed) return
+                                const response = await apiFetch(
+                                  `/api/workspaces/${activeWorkspaceId}/members/${member.id}`,
+                                  { method: "DELETE" }
+                                ).catch(() => null)
+                                if (response?.ok) {
+                                  setMembers((previous) =>
+                                    previous.filter((item) => item.id !== member.id)
+                                  )
+                                }
+                              }}
+                            >
                               <Trash2 className="h-3.5 w-3.5" />
                               Delete user
                             </DropdownMenuItem>
@@ -2745,7 +2857,9 @@ function MembersSettingsContent({
               </table>
               {filteredMembers.length === 0 && (
                 <div className="py-8 text-center text-sm text-muted-foreground">
-                  No members match your current search or filter.
+                  {isMembersLoading
+                    ? "Loading members..."
+                    : "No members match your current search or filter."}
                 </div>
               )}
             </div>
@@ -2920,9 +3034,12 @@ function MembersSettingsContent({
 }
 
 function UsageLimitsSettingsContent() {
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const usageRanges = ["This week", "This month", "All time"] as const
   const [usageRange, setUsageRange] =
     React.useState<(typeof usageRanges)[number]>("This month")
+  const [workspaceMembers, setWorkspaceMembers] = React.useState<WorkspaceMember[]>([])
+  const [automationCount, setAutomationCount] = React.useState(0)
   const defaultUserLimits = React.useMemo<Record<string, number>>(
     () =>
       Object.fromEntries(
@@ -2930,54 +3047,105 @@ function UsageLimitsSettingsContent() {
           member.id,
           member.role === "Super Admin"
             ? 6000
-            : member.role === "Admin"
+            : member.role === "Workspace Admin"
               ? 4000
               : 2500,
         ])
       ),
-    []
+    [workspaceMembers]
   )
   const [userLimits, setUserLimits] =
     React.useState<Record<string, number>>(defaultUserLimits)
   const [savedUserLimits, setSavedUserLimits] =
     React.useState<Record<string, number>>(defaultUserLimits)
 
-  const stats = usageRangeStats[usageRange]
-  const creditsPercentage = Math.min(
-    100,
-    (stats.creditsUsed / stats.creditsLimit) * 100
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setWorkspaceMembers([])
+      setAutomationCount(0)
+      return
+    }
+
+    void Promise.all([
+      apiFetch(`/api/workspaces/${activeWorkspaceId}/members`).then((r) => r.json()),
+      apiFetch("/api/automations").then((r) => r.json()),
+    ])
+      .then(([membersRes, automationsRes]: [
+        {
+          data?: {
+            members?: Array<{
+              role: "owner" | "admin" | "member"
+              joined_at: string
+              user:
+                | {
+                    id: string
+                    email: string | null
+                    full_name: string | null
+                    avatar_url?: string | null
+                    status: string
+                  }
+                | null
+            }>
+          }
+        },
+        { data?: { automations?: unknown[] } },
+      ]) => {
+        const nextMembers = (membersRes.data?.members ?? []).map((row) => {
+          const user = Array.isArray(row.user) ? row.user[0] : row.user
+          const name = user?.full_name || user?.email || "Unknown user"
+          return {
+            id: user?.id ?? `${row.role}-${row.joined_at}`,
+            name,
+            email: user?.email ?? "",
+            role:
+              row.role === "owner"
+                ? "Super Admin"
+                : row.role === "admin"
+                  ? "Workspace Admin"
+                  : "Workspace Member",
+            profileRole: user?.status ?? "active",
+            lastLogin: row.joined_at
+              ? new Date(row.joined_at).toLocaleDateString()
+              : "Unknown",
+            initials: deriveInitialsFromName(name),
+            avatarUrl: user?.avatar_url ?? "",
+            creditsUsage: { allTime: 0, thisMonth: 0, thisWeek: 0 },
+            integratedApps: [],
+          } satisfies WorkspaceMember
+        })
+        setWorkspaceMembers(nextMembers)
+        setAutomationCount(automationsRes.data?.automations?.length ?? 0)
+      })
+      .catch(() => {
+        setWorkspaceMembers([])
+        setAutomationCount(0)
+      })
+  }, [activeWorkspaceId, apiFetch])
+
+  React.useEffect(() => {
+    setUserLimits(defaultUserLimits)
+    setSavedUserLimits(defaultUserLimits)
+  }, [defaultUserLimits])
+
+  const stats = React.useMemo(
+    () => ({
+      creditsUsed: 0,
+      creditsLimit: Object.values(userLimits).reduce((sum, value) => sum + value, 0),
+      apiRequests: 0,
+      apiLimit: 0,
+      storageUsedGb: 0,
+      storageLimitGb: 0,
+      automationsActive: automationCount,
+      automationsLimit: automationCount,
+    }),
+    [automationCount, userLimits]
   )
   const hasUserLimitsChanges =
     JSON.stringify(userLimits) !== JSON.stringify(savedUserLimits)
   const chartData = React.useMemo(() => {
-    if (usageRange === "All time") {
-      return [
-        { label: "Oct", value: 5400 },
-        { label: "Nov", value: 6900 },
-        { label: "Dec", value: 6400 },
-        { label: "Jan", value: 7900 },
-        { label: "Feb", value: 8350 },
-        { label: "Mar", value: 9200 },
-        { label: "Apr", value: 8690 },
-      ]
-    }
-    if (usageRange === "This week") {
-      return [
-        { label: "Mon", value: 210 },
-        { label: "Tue", value: 280 },
-        { label: "Wed", value: 260 },
-        { label: "Thu", value: 240 },
-        { label: "Fri", value: 310 },
-        { label: "Sat", value: 270 },
-        { label: "Sun", value: 250 },
-      ]
-    }
-    return [
-      { label: "W1", value: 1520 },
-      { label: "W2", value: 1860 },
-      { label: "W3", value: 2010 },
-      { label: "W4", value: 2030 },
-    ]
+    if (usageRange === "This week") return [{ label: "This week", value: 0 }]
+    if (usageRange === "All time") return [{ label: "All time", value: 0 }]
+    return [{ label: "This month", value: 0 }]
   }, [usageRange])
 
   return (
@@ -3246,52 +3414,107 @@ function UsageLimitsSettingsContent() {
 }
 
 function IntegrationsSettingsContent() {
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const [nameFilter, setNameFilter] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [viewMode, setViewMode] = React.useState<"workspace" | "users">(
     "workspace"
   )
-  const [disconnectedAppsByName, setDisconnectedAppsByName] = React.useState<
-    Record<string, boolean>
-  >({})
+  const [memberCount, setMemberCount] = React.useState(0)
+  const [members, setMembers] = React.useState<
+    Array<{
+      id: string
+      name: string
+      email: string
+      role: string
+      initials: string
+      avatarUrl: string
+    }>
+  >([])
+  const [integrations, setIntegrations] = React.useState<
+    Array<{
+      slug: string
+      name: string
+      category: string
+      connected: boolean
+      status?: string
+      connected_at?: string
+    }>
+  >([])
   const [forcedAppsByName, setForcedAppsByName] = React.useState<
     Record<string, boolean>
-  >(() => ({
-    Slack: true,
-    Notion: true,
-  }))
+  >({})
 
-  const appRows = React.useMemo(() => {
-    const appMap = new Map<
-      string,
-      { name: string; category: string; connectedUsers: number }
-    >()
-
-    for (const member of workspaceMembers) {
-      for (const app of member.integratedApps) {
-        if (app.status !== "Connected") continue
-        if (disconnectedAppsByName[app.name]) continue
-        const existing = appMap.get(app.name)
-        if (existing) {
-          appMap.set(app.name, {
-            ...existing,
-            connectedUsers: existing.connectedUsers + 1,
-          })
-          continue
-        }
-
-        appMap.set(app.name, {
-          name: app.name,
-          category: app.category,
-          connectedUsers: 1,
-        })
-      }
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setIntegrations([])
+      setMemberCount(0)
+      return
     }
 
-    return Array.from(appMap.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    )
-  }, [disconnectedAppsByName])
+    void Promise.all([
+      apiFetch("/api/integrations").then((r) => r.json()),
+      apiFetch(`/api/workspaces/${activeWorkspaceId}/members`).then((r) => r.json()),
+    ])
+      .then(([integrationsRes, membersRes]: [
+        { data?: { integrations?: typeof integrations } },
+        {
+          data?: {
+            members?: Array<{
+              role: "owner" | "admin" | "member"
+              user:
+                | {
+                    id: string
+                    email: string | null
+                    full_name: string | null
+                    avatar_url?: string | null
+                  }
+                | null
+            }>
+          }
+        },
+      ]) => {
+        setIntegrations(integrationsRes.data?.integrations ?? [])
+        const nextMembers = (membersRes.data?.members ?? []).map((row) => {
+          const user = Array.isArray(row.user) ? row.user[0] : row.user
+          const name = user?.full_name || user?.email || "Unknown user"
+          return {
+            id: user?.id ?? name,
+            name,
+            email: user?.email ?? "",
+            role:
+              row.role === "owner"
+                ? "Owner"
+                : row.role === "admin"
+                  ? "Admin"
+                  : "Member",
+            initials: deriveInitialsFromName(name),
+            avatarUrl: user?.avatar_url ?? "",
+          }
+        })
+        setMembers(nextMembers)
+        setMemberCount(nextMembers.length)
+      })
+      .catch(() => {
+        setIntegrations([])
+        setMembers([])
+        setMemberCount(0)
+      })
+  }, [activeWorkspaceId, apiFetch])
+
+  const appRows = React.useMemo(() => {
+    return integrations
+      .filter((integration) => integration.connected)
+      .map((integration) => ({
+        slug: integration.slug,
+        name: integration.name,
+        category: integration.category,
+        status: integration.status ?? "active",
+        connectedAt: integration.connected_at ?? null,
+        connectedUsers: memberCount,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [integrations, memberCount])
 
   const categoryOptions = React.useMemo(
     () => Array.from(new Set(appRows.map((app) => app.category))).sort(),
@@ -3322,16 +3545,26 @@ function IntegrationsSettingsContent() {
   const categoryFilterLabel =
     categoryFilter === "all" ? "All categories" : categoryFilter
   const hasAnyConnectedApps = appRows.length > 0
-  const handleDisconnectApp = React.useCallback((appName: string) => {
-    setDisconnectedAppsByName((previous) => ({
-      ...previous,
-      [appName]: true,
-    }))
-    setForcedAppsByName((previous) => ({
-      ...previous,
-      [appName]: false,
-    }))
-  }, [])
+  const handleDisconnectApp = React.useCallback(
+    async (appSlug: string, appName: string) => {
+      const response = await apiFetch(`/api/integrations/${appSlug}`, {
+        method: "DELETE",
+      }).catch(() => null)
+      if (!response?.ok) return
+      setIntegrations((previous) =>
+        previous.map((integration) =>
+          integration.slug === appSlug
+            ? { ...integration, connected: false, status: undefined, connected_at: undefined }
+            : integration
+        )
+      )
+      setForcedAppsByName((previous) => ({
+        ...previous,
+        [appName]: false,
+      }))
+    },
+    [apiFetch]
+  )
 
   return (
     <div className="space-y-3 pb-1">
@@ -3441,7 +3674,7 @@ function IntegrationsSettingsContent() {
                   {filteredAppRows.map((app) => {
                     const isForced = Boolean(forcedAppsByName[app.name])
                     const connectedUsersCount = isForced
-                      ? workspaceMembers.length
+                      ? memberCount
                       : app.connectedUsers
 
                     return (
@@ -3471,7 +3704,7 @@ function IntegrationsSettingsContent() {
                           {app.category}
                         </td>
                         <td className="px-2.5 py-1.5 text-foreground">
-                          {connectedUsersCount} / {workspaceMembers.length}
+                          {connectedUsersCount} / {memberCount}
                         </td>
                         <td className="px-2.5 py-1.5 text-right">
                           <div className="flex flex-nowrap justify-end gap-1.5">
@@ -3494,7 +3727,7 @@ function IntegrationsSettingsContent() {
                               size="xs"
                               variant="ghost"
                               className="shrink-0 rounded-[min(var(--radius-md),12px)] border border-transparent bg-sidebar text-foreground hover:bg-sidebar-accent"
-                              onClick={() => handleDisconnectApp(app.name)}
+                              onClick={() => void handleDisconnectApp(app.slug, app.name)}
                             >
                               Unconnect
                             </Button>
@@ -3531,16 +3764,9 @@ function IntegrationsSettingsContent() {
                 </tr>
               </thead>
               <tbody>
-                {workspaceMembers.map((member) => {
-                  const connectedNames = member.integratedApps
-                    .filter(
-                      (app) =>
-                        app.status === "Connected" &&
-                        !disconnectedAppsByName[app.name]
-                    )
-                    .map((app) => app.name)
+                {members.map((member) => {
                   const effectiveSet = new Set([
-                    ...connectedNames,
+                    ...appRows.map((app) => app.name),
                     ...forcedAppNames,
                   ])
 
@@ -3657,7 +3883,16 @@ function DataControlsSettingsContent() {
 function ReferAndEarnSettingsContent() {
   const referredUsers = 12
   const totalCredits = 310
-  const referralCode = accountProfile.userId.replace(/^usr_/, "").toUpperCase()
+  const [ownUserId, setOwnUserId] = React.useState("")
+  React.useEffect(() => {
+    fetch("/api/users/me")
+      .then((r) => r.json())
+      .then((res: { data?: { user: { id: string } } }) => {
+        if (res.data?.user.id) setOwnUserId(res.data.user.id)
+      })
+      .catch(() => {})
+  }, [])
+  const referralCode = ownUserId.replace(/-/g, "").slice(0, 12).toUpperCase()
   const referralLink = React.useMemo(() => {
     if (typeof window === "undefined") {
       return `https://app.atmet.ai/signup?ref=${referralCode}`
@@ -4043,7 +4278,7 @@ const adminMembers = [
     status: "Active",
     lastActive: "Today, 10:42 AM",
     initials: "AH",
-    avatarUrl: accountProfile.avatarUrl,
+    avatarUrl: null,
   },
   {
     id: "adm_mem_002",
@@ -4372,7 +4607,7 @@ function AdminAvatar({
   )
 }
 
-function AdminOverviewConsoleContent() {
+function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?: string[] }) {
   const [datePeriod, setDatePeriod] = React.useState("Last 7 days")
   const [activityQuery, setActivityQuery] = React.useState("")
   const [activityType, setActivityType] = React.useState("All event types")
@@ -4493,7 +4728,7 @@ function AdminOverviewConsoleContent() {
             />
             <AdminSelect
               value={activityWorkspace}
-              options={["All workspaces", ...initialWorkspaces.map((workspace) => workspace.name), "System"]}
+              options={["All workspaces", ...workspaceNames, "System"]}
               onChange={setActivityWorkspace}
             />
             <AdminSelect
@@ -4821,7 +5056,7 @@ function WorkspaceProvisioningConsoleContent() {
   )
 }
 
-function UsersWorkspacesConsoleContent() {
+function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames?: string[] }) {
   const [query, setQuery] = React.useState("")
   const [roleFilter, setRoleFilter] = React.useState("All roles")
   const [statusFilter, setStatusFilter] = React.useState("All")
@@ -4829,12 +5064,94 @@ function UsersWorkspacesConsoleContent() {
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState("")
   const [inviteRole, setInviteRole] = React.useState<PlatformRole>("Workspace Member")
+  const [adminUsers, setAdminUsers] = React.useState<
+    Array<{
+      id: string
+      name: string
+      initials: string
+      email: string
+      workspace: string
+      role: PlatformRole
+      status: "Active" | "Invited" | "Suspended"
+      lastActive: string
+    }>
+  >([])
+  const [isLoadingUsers, setIsLoadingUsers] = React.useState(true)
   const statusTones: Record<string, AdminBadgeTone> = {
     Active: "success",
     Invited: "info",
     Suspended: "warning",
   }
-  const filteredMembers = adminMembers.filter((member) => {
+
+  React.useEffect(() => {
+    setIsLoadingUsers(true)
+    fetch("/api/admin/users")
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            users?: Array<{
+              id: string
+              email: string | null
+              full_name: string | null
+              status: "active" | "inactive" | "suspended"
+              platform_role: "user" | "super_admin"
+              updated_at: string
+              memberships: Array<{
+                role: "owner" | "admin" | "member"
+                workspace?: { name?: string } | { name?: string }[] | null
+              }>
+            }>
+          }
+        } | null) => {
+          const users = payload?.data?.users ?? []
+          setAdminUsers(
+            users.map((user) => {
+              const memberships = user.memberships ?? []
+              const firstMembership = memberships[0]
+              const workspace = Array.isArray(firstMembership?.workspace)
+                ? firstMembership.workspace[0]
+                : firstMembership?.workspace
+              const name = user.full_name || user.email || "Unknown user"
+              const membershipRole = firstMembership?.role
+              const role: PlatformRole =
+                user.platform_role === "super_admin"
+                  ? "Super Admin"
+                  : membershipRole === "owner"
+                    ? "Workspace Admin"
+                    : membershipRole === "admin"
+                      ? "Admin"
+                      : "Workspace Member"
+
+              return {
+                id: user.id,
+                name,
+                initials: deriveInitialsFromName(name),
+                email: user.email ?? "",
+                workspace:
+                  user.platform_role === "super_admin"
+                    ? "Platform"
+                    : workspace?.name ?? "No workspace",
+                role,
+                status:
+                  user.status === "suspended"
+                    ? "Suspended"
+                    : user.status === "inactive"
+                      ? "Invited"
+                      : "Active",
+                lastActive: user.updated_at
+                  ? new Date(user.updated_at).toLocaleString()
+                  : "Unknown",
+              }
+            })
+          )
+        }
+      )
+      .catch(() => setAdminUsers([]))
+      .finally(() => setIsLoadingUsers(false))
+  }, [])
+
+  const filteredMembers = adminUsers.filter((member) => {
     const matchesQuery =
       query.trim().length === 0 ||
       member.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -4928,8 +5245,12 @@ function UsersWorkspacesConsoleContent() {
       {filteredMembers.length === 0 ? (
         <AdminEmptyState
           icon={IconUsers}
-          title="No users found"
-          description="No users or workspace assignments match the current search and filters."
+          title={isLoadingUsers ? "Loading users" : "No users found"}
+          description={
+            isLoadingUsers
+              ? "Reading users from the database."
+              : "No users or workspace assignments match the current search and filters."
+          }
           action={
             <Button type="button" size="sm" onClick={() => setInviteOpen(true)}>
               Invite your first user
@@ -5807,7 +6128,7 @@ function AuditLogsConsoleContent() {
   )
 }
 
-function UsageLimitsConsoleContent() {
+function UsageLimitsConsoleContent({ workspaceNames = [] }: { workspaceNames?: string[] }) {
   const [sortKey, setSortKey] = React.useState<"name" | "workspace" | "tokens" | "runs" | "files" | "lastActive">("tokens")
   const [query, setQuery] = React.useState("")
   const [workspaceFilter, setWorkspaceFilter] = React.useState("All workspaces")
@@ -5869,7 +6190,7 @@ function UsageLimitsConsoleContent() {
         </div>
         <AdminSelect
           value={workspaceFilter}
-          options={["All workspaces", ...initialWorkspaces.map((workspace) => workspace.name)]}
+          options={["All workspaces", ...workspaceNames]}
           onChange={setWorkspaceFilter}
           className="sm:w-40"
         />
@@ -5960,20 +6281,232 @@ function UsageLimitsConsoleContent() {
   )
 }
 
-function renderAdminConsoleContent(section: AdminConsoleSection) {
+type WaitlistRequest = {
+  id: string
+  name: string
+  email: string
+  company: string | null
+  role: string | null
+  company_size: string | null
+  country: string | null
+  profile_type: string | null
+  notes: string | null
+  status: "pending" | "approved" | "rejected"
+  created_at: string
+}
+
+function RequestsConsoleContent() {
+  const [requests, setRequests] = React.useState<WaitlistRequest[]>([])
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [actionLoading, setActionLoading] = React.useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = React.useState("All")
+  const [query, setQuery] = React.useState("")
+
+  const loadRequests = React.useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const res = await fetch("/api/admin/waitlist")
+      const payload = (await res.json()) as { data?: { requests: WaitlistRequest[] } }
+      setRequests(payload.data?.requests ?? [])
+    } catch {
+      /* silent */
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => { void loadRequests() }, [loadRequests])
+
+  const handleAction = React.useCallback(
+    async (id: string, action: "approve" | "reject") => {
+      setActionLoading(id + action)
+      try {
+        const res = await fetch(`/api/admin/waitlist/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        })
+        if (res.ok) {
+          setRequests((prev) =>
+            prev.map((r) =>
+              r.id === id ? { ...r, status: action === "approve" ? "approved" : "rejected" } : r
+            )
+          )
+        }
+      } catch {
+        /* silent */
+      } finally {
+        setActionLoading(null)
+      }
+    },
+    []
+  )
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return requests.filter((r) => {
+      const matchesStatus =
+        statusFilter === "All" ||
+        r.status === statusFilter.toLowerCase()
+      const matchesQuery =
+        !q ||
+        r.name.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
+        (r.company ?? "").toLowerCase().includes(q)
+      return matchesStatus && matchesQuery
+    })
+  }, [requests, statusFilter, query])
+
+  const pendingCount = requests.filter((r) => r.status === "pending").length
+
+  return (
+    <AdminPage
+      section={"Requests" as AdminConsoleSection}
+      actions={
+        pendingCount > 0 ? (
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+            {pendingCount}
+          </span>
+        ) : null
+      }
+    >
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-40">
+            <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, email, or company"
+              className="h-7 pl-8 text-xs"
+            />
+          </div>
+          <AdminSelect
+            value={statusFilter}
+            options={["All", "Pending", "Approved", "Rejected"]}
+            onChange={setStatusFilter}
+            className="sm:w-36"
+          />
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading requests…
+          </div>
+        ) : filtered.length === 0 ? (
+          <AdminEmptyState
+            icon={IconListDetails}
+            title="No requests found"
+            description={
+              statusFilter === "All"
+                ? "No waitlist submissions yet."
+                : `No ${statusFilter.toLowerCase()} requests.`
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+                  <th className="px-3 py-2.5 text-left font-medium">Name</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Email</th>
+                  <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Company / Role</th>
+                  <th className="hidden px-3 py-2.5 text-left font-medium md:table-cell">Country</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Date</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filtered.map((req) => {
+                  const statusTone: Record<string, string> = {
+                    pending: "text-amber-700 dark:text-amber-300 bg-amber-500/10",
+                    approved: "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10",
+                    rejected: "text-red-700 dark:text-red-300 bg-red-500/10",
+                  }
+                  return (
+                    <tr key={req.id} className="hover:bg-muted/20">
+                      <td className="px-3 py-2.5 font-medium">{req.name}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{req.email}</td>
+                      <td className="hidden px-3 py-2.5 text-muted-foreground sm:table-cell">
+                        {[req.company, req.role].filter(Boolean).join(" · ") || "—"}
+                      </td>
+                      <td className="hidden px-3 py-2.5 text-muted-foreground md:table-cell">
+                        {req.country ?? "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusTone[req.status] ?? ""}`}>
+                          {req.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                        {new Date(req.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {req.status === "pending" ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              disabled={actionLoading !== null}
+                              onClick={() => void handleAction(req.id, "approve")}
+                              className="h-6 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                            >
+                              {actionLoading === req.id + "approve" ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                "Approve"
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              disabled={actionLoading !== null}
+                              onClick={() => void handleAction(req.id, "reject")}
+                              className="h-6 border-red-500/40 text-red-700 hover:bg-red-500/10 dark:text-red-300"
+                            >
+                              {actionLoading === req.id + "reject" ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                "Reject"
+                              )}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </AdminPage>
+  )
+}
+
+function renderAdminConsoleContent(section: AdminConsoleSection, workspaceNames: string[] = []) {
   switch (section) {
     case "Admin overview":
-      return <AdminOverviewConsoleContent />
+      return <AdminOverviewConsoleContent workspaceNames={workspaceNames} />
     case "Workspace provisioning":
       return <WorkspaceProvisioningConsoleContent />
+    case "Requests":
+      return <RequestsConsoleContent />
     case "Users & workspaces":
-      return <UsersWorkspacesConsoleContent />
+      return <UsersWorkspacesConsoleContent workspaceNames={workspaceNames} />
     case "Roles & permissions":
       return <RolesPermissionsConsoleContent />
     case "Access policies":
       return <AccessPoliciesConsoleContent />
     case "Usage & limits":
-      return <UsageLimitsConsoleContent />
+      return <UsageLimitsConsoleContent workspaceNames={workspaceNames} />
   }
 }
 
@@ -5982,17 +6515,58 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { theme, resolvedTheme, setTheme } = useTheme()
-  const currentWorkspaceMember = React.useMemo(
-    () =>
-      workspaceMembers.find(
-        (member) =>
-          member.email.toLowerCase() === accountProfile.email.toLowerCase()
-      ) ?? null,
-    []
-  )
-  const isPlatformAdmin =
-    currentWorkspaceMember?.role === "Super Admin" ||
-    currentWorkspaceMember?.role === "Admin"
+  const {
+    workspaces,
+    activeWorkspaceId: ctxActiveId,
+    setActiveWorkspace,
+    refreshWorkspaces,
+    apiFetch,
+  } = useWorkspace()
+
+  // Real user data
+  const [liveUser, setLiveUser] = React.useState<{
+    id: string
+    full_name: string | null
+    email: string | null
+    avatar_url: string | null
+    platform_role: string
+  } | null>(null)
+
+  const refreshLiveUser = React.useCallback(() => {
+    fetch("/api/users/me")
+      .then((r) => r.json())
+      .then((res: { data?: { user: { id: string; full_name: string | null; email: string | null; avatar_url: string | null; platform_role: string } } }) => {
+        if (res.data?.user) setLiveUser(res.data.user)
+      })
+      .catch(() => {})
+  }, [])
+
+  React.useEffect(() => {
+    refreshLiveUser()
+    window.addEventListener("atmet-user-updated", refreshLiveUser)
+    return () => window.removeEventListener("atmet-user-updated", refreshLiveUser)
+  }, [refreshLiveUser])
+
+  const liveUserName = liveUser?.full_name ?? ""
+  const liveUserInitials = liveUserName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((t) => t[0]?.toUpperCase() ?? "")
+    .join("") || "U"
+
+  const handleSignOut = React.useCallback(async () => {
+    try {
+      await fetch("/api/auth/sign-out", { method: "POST" })
+    } finally {
+      setLiveUser(null)
+      localStorage.removeItem("atmet_active_workspace")
+      router.push("/sign-in")
+    }
+  }, [router])
+
+  const isPlatformAdmin = liveUser?.platform_role === "super_admin"
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [adminConsoleOpen, setAdminConsoleOpen] = React.useState(false)
   const [isSettingsCloseConfirmOpen, setIsSettingsCloseConfirmOpen] =
@@ -6005,10 +6579,48 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     React.useState<AdminConsoleSection>("Admin overview")
   const [profileReturnAdminSection, setProfileReturnAdminSection] =
     React.useState<AdminConsoleSection | null>(null)
-  const [workspaceRecords, setWorkspaceRecords] =
-    React.useState<WorkspaceProfile[]>(initialWorkspaces)
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = React.useState(
-    initialWorkspaces[0]?.id ?? ""
+  const workspaceRecords = React.useMemo<WorkspaceProfile[]>(
+    () => {
+      if (isPlatformAdmin && workspaces.length === 0) {
+        return [
+          {
+            id: PLATFORM_ADMIN_WORKSPACE_ID,
+            name: "Atmet",
+            avatarUrl: "/Logos/Favicon Atmet.png",
+            initials: "A",
+            bgClass: "bg-cyan-500/15",
+            textClass: "text-cyan-700 dark:text-cyan-300",
+            primaryEmail: liveUser?.email ?? "",
+            description: "Platform administration workspace.",
+            country: "",
+          },
+        ]
+      }
+
+      return workspaces.map((ws) => ({
+        id: ws.id,
+        name: ws.name,
+        avatarUrl: ws.avatar_url ?? null,
+        initials: deriveInitialsFromName(ws.name),
+        bgClass: "bg-sky-500/20",
+        textClass: "text-sky-700 dark:text-sky-300",
+        primaryEmail: "",
+        description: "",
+        country: "",
+      }))
+    },
+    [isPlatformAdmin, liveUser?.email, workspaces]
+  )
+  const selectedWorkspaceId =
+    isPlatformAdmin && workspaces.length === 0
+      ? PLATFORM_ADMIN_WORKSPACE_ID
+      : ctxActiveId ?? workspaceRecords[0]?.id ?? ""
+  const setSelectedWorkspaceId = React.useCallback(
+    (workspaceId: string) => {
+      if (workspaceId === PLATFORM_ADMIN_WORKSPACE_ID) return
+      setActiveWorkspace(workspaceId)
+    },
+    [setActiveWorkspace]
   )
   const [membersQuickSearchQuery, setMembersQuickSearchQuery] =
     React.useState("")
@@ -6030,7 +6642,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const activeChatId = searchParams.get("chat")
   const selectedWorkspace = React.useMemo(
     () => {
-      const fallbackWorkspace = workspaceRecords[0] ?? initialWorkspaces[0]
+      const fallbackWorkspace = workspaceRecords[0] ?? null
       if (!fallbackWorkspace) return null
       return (
         workspaceRecords.find(
@@ -6079,37 +6691,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     [visibleChats]
   )
 
-  const readStoredChats = React.useCallback((): StoredChatItem[] => {
-    try {
-      const raw = window.localStorage.getItem(AI_CORE_CHATS_STORAGE_KEY)
-      if (!raw) return []
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return []
-
-      return parsed.filter(
-        (item): item is StoredChatItem =>
-          item &&
-          typeof item === "object" &&
-          typeof item.id === "string" &&
-          typeof item.title === "string" &&
-          typeof item.updatedAt === "number"
-      )
-    } catch {
-      return []
-    }
+  const persistStoredChats = React.useCallback((nextChats: StoredChatItem[]) => {
+    setStoredChats(nextChats)
   }, [])
-
-  const persistStoredChats = React.useCallback(
-    (nextChats: StoredChatItem[]) => {
-      setStoredChats(nextChats)
-      window.localStorage.setItem(
-        AI_CORE_CHATS_STORAGE_KEY,
-        JSON.stringify(nextChats)
-      )
-      window.dispatchEvent(new CustomEvent(AI_CORE_CHATS_UPDATED_EVENT))
-    },
-    []
-  )
 
   const toggleChatPin = React.useCallback(
     (chatId: string) => {
@@ -6138,7 +6722,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }, [])
 
   const submitRenamingChat = React.useCallback(
-    (chatId: string) => {
+    async (chatId: string) => {
       if (discardNextRenameSubmitRef.current) {
         discardNextRenameSubmitRef.current = false
         cancelRenamingChat()
@@ -6161,14 +6745,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         chat.id === chatId ? { ...chat, title: trimmedTitle } : chat
       )
       persistStoredChats(nextChats)
+      await apiFetch(`/api/chats/${chatId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmedTitle }),
+      }).catch(() => undefined)
       discardNextRenameSubmitRef.current = false
       cancelRenamingChat()
     },
-    [cancelRenamingChat, editingChatTitle, persistStoredChats, storedChats]
+    [apiFetch, cancelRenamingChat, editingChatTitle, persistStoredChats, storedChats]
   )
 
   const deleteChat = React.useCallback(
-    (chatId: string) => {
+    async (chatId: string) => {
       const target = storedChats.find((chat) => chat.id === chatId)
       if (!target) return
 
@@ -6177,67 +6766,110 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       const nextChats = storedChats.filter((chat) => chat.id !== chatId)
       persistStoredChats(nextChats)
+      await apiFetch(`/api/chats/${chatId}`, { method: "DELETE" }).catch(
+        () => undefined
+      )
 
       if (activeChatId === chatId) {
         router.push("/ai-core")
       }
     },
-    [activeChatId, persistStoredChats, router, storedChats]
+    [activeChatId, apiFetch, persistStoredChats, router, storedChats]
   )
 
-  const createNewChat = React.useCallback(() => {
-    const now = Date.now()
-    const id = `chat-${now}-${Math.random().toString(36).slice(2, 8)}`
+  const createNewChat = React.useCallback(async () => {
+    const response = await apiFetch("/api/chats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "New chat" }),
+    }).catch(() => null)
+    if (!response?.ok) return
+
+    const payload = (await response.json()) as {
+      data?: { chat?: { id: string; title: string; updated_at?: string; created_at?: string } }
+    }
+    const chat = payload.data?.chat
+    if (!chat) return
+
+    const updatedAt = chat.updated_at ?? chat.created_at ?? new Date().toISOString()
     const nextChat: StoredChatItem = {
-      id,
-      title: "New chat",
-      updatedAt: now,
+      id: chat.id,
+      title: chat.title,
+      updatedAt: Date.parse(updatedAt),
       pinned: false,
-      path: `/ai-core?chat=${id}`,
+      path: `/ai-core?chat=${chat.id}`,
     }
 
-    const nextChats = [nextChat, ...storedChats]
-    persistStoredChats(nextChats)
+    persistStoredChats([nextChat, ...storedChats.filter((item) => item.id !== chat.id)])
     router.push(nextChat.path ?? "/ai-core")
-  }, [persistStoredChats, router, storedChats])
+  }, [apiFetch, persistStoredChats, router, storedChats])
 
   const handleWorkspaceSave = React.useCallback(
-    (nextWorkspace: WorkspaceProfile) => {
-      setWorkspaceRecords((previous) =>
-        previous.map((workspace) =>
-          workspace.id === nextWorkspace.id ? nextWorkspace : workspace
-        )
-      )
+    async (nextWorkspace: WorkspaceProfile) => {
+      const response = await apiFetch(`/api/workspaces/${nextWorkspace.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nextWorkspace.name,
+          avatar_url: nextWorkspace.avatarUrl,
+        }),
+      }).catch(() => null)
+      if (response?.ok) {
+        await refreshWorkspaces()
+      }
     },
-    []
+    [apiFetch, refreshWorkspaces]
   )
 
   React.useEffect(() => {
-    const syncChats = () => {
-      setStoredChats(readStoredChats())
+    if (!selectedWorkspaceId) {
+      setStoredChats([])
+      return
     }
 
-    syncChats()
-
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== AI_CORE_CHATS_STORAGE_KEY) return
-      syncChats()
+    const syncChats = async () => {
+      const response = await apiFetch("/api/chats").catch(() => null)
+      if (!response?.ok) {
+        setStoredChats([])
+        return
+      }
+      const payload = (await response.json()) as {
+        data?: {
+          chats?: Array<{
+            id: string
+            title: string
+            updated_at?: string
+            created_at?: string
+          }>
+        }
+      }
+      setStoredChats(
+        (payload.data?.chats ?? []).map((chat) => {
+          const updatedAt = chat.updated_at ?? chat.created_at ?? new Date().toISOString()
+          return {
+            id: chat.id,
+            title: chat.title,
+            updatedAt: Date.parse(updatedAt),
+            pinned: false,
+            path: `/ai-core?chat=${chat.id}`,
+          }
+        })
+      )
     }
 
+    void syncChats()
     window.addEventListener(
       AI_CORE_CHATS_UPDATED_EVENT,
       syncChats as EventListener
     )
-    window.addEventListener("storage", onStorage)
 
     return () => {
       window.removeEventListener(
         AI_CORE_CHATS_UPDATED_EVENT,
         syncChats as EventListener
       )
-      window.removeEventListener("storage", onStorage)
     }
-  }, [readStoredChats])
+  }, [apiFetch, selectedWorkspaceId])
 
   React.useEffect(() => {
     const handleOpenSettingsPanel = (event: Event) => {
@@ -6363,6 +6995,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               selectedWorkspaceId || workspaceRecords[0]?.id || ""
             }
             onSelectedWorkspaceIdChange={setSelectedWorkspaceId}
+            showWorkspaceActions={selectedWorkspaceId !== PLATFORM_ADMIN_WORKSPACE_ID}
+            onCreateWorkspace={async () => {
+              const name = window.prompt("Workspace name")
+              if (!name?.trim()) return
+              const response = await fetch("/api/workspaces", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: name.trim() }),
+              }).catch(() => null)
+              if (!response?.ok) return
+              const payload = (await response.json()) as {
+                data?: { workspace?: { id: string } }
+              }
+              await refreshWorkspaces()
+              if (payload.data?.workspace?.id) {
+                setActiveWorkspace(payload.data.workspace.id)
+              }
+              setActiveSettingsSection("Workspace")
+              setSettingsOpen(true)
+            }}
+            onAddUsersToWorkspace={() => {
+              setActiveSettingsSection("Members")
+              setMembersQuickInviteToken((previous) => previous + 1)
+              setSettingsOpen(true)
+            }}
           />
         </div>
         <div className="px-2 py-2 group-data-[collapsible=icon]:hidden">
@@ -6786,7 +7443,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4"
                         data-settings-scope="true"
                       >
-                        {renderAdminConsoleContent(activeAdminConsoleSection)}
+                        {renderAdminConsoleContent(activeAdminConsoleSection, workspaceRecords.map(w => w.name))}
                       </div>
                     </div>
                   </div>
@@ -6983,20 +7640,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <Avatar className="size-8 shrink-0">
                   <AvatarImage
-                    src={accountProfile.avatarUrl}
-                    alt={`${currentUser.name} avatar`}
+                    src={liveUser?.avatar_url ?? undefined}
+                    alt={`${liveUserName} avatar`}
                     className="object-cover"
                   />
                   <AvatarFallback className="text-xs font-semibold">
-                    {currentUser.initials}
+                    {liveUserInitials}
                   </AvatarFallback>
                 </Avatar>
                 <span className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="truncate text-sm font-medium">
-                    {currentUser.name}
+                    {liveUserName}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                    {currentUser.role}
+                    {liveUser?.email ?? "Signed in"}
                   </span>
                 </span>
                 <IconChevronUp className="ms-auto h-4 w-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
@@ -7014,7 +7671,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   )}
                   Theme toggle
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setActiveSettingsSection("Account")
+                    setSettingsOpen(true)
+                  }}
+                >
                   <IconUser className="h-4 w-4" stroke={1.5} />
                   Profile
                 </DropdownMenuItem>
@@ -7035,7 +7697,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </Badge>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => { void handleSignOut() }}
+                >
                   <IconLogout2 className="h-4 w-4" stroke={1.5} />
                   Logout
                 </DropdownMenuItem>

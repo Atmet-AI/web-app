@@ -36,10 +36,16 @@ export function VersionSwitcher({
   workspaces,
   selectedWorkspaceId,
   onSelectedWorkspaceIdChange,
+  onCreateWorkspace,
+  onAddUsersToWorkspace,
+  showWorkspaceActions = true,
 }: {
   workspaces: WorkspaceSwitcherItem[]
   selectedWorkspaceId: string
   onSelectedWorkspaceIdChange: (workspaceId: string) => void
+  onCreateWorkspace?: () => void
+  onAddUsersToWorkspace?: () => void
+  showWorkspaceActions?: boolean
 }) {
   const { state, toggleSidebar } = useSidebar()
   const selectedWorkspace =
@@ -143,15 +149,19 @@ export function VersionSwitcher({
                   )}
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Plus className="h-4 w-4 opacity-80" />
-                Create workspace
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Users className="h-4 w-4 opacity-80" />
-                Add users to workspace
-              </DropdownMenuItem>
+              {showWorkspaceActions ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={onCreateWorkspace}>
+                    <Plus className="h-4 w-4 opacity-80" />
+                    Create workspace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={onAddUsersToWorkspace}>
+                    <Users className="h-4 w-4 opacity-80" />
+                    Add users to workspace
+                  </DropdownMenuItem>
+                </>
+              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="justify-between gap-3"

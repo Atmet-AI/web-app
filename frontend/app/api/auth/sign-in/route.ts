@@ -1,32 +1,49 @@
-import { NextResponse } from "next/server"
+import { type NextRequest } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { ok, Errors } from "@/lib/api/response"
+import { signInSchema } from "@/lib/validations/auth"
 
-type SignInPayload = {
-  email?: string
-  password?: string
-}
-
-export async function POST(request: Request) {
-  await new Promise((resolve) => setTimeout(resolve, 1000))
-
-  // TODO: Replace with real credential validation and JWT issuance.
-  const body = (await request.json()) as SignInPayload
-
-  if (body.password === "wrong") {
-    return NextResponse.json({ error: "invalid_credentials" }, { status: 401 })
+export async function POST(request: NextRequest) {
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return Errors.badRequest("Invalid JSON body.")
   }
 
-  if (body.email === "unverified@test.com") {
-    return NextResponse.json({ error: "unverified_email" }, { status: 403 })
+  const parsed = signInSchema.safeParse(body)
+  if (!parsed.success) {
+    return Errors.validationError(parsed.error.issues[0].message)
   }
 
-  return NextResponse.json({
-    success: true,
-    token: `mock_token_${Date.now()}`,
+  const { email, password } = parsed.data
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (error) {
+    if (error.message.toLowerCase().includes("email not confirmed")) {
+      return Errors.forbidden("Please verify your email before signing in.")
+    }
+    return Errors.unauthorized("Invalid email or password.")
+  }
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("full_name, status, platform_role")
+    .eq("id", data.user.id)
+    .maybeSingle()
+
+  return ok({
     user: {
-      id: "usr_mock_001",
-      name: "Amir Haddad",
-      email: body.email ?? "",
-      role: "Owner",
+      id: data.user.id,
+      email: data.user.email,
+      full_name: profile?.full_name ?? null,
+      status: profile?.status ?? "active",
+      platform_role: profile?.platform_role ?? "user",
     },
   })
 }

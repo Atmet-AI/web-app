@@ -1,8 +1,32 @@
-import { NextResponse } from "next/server"
+import { type NextRequest } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { ok, Errors } from "@/lib/api/response"
+import { resendVerificationSchema } from "@/lib/validations/auth"
 
-export async function POST() {
-  await new Promise((resolve) => setTimeout(resolve, 800))
+export async function POST(request: NextRequest) {
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return Errors.badRequest("Invalid JSON body.")
+  }
 
-  // TODO: Replace with real verification email sending (e.g., SendGrid).
-  return NextResponse.json({ success: true })
+  const parsed = resendVerificationSchema.safeParse(body)
+  if (!parsed.success) {
+    return Errors.validationError(parsed.error.issues[0].message)
+  }
+
+  const { email } = parsed.data
+  const supabase = await createClient()
+
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email,
+  })
+
+  if (error) {
+    return Errors.internal()
+  }
+
+  return ok({ success: true })
 }

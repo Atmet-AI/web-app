@@ -1,26 +1,56 @@
-import { NextResponse } from "next/server"
+import { type NextRequest } from "next/server"
+import { getUser } from "@/lib/api/auth"
+import { getWorkspaceId } from "@/lib/api/workspace"
+import { ok, Errors } from "@/lib/api/response"
+import { getCatalogIntegration } from "@/lib/integrations-catalog"
+import { connectApiKeySchema } from "@/lib/validations/integration"
 
-import { connectApiKeyIntegration } from "@/lib/integrations-store"
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const auth = await getUser()
+  if (!auth.ok) return auth.response
 
-export async function POST(request: Request, context: { params: Promise<{ slug: string }> }) {
-  const { slug } = await context.params
+  const ws = getWorkspaceId(request)
+  if (!ws.ok) return ws.response
 
-  let payload: { apiKey?: string; keyName?: string }
+  const { supabase, user } = auth
+  const { slug } = await params
 
+  const catalog = getCatalogIntegration(slug)
+  if (!catalog) return Errors.notFound("Integration")
+  if (catalog.authType !== "apikey") {
+    return Errors.badRequest("This integration uses OAuth, not API keys.")
+  }
+
+  let body: unknown
   try {
-    payload = (await request.json()) as { apiKey?: string; keyName?: string }
+    body = await request.json()
   } catch {
-    return NextResponse.json(
-      { success: false, message: "Invalid request body." },
-      { status: 400 }
-    )
+    return Errors.badRequest("Invalid JSON body.")
   }
 
-  const result = connectApiKeyIntegration(slug, payload.apiKey ?? "", payload.keyName)
+  const parsed = connectApiKeySchema.safeParse(body)
+  if (!parsed.success) return Errors.validationError(parsed.error.issues[0].message)
 
-  if (!result.success) {
-    return NextResponse.json(result, { status: 400 })
-  }
+  const { apiKey, keyName } = parsed.data
 
-  return NextResponse.json({ success: true })
+  const { error } = await supabase.from("integration").upsert(
+    {
+      workspace_id: ws.workspaceId,
+      created_by: user.id,
+      slug,
+      auth_type: "apikey",
+      credentials: { api_key: apiKey, key_name: keyName ?? null },
+      // TODO: encrypt credentials using Supabase Vault before storing
+      status: "active",
+      connected_at: new Date().toISOString(),
+    },
+    { onConflict: "workspace_id,slug" }
+  )
+
+  if (error) return Errors.internal()
+
+  return ok({ success: true })
 }

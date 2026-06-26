@@ -32,7 +32,6 @@ import { Input } from "@/components/ui/input"
 import { useSidebar } from "@/components/ui/sidebar"
 import {
   getWorkflowProject,
-  workflowProjects,
   type WorkflowProject,
 } from "@/lib/workflow-projects"
 import {
@@ -47,6 +46,7 @@ import {
   type WorkflowStateEventDetail,
 } from "@/lib/workflow-events"
 import { OPEN_NEW_SKILL_DIALOG_EVENT } from "@/lib/skills-events"
+import { useWorkspace } from "@/lib/workspace-context"
 import {
   Check,
   ChevronDown,
@@ -137,14 +137,6 @@ function buildFallbackFromName(name: string) {
   return letters.slice(0, 2) || "U"
 }
 
-function buildWorkspaceEmail(name: string) {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "")
-  return `${slug || "user"}@atmet.ai`
-}
-
 function getDefaultParticipantsForProject(project: WorkflowProject | null) {
   if (!project) return []
   return project.members.map((member) => ({
@@ -182,6 +174,7 @@ export function PlatformNavbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const { state: sidebarState, toggleSidebar } = useSidebar()
   const userPickerCardRef = useRef<HTMLDivElement>(null)
   const isAiCore = pathname.startsWith("/ai-core")
@@ -241,49 +234,82 @@ export function PlatformNavbar() {
   const canManageUsersFromNavbar = isAiCore || isWorkflowProject
   const manageUsersLabel = isWorkflowProject ? "Invite users" : "Manage chat users"
   const isChatOwner = true
-  const currentUserFullName = "Amir Haddad"
+  const [liveUser, setLiveUser] = useState<{
+    full_name: string | null
+    email: string | null
+  } | null>(null)
+  const [workspaceUserRows, setWorkspaceUserRows] = useState<WorkspaceUser[]>([])
+  const currentUserFullName = liveUser?.full_name || liveUser?.email || "You"
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false)
   const [userSearchQuery, setUserSearchQuery] = useState("")
+  useEffect(() => {
+    fetch("/api/users/me")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { user?: { full_name: string | null; email: string | null } } } | null) => {
+        if (payload?.data?.user) setLiveUser(payload.data.user)
+      })
+      .catch(() => undefined)
+  }, [])
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setWorkspaceUserRows([])
+      return
+    }
+
+    apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            members?: Array<{
+              user?: { email: string | null; full_name: string | null } | null
+            }>
+          }
+        } | null) => {
+          setWorkspaceUserRows(
+            (payload?.data?.members ?? []).map((member) => {
+              const name =
+                member.user?.full_name || member.user?.email || "Workspace user"
+              return {
+                name,
+                fallback: buildFallbackFromName(name),
+                email: member.user?.email ?? "",
+              }
+            })
+          )
+        }
+      )
+      .catch(() => setWorkspaceUserRows([]))
+  }, [activeWorkspaceId, apiFetch])
   const workspaceUsers = useMemo<WorkspaceUser[]>(
     () => {
-      const users = new Map<string, WorkspaceUser>([
-        [
-          currentUserFullName,
-          { name: currentUserFullName, fallback: "AH", email: "amir.haddad@atmet.ai" },
-        ],
-        ["Sarah Reed", { name: "Sarah Reed", fallback: "SR", email: "sarah.reed@atmet.ai" }],
-        ["Noah Ali", { name: "Noah Ali", fallback: "NA", email: "noah.ali@atmet.ai" }],
-        ["Lina Omar", { name: "Lina Omar", fallback: "LO", email: "lina.omar@atmet.ai" }],
-        ["Kareem Aziz", { name: "Kareem Aziz", fallback: "KA", email: "kareem.aziz@atmet.ai" }],
-        [
-          "Automation Bot",
-          { name: "Automation Bot", fallback: "AB", email: "automation.bot@atmet.ai" },
-        ],
-        [
-          "Product Manager",
-          { name: "Product Manager", fallback: "PM", email: "product.manager@atmet.ai" },
-        ],
-        ["Engineer", { name: "Engineer", fallback: "EN", email: "engineer@atmet.ai" }],
-      ])
-
-      workflowProjects.forEach((project) => {
-        project.members.forEach((member) => {
-          if (users.has(member.name)) return
-          users.set(member.name, {
-            name: member.name,
-            fallback: member.initials || buildFallbackFromName(member.name),
-            email: buildWorkspaceEmail(member.name),
-          })
-        })
+      const users = new Map<string, WorkspaceUser>()
+      users.set(currentUserFullName, {
+        name: currentUserFullName,
+        fallback: buildFallbackFromName(currentUserFullName),
+        email: liveUser?.email ?? "",
       })
+
+      workspaceUserRows.forEach((member) => users.set(member.name, member))
 
       return Array.from(users.values())
     },
-    [currentUserFullName]
+    [currentUserFullName, liveUser?.email, workspaceUserRows]
   )
   const [aiCoreParticipants, setAiCoreParticipants] = useState<ChatParticipant[]>([
-    { name: currentUserFullName, fallback: "AH" },
+    { name: currentUserFullName, fallback: buildFallbackFromName(currentUserFullName) },
   ])
+  useEffect(() => {
+    setAiCoreParticipants((previous) => {
+      if (previous.length > 1) return previous
+      return [
+        {
+          name: currentUserFullName,
+          fallback: buildFallbackFromName(currentUserFullName),
+        },
+      ]
+    })
+  }, [currentUserFullName])
   const [workflowParticipantsByProject, setWorkflowParticipantsByProject] = useState<
     Record<string, ChatParticipant[]>
   >({})
