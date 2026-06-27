@@ -1,8 +1,8 @@
-import { type NextRequest } from "next/server"
-import { createClient } from "@/lib/supabase/server"
-import { ok, Errors } from "@/lib/api/response"
-import { signInSchema } from "@/lib/validations/auth"
+import { type NextRequest, NextResponse } from "next/server"
 
+import { Errors } from "@/lib/api/response"
+import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import {
   TEMP_AUTH_COOKIE,
   TEMP_AUTH_EMAIL,
@@ -10,27 +10,68 @@ import {
   TEMP_AUTH_SESSION,
   TEMP_AUTH_USER,
 } from "@/lib/temp-auth"
+import { signInSchema } from "@/lib/validations/auth"
 
 type SignInPayload = {
   email?: string
   password?: string
+  otp?: string
 }
 
-  const { email, password } = parsed.data
-  const supabase = await createClient()
+type AuthListUser = Awaited<
+  ReturnType<typeof supabaseAdmin.auth.admin.listUsers>
+>["data"]["users"][number]
 
-  const body = (await request.json()) as SignInPayload
-  const email = body.email?.trim().toLowerCase()
-  const protocol = request.headers.get("x-forwarded-proto") ?? new URL(request.url).protocol
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
 
-  if (email !== TEMP_AUTH_EMAIL || body.password !== TEMP_AUTH_PASSWORD) {
-    return NextResponse.json({ error: "invalid_credentials" }, { status: 401 })
+async function findAuthUserByEmail(email: string): Promise<AuthListUser | null> {
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 100,
+    })
+
+    if (error) return null
+
+    const user = data.users.find(
+      (candidate) => candidate.email?.toLowerCase() === email
+    )
+    if (user) return user
+    if (data.users.length < 100) return null
   }
 
+  return null
+}
+
+function isFirstLoginUser(user: AuthListUser) {
+  return Boolean(user.email) && user.user_metadata?.password_set !== true
+}
+
+async function getApprovedWaitlistEntry(email: string) {
+  const { data } = await supabaseAdmin
+    .from("waitlist")
+    .select("email, name, status")
+    .eq("email", email)
+    .eq("status", "approved")
+    .maybeSingle()
+
+  return data
+}
+
+function buildSignedInResponse(user: {
+  id: string
+  email?: string
+  user_metadata?: { full_name?: string }
+}) {
   const response = NextResponse.json({
-    success: true,
-    token: TEMP_AUTH_SESSION,
-    user: TEMP_AUTH_USER,
+    data: {
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name ?? null,
+      },
+    },
   })
 
   response.cookies.set({
@@ -38,10 +79,100 @@ type SignInPayload = {
     value: TEMP_AUTH_SESSION,
     httpOnly: true,
     sameSite: "lax",
-    secure: protocol.replace(":", "") === "https",
+    secure: APP_URL.startsWith("https://"),
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   })
 
   return response
+}
+
+export async function POST(request: NextRequest) {
+  let body: SignInPayload
+  try {
+    body = (await request.json()) as SignInPayload
+  } catch {
+    return Errors.badRequest("Invalid JSON body.")
+  }
+
+  const email = body.email?.trim().toLowerCase()
+  if (!email) return Errors.validationError("Invalid email address")
+
+  if (body.otp) {
+    const supabase = await createClient()
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: body.otp.trim(),
+      type: "email",
+    })
+
+    if (error || !data.user) {
+      return Errors.unauthorized("Invalid or expired OTP.")
+    }
+
+    return buildSignedInResponse(data.user)
+  }
+
+  if (!body.password) {
+    const authUser = await findAuthUserByEmail(email)
+    const approvedEntry = await getApprovedWaitlistEntry(email)
+
+    if (approvedEntry && (!authUser || isFirstLoginUser(authUser)) && email !== TEMP_AUTH_EMAIL) {
+      const supabase = await createClient()
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          data: {
+            full_name: approvedEntry.name,
+            password_set: false,
+          },
+        },
+      })
+
+      if (error) {
+        console.error("OTP email error:", error.message)
+        return Errors.badRequest(`OTP email was not sent: ${error.message}`)
+      }
+
+      return NextResponse.json({
+        data: {
+          status: "otp_sent",
+        },
+      })
+    }
+
+    return NextResponse.json({
+      data: {
+        status: "password_required",
+      },
+    })
+  }
+
+  if (email === TEMP_AUTH_EMAIL && body.password === TEMP_AUTH_PASSWORD) {
+    return buildSignedInResponse({
+      id: TEMP_AUTH_USER.id,
+      email: TEMP_AUTH_USER.email,
+      user_metadata: { full_name: TEMP_AUTH_USER.name },
+    })
+  }
+
+  const parsed = signInSchema.safeParse({ email, password: body.password })
+  if (!parsed.success) {
+    return Errors.validationError(parsed.error.issues[0].message)
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data)
+
+  if (error) {
+    if (error.message.toLowerCase().includes("email not confirmed")) {
+      return Errors.forbidden("Please verify your email first.")
+    }
+    return Errors.unauthorized("Incorrect email or password.")
+  }
+
+  if (!data.user) return Errors.unauthorized("Incorrect email or password.")
+
+  return buildSignedInResponse(data.user)
 }

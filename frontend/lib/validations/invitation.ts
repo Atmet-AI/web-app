@@ -2,7 +2,7 @@ import { z } from "zod"
 
 export const createInvitationSchema = z.object({
   email: z.string().email("Invalid email address"),
-  role: z.enum(["admin", "member"]).default("member"),
+  role: z.enum(["member"]).default("member"),
 })
 
 export const apiKeySchema = z.object({

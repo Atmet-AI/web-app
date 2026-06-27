@@ -21,8 +21,8 @@ export async function PATCH(
     .eq("id", auth.user.id)
     .single()
 
-  if (profile?.platform_role !== "super_admin") {
-    return Errors.forbidden("Super admin access required.")
+  if (!["super_admin", "admin"].includes(profile?.platform_role ?? "")) {
+    return Errors.forbidden("Admin access required.")
   }
 
   let body: unknown
@@ -63,21 +63,6 @@ export async function PATCH(
     .eq("id", id)
 
   if (updateError) return Errors.internal()
-
-  // On approval: send invite email via Supabase Auth
-  if (action === "approve") {
-    const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      entry.email,
-      {
-        data: { full_name: entry.name },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/onboarding`,
-      }
-    )
-    if (inviteError) {
-      // Don't fail the whole request — log and continue
-      console.error("Invite email error:", inviteError.message)
-    }
-  }
 
   return ok({ success: true, status: newStatus })
 }

@@ -19,7 +19,10 @@ export async function POST(request: NextRequest) {
   const { password } = parsed.data
   const supabase = await createClient()
 
-  const { error } = await supabase.auth.updateUser({ password })
+  const { error } = await supabase.auth.updateUser({
+    password,
+    data: { password_set: true },
+  })
 
   if (error) {
     return Errors.badRequest(error.message)

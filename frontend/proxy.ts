@@ -2,8 +2,22 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { TEMP_AUTH_COOKIE, TEMP_AUTH_SESSION } from "@/lib/temp-auth"
 
-const PUBLIC_PATHS = new Set(["/sign-in", "/landing-page", "/waitlist"])
-const PUBLIC_API_PATHS = new Set(["/api/auth/sign-in"])
+const PUBLIC_PATHS = new Set([
+  "/sign-in",
+  "/landing-page",
+  "/waitlist",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+])
+const REDIRECT_WHEN_SIGNED_IN_PATHS = new Set(["/sign-in", "/waitlist"])
+const PUBLIC_API_PATHS = new Set([
+  "/api/waitlist",
+  "/api/auth/sign-in",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+  "/api/auth/resend-verification",
+])
 
 function isPublicAsset(pathname: string) {
   return (
@@ -22,10 +36,16 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
+  if (pathname === "/onboarding" && request.nextUrl.searchParams.has("code")) {
+    const resetUrl = new URL("/reset-password", request.url)
+    resetUrl.search = request.nextUrl.search
+    return NextResponse.redirect(resetUrl)
+  }
+
   const isSignedIn = request.cookies.get(TEMP_AUTH_COOKIE)?.value === TEMP_AUTH_SESSION
 
   if (PUBLIC_PATHS.has(pathname)) {
-    if (!isSignedIn) {
+    if (!isSignedIn || !REDIRECT_WHEN_SIGNED_IN_PATHS.has(pathname)) {
       return NextResponse.next()
     }
 
