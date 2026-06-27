@@ -28,7 +28,7 @@ export async function GET() {
   // Use admin client to bypass RLS — user always reads their own profile
   const { data, error } = await supabaseAdmin
     .from("users")
-    .select("id, email, full_name, avatar_url, status, platform_role, onboarding_completed, created_at, updated_at")
+    .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -45,10 +45,14 @@ export async function GET() {
         email: authUser.user.email ?? "",
         full_name: authUser.user.user_metadata?.full_name ?? null,
         avatar_url: authUser.user.user_metadata?.avatar_url ?? null,
+        phone_country: authUser.user.user_metadata?.phone_country ?? null,
+        phone_country_code: authUser.user.user_metadata?.phone_country_code ?? null,
+        phone_number: authUser.user.user_metadata?.phone_number ?? null,
         onboarding_completed: isSuperAdmin,
         platform_role: isSuperAdmin ? "super_admin" : "user",
+        status: isSuperAdmin ? "active" : "inactive",
       }, { onConflict: "id" })
-      .select("id, email, full_name, avatar_url, status, platform_role, onboarding_completed, created_at, updated_at")
+      .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
       .single()
 
     return ok({
@@ -58,8 +62,12 @@ export async function GET() {
           email: authUser.user.email,
           full_name: null,
           avatar_url: null,
+          phone_country: null,
+          phone_country_code: null,
+          phone_number: null,
           platform_role: isSuperAdmin ? "super_admin" : "user",
           onboarding_completed: isSuperAdmin,
+          status: isSuperAdmin ? "active" : "inactive",
         },
     })
   }
@@ -73,7 +81,7 @@ export async function GET() {
         status: "active",
       })
       .eq("id", user.id)
-      .select("id, email, full_name, avatar_url, status, platform_role, onboarding_completed, created_at, updated_at")
+      .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
       .single()
 
     if (promoted) return ok({ user: promoted })
@@ -95,17 +103,24 @@ export async function PATCH(request: NextRequest) {
     return Errors.badRequest("Invalid JSON body.")
   }
 
-  const { full_name, avatar_url, status, onboarding_completed } = body as {
+  const { full_name, avatar_url, status, onboarding_completed, phone_country, phone_country_code, phone_number } = body as {
     full_name?: string
     avatar_url?: string | null
     status?: string
     onboarding_completed?: boolean
+    phone_country?: string | null
+    phone_country_code?: string | null
+    phone_number?: string | null
   }
 
   const coreUpdates: Record<string, unknown> = {}
   if (full_name !== undefined) coreUpdates.full_name = full_name
   if (avatar_url !== undefined) coreUpdates.avatar_url = avatar_url
   if (status !== undefined) coreUpdates.status = status
+  if (phone_country !== undefined) coreUpdates.phone_country = phone_country
+  if (phone_country_code !== undefined) coreUpdates.phone_country_code = phone_country_code
+  if (phone_number !== undefined) coreUpdates.phone_number = phone_number
+  if (onboarding_completed === true) coreUpdates.status = "active"
 
   if (Object.keys(coreUpdates).length === 0 && onboarding_completed === undefined) {
     return Errors.badRequest("No fields to update.")
@@ -125,8 +140,12 @@ export async function PATCH(request: NextRequest) {
       email: authUser?.user?.email ?? "",
       full_name: authUser?.user?.user_metadata?.full_name ?? null,
       avatar_url: authUser?.user?.user_metadata?.avatar_url ?? null,
+      phone_country: authUser?.user?.user_metadata?.phone_country ?? null,
+      phone_country_code: authUser?.user?.user_metadata?.phone_country_code ?? null,
+      phone_number: authUser?.user?.user_metadata?.phone_number ?? null,
       onboarding_completed: false,
       platform_role: "user",
+      status: "inactive",
     }, { onConflict: "id" })
   }
 
@@ -152,7 +171,7 @@ export async function PATCH(request: NextRequest) {
 
   const { data } = await supabaseAdmin
     .from("users")
-    .select("id, email, full_name, avatar_url, status, platform_role, onboarding_completed, created_at, updated_at")
+    .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
     .eq("id", user.id)
     .single()
 

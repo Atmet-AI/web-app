@@ -53,6 +53,7 @@ async function ensureApprovedAuthUser(
 ): Promise<{ user: AuthListUser | null; error: string | null }> {
   const existingUser = await findAuthUserByEmail(email)
   if (existingUser) {
+    let user = existingUser
     if (!existingUser.email_confirmed_at) {
       const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
         existingUser.id,
@@ -67,10 +68,22 @@ async function ensureApprovedAuthUser(
       )
 
       if (error) return { user: null, error: error.message }
-      return { user: data.user, error: null }
+      user = data.user
     }
 
-    return { user: existingUser, error: null }
+    await supabaseAdmin.from("users").upsert(
+      {
+        id: user.id,
+        email: user.email ?? email,
+        full_name: user.user_metadata?.full_name ?? fullName,
+        platform_role: "user",
+        onboarding_completed: user.user_metadata?.password_set === true,
+        status: user.user_metadata?.password_set === true ? "active" : "inactive",
+      },
+      { onConflict: "id" }
+    )
+
+    return { user, error: null }
   }
 
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -83,6 +96,18 @@ async function ensureApprovedAuthUser(
   })
 
   if (error) return { user: null, error: error.message }
+
+  await supabaseAdmin.from("users").upsert(
+    {
+      id: data.user.id,
+      email: data.user.email ?? email,
+      full_name: fullName,
+      platform_role: "user",
+      onboarding_completed: false,
+      status: "inactive",
+    },
+    { onConflict: "id" }
+  )
 
   return { user: data.user, error: null }
 }

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Kbd } from "@/components/ui/kbd"
 import { PlatformSelect } from "@/components/platform-select"
+import { phoneCountries } from "@/lib/phone-countries"
 import { cn } from "@/lib/utils"
 
 type Step = "workspace" | "profile" | "done"
@@ -35,6 +36,12 @@ const roleOptions = [
   "Marketing",
   "Other",
 ].map((role) => ({ value: role, label: role }))
+
+const phoneCountryOptions = phoneCountries.map((country) => ({
+  value: country.value,
+  label: `${country.label} ${country.dialCode}`,
+  leading: <span className="text-base leading-none">{country.flag}</span>,
+}))
 
 function getInitials(value: string, fallback = "A") {
   const parts = value.trim().split(/\s+/).filter(Boolean)
@@ -139,6 +146,8 @@ export default function OnboardingPage() {
   const [secondName, setSecondName] = React.useState("")
   const [profileAvatarUrl, setProfileAvatarUrl] = React.useState<string | null>(null)
   const [role, setRole] = React.useState("")
+  const [phoneCountry, setPhoneCountry] = React.useState("JO")
+  const [phoneNumber, setPhoneNumber] = React.useState("")
   const [isLoading, setIsLoading] = React.useState(false)
   const [isUploadingWorkspaceImage, setIsUploadingWorkspaceImage] = React.useState(false)
   const [isUploadingProfileImage, setIsUploadingProfileImage] = React.useState(false)
@@ -147,13 +156,15 @@ export default function OnboardingPage() {
   React.useEffect(() => {
     fetch("/api/users/me")
       .then((r) => r.json())
-      .then((res: { data?: { user: { full_name: string | null; avatar_url: string | null } } }) => {
+      .then((res: { data?: { user: { full_name: string | null; avatar_url: string | null; phone_country: string | null; phone_number: string | null } } }) => {
         const user = res.data?.user
         if (!user) return
         const parsedName = splitName(user.full_name)
         setFirstName(parsedName.firstName)
         setSecondName(parsedName.secondName)
         setProfileAvatarUrl(user.avatar_url)
+        if (user.phone_country) setPhoneCountry(user.phone_country)
+        if (user.phone_number) setPhoneNumber(user.phone_number)
       })
       .catch(() => {})
   }, [])
@@ -218,6 +229,8 @@ export default function OnboardingPage() {
     async (e: React.FormEvent) => {
       e.preventDefault()
       const fullName = `${firstName.trim()} ${secondName.trim()}`.trim()
+      const selectedPhoneCountry = phoneCountries.find((country) => country.value === phoneCountry)
+      const normalizedPhoneNumber = phoneNumber.trim()
       if (!firstName.trim()) return
 
       setIsLoading(true)
@@ -230,6 +243,9 @@ export default function OnboardingPage() {
           body: JSON.stringify({
             full_name: fullName,
             avatar_url: profileAvatarUrl,
+            phone_country: normalizedPhoneNumber ? phoneCountry : null,
+            phone_country_code: normalizedPhoneNumber ? selectedPhoneCountry?.dialCode ?? null : null,
+            phone_number: normalizedPhoneNumber || null,
             onboarding_completed: true,
           }),
         })
@@ -247,7 +263,7 @@ export default function OnboardingPage() {
         setIsLoading(false)
       }
     },
-    [firstName, profileAvatarUrl, secondName]
+    [firstName, phoneCountry, phoneNumber, profileAvatarUrl, secondName]
   )
 
   const handleEnterApp = React.useCallback(() => {
@@ -416,6 +432,34 @@ export default function OnboardingPage() {
                   placeholder="Select your role..."
                   onChange={setRole}
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="phone-number" className="text-muted-foreground">
+                  Phone number <span>(optional)</span>
+                </Label>
+                <div className="grid grid-cols-[minmax(9rem,0.9fr)_minmax(0,1.1fr)] gap-2">
+                  <PlatformSelect
+                    id="phone-country"
+                    value={phoneCountry}
+                    options={phoneCountryOptions}
+                    placeholder="Country code"
+                    searchPlaceholder="Search country..."
+                    searchable
+                    onChange={setPhoneCountry}
+                  />
+                  <Input
+                    id="phone-number"
+                    type="tel"
+                    inputMode="tel"
+                    value={phoneNumber}
+                    onChange={(e) => {
+                      setPhoneNumber(e.target.value)
+                      setError(null)
+                    }}
+                    placeholder="79 000 0000"
+                  />
+                </div>
               </div>
 
               {error && <p className="text-xs text-destructive">{error}</p>}

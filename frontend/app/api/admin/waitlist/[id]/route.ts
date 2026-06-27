@@ -6,7 +6,7 @@ import { sendWaitlistApprovalEmail } from "@/lib/email/approval"
 import { z } from "zod"
 
 const actionSchema = z.object({
-  action: z.enum(["approve", "reject"]),
+  action: z.enum(["approve", "reject", "resend"]),
 })
 
 type AuthListUser = Awaited<
@@ -36,6 +36,67 @@ async function findAuthUserByEmail(email: string): Promise<AuthListUser | null> 
 
 function hasCompletedAccount(user: AuthListUser) {
   return user.user_metadata?.password_set === true
+}
+
+async function ensureApprovedUserProfile(email: string, fullName: string) {
+  const existingUser = await findAuthUserByEmail(email)
+
+  if (existingUser) {
+    if (!hasCompletedAccount(existingUser)) {
+      await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+        email_confirm: true,
+        user_metadata: {
+          ...existingUser.user_metadata,
+          full_name: existingUser.user_metadata?.full_name ?? fullName,
+          password_set: false,
+        },
+      })
+    }
+
+    await supabaseAdmin.from("users").upsert(
+      {
+        id: existingUser.id,
+        email: existingUser.email ?? email,
+        full_name: existingUser.user_metadata?.full_name ?? fullName,
+        platform_role: "user",
+        onboarding_completed: hasCompletedAccount(existingUser),
+        status: hasCompletedAccount(existingUser) ? "active" : "inactive",
+      },
+      { onConflict: "id" }
+    )
+
+    return { ok: true as const, completed: hasCompletedAccount(existingUser) }
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+      password_set: false,
+    },
+  })
+
+  if (error || !data.user) {
+    return {
+      ok: false as const,
+      reason: error?.message ?? "Unable to create the approved user account.",
+    }
+  }
+
+  await supabaseAdmin.from("users").upsert(
+    {
+      id: data.user.id,
+      email: data.user.email ?? email,
+      full_name: fullName,
+      platform_role: "user",
+      onboarding_completed: false,
+      status: "inactive",
+    },
+    { onConflict: "id" }
+  )
+
+  return { ok: true as const, completed: false }
 }
 
 export async function PATCH(
@@ -77,8 +138,43 @@ export async function PATCH(
     .maybeSingle()
 
   if (!entry) return Errors.notFound("Waitlist entry")
-  if (entry.status !== "pending") {
+  if (action !== "resend" && entry.status !== "pending") {
     return Errors.badRequest("This request has already been reviewed.")
+  }
+  if (action === "resend" && entry.status !== "approved") {
+    return Errors.badRequest("Only approved requests can receive another approval email.")
+  }
+
+  if (action === "resend") {
+    const ensured = await ensureApprovedUserProfile(entry.email, entry.name)
+    if (!ensured.ok) {
+      return ok({
+        success: true,
+        status: entry.status,
+        approvalEmailSent: false,
+        approvalEmailWarning: ensured.reason,
+      })
+    }
+
+    const emailResult = await sendWaitlistApprovalEmail({
+      email: entry.email,
+      name: entry.name,
+    })
+
+    if (!emailResult.ok) {
+      return ok({
+        success: true,
+        status: entry.status,
+        approvalEmailSent: false,
+        approvalEmailWarning: emailResult.reason,
+      })
+    }
+
+    return ok({
+      success: true,
+      status: entry.status,
+      approvalEmailSent: true,
+    })
   }
 
   const newStatus = action === "approve" ? "approved" : "rejected"
@@ -95,13 +191,13 @@ export async function PATCH(
   if (updateError) return Errors.internal()
 
   if (action === "approve") {
-    const existingUser = await findAuthUserByEmail(entry.email)
-    if (existingUser && hasCompletedAccount(existingUser)) {
+    const ensured = await ensureApprovedUserProfile(entry.email, entry.name)
+    if (!ensured.ok) {
       return ok({
         success: true,
         status: newStatus,
         approvalEmailSent: false,
-        approvalEmailWarning: "This email already belongs to an existing user, so no first-time approval email was sent.",
+        approvalEmailWarning: ensured.reason,
       })
     }
 
