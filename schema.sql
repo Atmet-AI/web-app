@@ -76,10 +76,10 @@ DROP TYPE IF EXISTS integration_auth_type   CASCADE;
 
 CREATE TYPE workspace_status      AS ENUM ('active', 'suspended', 'cancelled');
 CREATE TYPE workspace_plan        AS ENUM ('free', 'pro', 'enterprise');
-CREATE TYPE workspace_member_role AS ENUM ('owner', 'admin', 'member');
+CREATE TYPE workspace_member_role AS ENUM ('owner', 'member');
 CREATE TYPE user_status           AS ENUM ('active', 'inactive', 'suspended');
 CREATE TYPE invitation_status     AS ENUM ('pending', 'accepted', 'expired', 'revoked');
-CREATE TYPE invitation_role       AS ENUM ('admin', 'member');
+CREATE TYPE invitation_role       AS ENUM ('member');
 CREATE TYPE chat_status           AS ENUM ('active', 'archived');
 CREATE TYPE message_role          AS ENUM ('system', 'user', 'assistant', 'tool');
 CREATE TYPE automation_status     AS ENUM ('active', 'inactive', 'draft');
@@ -114,7 +114,7 @@ CREATE TABLE users (
   full_name            text,
   avatar_url           text,
   status               user_status              NOT NULL DEFAULT 'active',
-  platform_role        text                     NOT NULL DEFAULT 'user' CHECK (platform_role IN ('user', 'super_admin')),
+  platform_role        text                     NOT NULL DEFAULT 'user' CHECK (platform_role IN ('user', 'super_admin', 'admin')),
   onboarding_completed boolean                  NOT NULL DEFAULT false,
   created_at           timestamp with time zone NOT NULL DEFAULT now(),
   updated_at           timestamp with time zone NOT NULL DEFAULT now()
@@ -489,7 +489,7 @@ RETURNS boolean AS $$
     SELECT 1 FROM workspace_member
     WHERE workspace_id = wid
       AND user_id = auth.uid()
-      AND role IN ('owner', 'admin')
+      AND role = 'owner'
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
