@@ -13,8 +13,8 @@ export async function GET() {
     .eq("id", auth.user.id)
     .single()
 
-  if (profile?.platform_role !== "super_admin") {
-    return Errors.forbidden("Super admin access required.")
+  if (!["super_admin", "admin"].includes(profile?.platform_role ?? "")) {
+    return Errors.forbidden("Admin access required.")
   }
 
   const { data, error } = await supabaseAdmin

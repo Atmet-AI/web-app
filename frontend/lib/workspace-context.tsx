@@ -33,7 +33,15 @@ const WorkspaceContext = createContext<WorkspaceContextValue>({
 const ACTIVE_WS_KEY = "atmet_active_workspace"
 
 const ONBOARDING_PATH = "/onboarding"
-const SKIP_REDIRECT_PATHS = [ONBOARDING_PATH, "/sign-in", "/sign-up", "/forgot-password", "/verify-email", "/waitlist"]
+const SKIP_REDIRECT_PATHS = [
+  ONBOARDING_PATH,
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+  "/waitlist",
+]
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])

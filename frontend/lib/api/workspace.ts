@@ -136,7 +136,7 @@ export async function assertWorkspaceAdmin(
     .select("role")
     .eq("workspace_id", workspaceId)
     .eq("user_id", userId)
-    .in("role", ["owner", "admin"])
+    .eq("role", "owner")
     .maybeSingle()
 
   return !!data

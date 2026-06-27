@@ -132,8 +132,7 @@ export default function OnboardingPage() {
   const totalSteps = 2
 
   return (
-    <div className="w-full max-w-sm">
-      {/* Step indicator */}
+    <div className="mx-auto w-full max-w-sm">
       {step !== "done" && (
         <div className="mb-8 flex items-center gap-2">
           {Array.from({ length: totalSteps }).map((_, i) => (
@@ -158,10 +157,10 @@ export default function OnboardingPage() {
             className="space-y-8"
           >
             <div className="space-y-1.5 text-center">
-              <h1 className="text-3xl font-semibold tracking-tight">
+              <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
                 {STEP_LABELS.workspace}
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-pretty text-sm text-muted-foreground">
                 {STEP_DESCRIPTIONS.workspace}
               </p>
             </div>
@@ -171,7 +170,9 @@ export default function OnboardingPage() {
               className="space-y-4"
             >
               <div className="space-y-1.5">
-                <Label htmlFor="ws-name">Workspace name</Label>
+                <Label htmlFor="ws-name" className="text-muted-foreground">
+                  Workspace name
+                </Label>
                 <Input
                   id="ws-name"
                   value={workspaceName}
@@ -186,24 +187,26 @@ export default function OnboardingPage() {
               </div>
 
               {error && (
-                <p className="text-sm text-destructive">{error}</p>
+                <p className="text-xs text-destructive">{error}</p>
               )}
 
               <Button
                 type="submit"
+                size="sm"
+                data-auth-primary-action="true"
                 disabled={isLoading || !workspaceName.trim()}
-                className="w-full"
+                className="mt-2 w-full transition-transform active:scale-[0.96]"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating…
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Creating...</span>
                   </>
                 ) : (
                   <>
-                    Continue
-                    <Kbd className="ml-auto">
-                      <CornerDownLeft className="h-3 w-3" />
+                    <span>Continue</span>
+                    <Kbd className="h-4 rounded-[calc(min(var(--radius-md),12px)*4/7)] border-transparent bg-primary-foreground/15 px-1 text-[10px] text-primary-foreground">
+                      <CornerDownLeft className="h-2.5 w-2.5" />
                     </Kbd>
                   </>
                 )}
@@ -222,10 +225,10 @@ export default function OnboardingPage() {
             className="space-y-8"
           >
             <div className="space-y-1.5 text-center">
-              <h1 className="text-3xl font-semibold tracking-tight">
+              <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
                 {STEP_LABELS.profile}
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-pretty text-sm text-muted-foreground">
                 {STEP_DESCRIPTIONS.profile}
               </p>
             </div>
@@ -235,7 +238,9 @@ export default function OnboardingPage() {
               className="space-y-4"
             >
               <div className="space-y-1.5">
-                <Label htmlFor="full-name">Full name</Label>
+                <Label htmlFor="full-name" className="text-muted-foreground">
+                  Full name
+                </Label>
                 <Input
                   id="full-name"
                   value={fullName}
@@ -250,14 +255,16 @@ export default function OnboardingPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="role">Your role <span className="text-muted-foreground">(optional)</span></Label>
+                <Label htmlFor="role" className="text-muted-foreground">
+                  Your role <span>(optional)</span>
+                </Label>
                 <select
                   id="role"
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80"
                 >
-                  <option value="">Select your role…</option>
+                  <option value="">Select your role...</option>
                   {roleOptions.map((r) => (
                     <option key={r} value={r}>{r}</option>
                   ))}
@@ -265,24 +272,26 @@ export default function OnboardingPage() {
               </div>
 
               {error && (
-                <p className="text-sm text-destructive">{error}</p>
+                <p className="text-xs text-destructive">{error}</p>
               )}
 
               <Button
                 type="submit"
+                size="sm"
+                data-auth-primary-action="true"
                 disabled={isLoading || !fullName.trim()}
-                className="w-full"
+                className="mt-2 w-full transition-transform active:scale-[0.96]"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving…
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>
-                    Complete setup
-                    <Kbd className="ml-auto">
-                      <CornerDownLeft className="h-3 w-3" />
+                    <span>Complete setup</span>
+                    <Kbd className="h-4 rounded-[calc(min(var(--radius-md),12px)*4/7)] border-transparent bg-primary-foreground/15 px-1 text-[10px] text-primary-foreground">
+                      <CornerDownLeft className="h-2.5 w-2.5" />
                     </Kbd>
                   </>
                 )}
@@ -306,20 +315,25 @@ export default function OnboardingPage() {
             </div>
 
             <div className="space-y-1.5">
-              <h1 className="text-3xl font-semibold tracking-tight">
+              <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
                 {STEP_LABELS.done}
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-pretty text-sm text-muted-foreground">
                 {STEP_DESCRIPTIONS.done}
                 {workspaceId && (
-                  <span className="block mt-1">
+                  <span className="mt-1 block">
                     Workspace <strong>{workspaceName}</strong> is ready.
                   </span>
                 )}
               </p>
             </div>
 
-            <Button className="w-full" onClick={handleEnterApp}>
+            <Button
+              size="sm"
+              data-auth-primary-action="true"
+              className="w-full transition-transform active:scale-[0.96]"
+              onClick={handleEnterApp}
+            >
               Open Atmet
             </Button>
           </motion.div>

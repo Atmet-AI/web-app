@@ -243,14 +243,14 @@ type WorkspaceMemberApp = {
 type PlatformRole =
   | "Super Admin"
   | "Admin"
-  | "Workspace Admin"
-  | "Workspace Member"
+  | "Owner"
+  | "Member"
 
 const platformRoles: readonly PlatformRole[] = [
   "Super Admin",
   "Admin",
-  "Workspace Admin",
-  "Workspace Member",
+  "Owner",
+  "Member",
 ]
 
 type WorkspaceMember = {
@@ -314,7 +314,7 @@ const workspaceMembers: WorkspaceMember[] = [
     id: "mem_002",
     name: "Lina Saad",
     email: "lina.saad@atmet.ai",
-    role: "Admin",
+    role: "Admin" as PlatformRole,
     profileRole: "Product Lead",
     lastLogin: "Today, 09:15 AM",
     initials: "LS",
@@ -346,7 +346,7 @@ const workspaceMembers: WorkspaceMember[] = [
     id: "mem_003",
     name: "Omar Khaled",
     email: "omar.khaled@atmet.ai",
-    role: "Workspace Admin",
+    role: "Owner" as PlatformRole,
     profileRole: "Operations Specialist",
     lastLogin: "Yesterday, 07:40 PM",
     initials: "OK",
@@ -378,7 +378,7 @@ const workspaceMembers: WorkspaceMember[] = [
     id: "mem_004",
     name: "Yara Nasser",
     email: "yara.nasser@atmet.ai",
-    role: "Workspace Member",
+    role: "Member" as PlatformRole,
     profileRole: "Marketing Specialist",
     lastLogin: "Yesterday, 11:05 AM",
     initials: "YN",
@@ -410,7 +410,7 @@ const workspaceMembers: WorkspaceMember[] = [
     id: "mem_005",
     name: "Fadi Mourad",
     email: "fadi.mourad@atmet.ai",
-    role: "Workspace Admin",
+    role: "Owner" as PlatformRole,
     profileRole: "Engineering Manager",
     lastLogin: "Mar 24, 2026",
     initials: "FM",
@@ -2193,7 +2193,7 @@ function MembersSettingsContent({
 }) {
   const { activeWorkspaceId, apiFetch } = useWorkspace()
   const roleFilters = ["All users", ...platformRoles] as const
-  const inviteRoleOptions = ["Workspace Admin", "Workspace Member"] as const
+  const inviteRoleOptions = ["Member"] as const
   const creditsRanges = ["All time", "This month", "This week"] as const
   const seatsLimit = 10
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -2206,7 +2206,7 @@ function MembersSettingsContent({
     React.useState<(typeof creditsRanges)[number]>("All time")
   const [isInviteOpen, setIsInviteOpen] = React.useState(false)
   const [inviteRole, setInviteRole] =
-    React.useState<(typeof inviteRoleOptions)[number]>("Workspace Member")
+    React.useState<(typeof inviteRoleOptions)[number]>("Member")
   const [inviteInput, setInviteInput] = React.useState("")
   const [inviteEmails, setInviteEmails] = React.useState<string[]>([])
   const [inviteError, setInviteError] = React.useState("")
@@ -2216,8 +2216,8 @@ function MembersSettingsContent({
   const roleBadgeClasses: Record<WorkspaceMember["role"], BadgeVariant> = {
     "Super Admin": "violet",
     Admin: "blue",
-    "Workspace Admin": "blue",
-    "Workspace Member": "neutral",
+    Owner: "blue",
+    Member: "neutral",
   }
   const appStatusClasses: Record<WorkspaceMemberApp["status"], BadgeVariant> = {
     Connected: "green",
@@ -2239,7 +2239,7 @@ function MembersSettingsContent({
       const payload = (await response.json()) as {
         data?: {
           members?: Array<{
-            role: "owner" | "admin" | "member"
+            role: "owner" | "member"
             joined_at: string
             user: {
               id: string
@@ -2258,10 +2258,8 @@ function MembersSettingsContent({
           const initials = deriveInitialsFromName(name)
           const role: PlatformRole =
             row.role === "owner"
-              ? "Super Admin"
-              : row.role === "admin"
-                ? "Workspace Admin"
-                : "Workspace Member"
+              ? "Owner"
+              : "Member"
           return {
             id: user?.id ?? `${row.role}-${row.joined_at}`,
             name,
@@ -2399,7 +2397,7 @@ function MembersSettingsContent({
     setIsInviteOpen(false)
     setInviteInput("")
     setInviteEmails([])
-    setInviteRole("Workspace Member")
+    setInviteRole("Member")
     setInviteError("")
   }, [])
 
@@ -2438,7 +2436,7 @@ function MembersSettingsContent({
     setInviteInput("")
     setInviteEmails([])
     setInviteError("")
-    setInviteRole("Workspace Member")
+    setInviteRole("Member")
     setIsInviteOpen(true)
   }, [quickInviteToken])
 
@@ -2466,7 +2464,7 @@ function MembersSettingsContent({
       return
     }
 
-    const role = inviteRole === "Workspace Admin" ? "admin" : "member"
+    const role = "member"
     const results = await Promise.all(
       merged.map((email) =>
         apiFetch(`/api/workspaces/${activeWorkspaceId}/members`, {
@@ -3047,7 +3045,7 @@ function UsageLimitsSettingsContent() {
           member.id,
           member.role === "Super Admin"
             ? 6000
-            : member.role === "Workspace Admin"
+            : member.role === "Owner"
               ? 4000
               : 2500,
         ])
@@ -3074,7 +3072,7 @@ function UsageLimitsSettingsContent() {
         {
           data?: {
             members?: Array<{
-              role: "owner" | "admin" | "member"
+              role: "owner" | "member"
               joined_at: string
               user:
                 | {
@@ -3099,10 +3097,8 @@ function UsageLimitsSettingsContent() {
             email: user?.email ?? "",
             role:
               row.role === "owner"
-                ? "Super Admin"
-                : row.role === "admin"
-                  ? "Workspace Admin"
-                  : "Workspace Member",
+                ? "Owner"
+                : "Member",
             profileRole: user?.status ?? "active",
             lastLogin: row.joined_at
               ? new Date(row.joined_at).toLocaleDateString()
@@ -3364,7 +3360,7 @@ function UsageLimitsSettingsContent() {
                   </td>
                   <td className="px-2.5 py-1.5">
                     <Badge
-                      variant={member.role === "Workspace Member" ? "neutral" : "violet"}
+                      variant={member.role === "Member" ? "neutral" : "violet"}
                     >
                       {member.role}
                     </Badge>
@@ -3461,7 +3457,7 @@ function IntegrationsSettingsContent() {
         {
           data?: {
             members?: Array<{
-              role: "owner" | "admin" | "member"
+              role: "owner" | "member"
               user:
                 | {
                     id: string
@@ -3485,9 +3481,7 @@ function IntegrationsSettingsContent() {
             role:
               row.role === "owner"
                 ? "Owner"
-                : row.role === "admin"
-                  ? "Admin"
-                  : "Member",
+                : "Member",
             initials: deriveInitialsFromName(name),
             avatarUrl: user?.avatar_url ?? "",
           }
@@ -4240,7 +4234,7 @@ const adminActivityRows = [
     initials: "AH",
     type: "Member invited",
     tone: "info" as const,
-    description: "Invited dina.saleh@atmet.ai as Workspace Member.",
+    description: "Invited dina.saleh@atmet.ai as Member.",
   },
   {
     timestamp: "Yesterday, 01:05 PM",
@@ -4296,7 +4290,7 @@ const adminMembers = [
     id: "adm_mem_003",
     name: "Omar Khaled",
     email: "omar.khaled@atmet.ai",
-    role: "Workspace Admin",
+    role: "Owner" as PlatformRole,
     workspace: "Operations",
     status: "Active",
     lastActive: "Yesterday, 07:40 PM",
@@ -4308,7 +4302,7 @@ const adminMembers = [
     id: "adm_mem_004",
     name: "Yara Nasser",
     email: "yara.nasser@atmet.ai",
-    role: "Workspace Member",
+    role: "Member" as PlatformRole,
     workspace: "Marketing",
     status: "Invited",
     lastActive: "Pending invite",
@@ -4320,7 +4314,7 @@ const adminMembers = [
     id: "adm_mem_005",
     name: "Fadi Mourad",
     email: "fadi.mourad@atmet.ai",
-    role: "Workspace Admin",
+    role: "Owner" as PlatformRole,
     workspace: "Documentation",
     status: "Suspended",
     lastActive: "Mar 24, 2026",
@@ -4412,7 +4406,7 @@ const adminAuditRows = [
     tone: "info" as const,
     target: "dina.saleh@atmet.ai",
     ip: "10.14.20.19",
-    details: { role: "Workspace Member", inviteId: "inv_8831" },
+    details: { role: "Member", inviteId: "inv_8831" },
   },
 ] as const
 
@@ -4786,7 +4780,7 @@ function WorkspaceProvisioningConsoleContent() {
   const [plan, setPlan] = React.useState("Team")
   const [ownerName, setOwnerName] = React.useState("")
   const [ownerEmail, setOwnerEmail] = React.useState("")
-  const [ownerRole, setOwnerRole] = React.useState<PlatformRole>("Workspace Admin")
+  const [ownerRole, setOwnerRole] = React.useState<PlatformRole>("Owner")
   const [apiKeyName, setApiKeyName] = React.useState("Default workspace key")
   const [apiExpiry, setApiExpiry] = React.useState("Never")
   const [apiEnabled, setApiEnabled] = React.useState(true)
@@ -5063,7 +5057,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
   const [selectedRows, setSelectedRows] = React.useState<string[]>([])
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState("")
-  const [inviteRole, setInviteRole] = React.useState<PlatformRole>("Workspace Member")
+  const [inviteRole, setInviteRole] = React.useState<PlatformRole>("Member")
   const [adminUsers, setAdminUsers] = React.useState<
     Array<{
       id: string
@@ -5074,9 +5068,19 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       role: PlatformRole
       status: "Active" | "Invited" | "Suspended"
       lastActive: string
+      ownedWorkspaces: Array<{ id: string; name: string }>
     }>
   >([])
   const [isLoadingUsers, setIsLoadingUsers] = React.useState(true)
+  const [pendingRemoveUser, setPendingRemoveUser] = React.useState<{
+    id: string
+    name: string
+    email: string
+    ownedWorkspaces: Array<{ id: string; name: string }>
+  } | null>(null)
+  const [ownerRemoveWarningOpen, setOwnerRemoveWarningOpen] = React.useState(false)
+  const [isRemovingUser, setIsRemovingUser] = React.useState(false)
+  const [removeUserError, setRemoveUserError] = React.useState<string | null>(null)
   const statusTones: Record<string, AdminBadgeTone> = {
     Active: "success",
     Invited: "info",
@@ -5095,12 +5099,13 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
               email: string | null
               full_name: string | null
               status: "active" | "inactive" | "suspended"
-              platform_role: "user" | "super_admin"
+              platform_role: "user" | "super_admin" | "admin"
               updated_at: string
               memberships: Array<{
-                role: "owner" | "admin" | "member"
+                role: "owner" | "member"
                 workspace?: { name?: string } | { name?: string }[] | null
               }>
+              owned_workspaces?: Array<{ id: string; name: string }>
             }>
           }
         } | null) => {
@@ -5117,11 +5122,11 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
               const role: PlatformRole =
                 user.platform_role === "super_admin"
                   ? "Super Admin"
-                  : membershipRole === "owner"
-                    ? "Workspace Admin"
-                    : membershipRole === "admin"
-                      ? "Admin"
-                      : "Workspace Member"
+                  : user.platform_role === "admin"
+                    ? "Admin"
+                    : membershipRole === "owner"
+                      ? "Owner"
+                      : "Member"
 
               return {
                 id: user.id,
@@ -5129,7 +5134,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                 initials: deriveInitialsFromName(name),
                 email: user.email ?? "",
                 workspace:
-                  user.platform_role === "super_admin"
+                  user.platform_role === "super_admin" || user.platform_role === "admin"
                     ? "Platform"
                     : workspace?.name ?? "No workspace",
                 role,
@@ -5142,6 +5147,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                 lastActive: user.updated_at
                   ? new Date(user.updated_at).toLocaleString()
                   : "Unknown",
+                ownedWorkspaces: user.owned_workspaces ?? [],
               }
             })
           )
@@ -5164,6 +5170,64 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
   const allFilteredSelected =
     filteredMembers.length > 0 &&
     filteredMembers.every((member) => selectedRows.includes(member.id))
+
+  const closeRemoveDialogs = React.useCallback(() => {
+    if (isRemovingUser) return
+    setPendingRemoveUser(null)
+    setOwnerRemoveWarningOpen(false)
+    setRemoveUserError(null)
+  }, [isRemovingUser])
+
+  const requestRemoveUser = React.useCallback(
+    (member: (typeof adminUsers)[number]) => {
+      setPendingRemoveUser({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        ownedWorkspaces: member.ownedWorkspaces,
+      })
+      setOwnerRemoveWarningOpen(false)
+      setRemoveUserError(null)
+    },
+    []
+  )
+
+  const removeUser = React.useCallback(
+    async (confirmWorkspaceDeletion: boolean) => {
+      if (!pendingRemoveUser || isRemovingUser) return
+
+      setIsRemovingUser(true)
+      setRemoveUserError(null)
+      try {
+        const queryString = confirmWorkspaceDeletion
+          ? "?confirmWorkspaceDeletion=true"
+          : ""
+        const response = await fetch(`/api/admin/users/${pendingRemoveUser.id}${queryString}`, {
+          method: "DELETE",
+        })
+        const payload = (await response.json()) as { error?: { message?: string } }
+
+        if (!response.ok) {
+          setRemoveUserError(payload.error?.message ?? "Unable to remove this user.")
+          return
+        }
+
+        setAdminUsers((previous) =>
+          previous.filter((user) => user.id !== pendingRemoveUser.id)
+        )
+        setSelectedRows((previous) =>
+          previous.filter((id) => id !== pendingRemoveUser.id)
+        )
+        setPendingRemoveUser(null)
+        setOwnerRemoveWarningOpen(false)
+      } catch {
+        setRemoveUserError("Unable to remove this user. Please try again.")
+      } finally {
+        setIsRemovingUser(false)
+      }
+    },
+    [isRemovingUser, pendingRemoveUser]
+  )
 
   return (
     <AdminPage section="Users & workspaces">
@@ -5204,7 +5268,18 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           </p>
           <div className="flex gap-1.5">
             <Button type="button" size="xs" variant="outline">Suspend selected</Button>
-            <Button type="button" size="xs" variant="destructive">Remove selected</Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="destructive"
+              disabled={selectedRows.length !== 1}
+              onClick={() => {
+                const selectedUser = adminUsers.find((user) => user.id === selectedRows[0])
+                if (selectedUser) requestRemoveUser(selectedUser)
+              }}
+            >
+              Remove selected
+            </Button>
           </div>
         </div>
       ) : null}
@@ -5233,7 +5308,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
               onClick={() => {
                 setInviteOpen(false)
                 setInviteEmail("")
-                setInviteRole("Workspace Member")
+                setInviteRole("Member")
               }}
             >
               Send invite
@@ -5345,7 +5420,15 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                         <DropdownMenuItem>Change role</DropdownMenuItem>
                         <DropdownMenuItem>Suspend</DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive">Remove</DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            requestRemoveUser(member)
+                          }}
+                        >
+                          Remove
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -5355,6 +5438,97 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           </table>
         </section>
       )}
+      <Dialog open={Boolean(pendingRemoveUser) && !ownerRemoveWarningOpen} onOpenChange={(open) => {
+        if (!open) closeRemoveDialogs()
+      }}>
+        <DialogContent className="max-w-sm" showCloseButton={!isRemovingUser}>
+          <DialogHeader>
+            <DialogTitle>Remove user?</DialogTitle>
+            <DialogDescription>
+              This will remove {pendingRemoveUser?.name ?? "this user"} from Atmet and revoke their access.
+            </DialogDescription>
+          </DialogHeader>
+          {removeUserError ? (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {removeUserError}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isRemovingUser}
+              onClick={closeRemoveDialogs}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isRemovingUser}
+              onClick={() => {
+                if (!pendingRemoveUser) return
+                if (pendingRemoveUser.ownedWorkspaces.length > 0) {
+                  setOwnerRemoveWarningOpen(true)
+                  setRemoveUserError(null)
+                  return
+                }
+                void removeUser(false)
+              }}
+            >
+              {isRemovingUser ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Remove user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ownerRemoveWarningOpen} onOpenChange={(open) => {
+        if (!open) closeRemoveDialogs()
+      }}>
+        <DialogContent className="max-w-sm" showCloseButton={!isRemovingUser}>
+          <DialogHeader>
+            <DialogTitle>Delete owned workspace?</DialogTitle>
+            <DialogDescription>
+              {pendingRemoveUser?.name ?? "This user"} owns workspace data. Removing this user will also delete the owned workspace
+              {(pendingRemoveUser?.ownedWorkspaces.length ?? 0) === 1 ? "" : "s"} below.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingRemoveUser?.ownedWorkspaces.length ? (
+            <div className="rounded-lg bg-muted px-3 py-2 text-xs text-foreground">
+              {pendingRemoveUser.ownedWorkspaces.map((workspace) => (
+                <div key={workspace.id} className="truncate">
+                  {workspace.name}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {removeUserError ? (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {removeUserError}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isRemovingUser}
+              onClick={() => setOwnerRemoveWarningOpen(false)}
+            >
+              Back
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isRemovingUser}
+              onClick={() => void removeUser(true)}
+            >
+              {isRemovingUser ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Delete workspace and user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminPage>
   )
 }
@@ -5379,15 +5553,15 @@ function RolesPermissionsConsoleContent() {
   const [selectedRole, setSelectedRole] =
     React.useState<PlatformRole>("Super Admin")
   const [rolePermissions, setRolePermissions] = React.useState<
-    Record<"Workspace Admin" | "Workspace Member", Record<PermissionKey, boolean>>
+    Record<"Owner" | "Member", Record<PermissionKey, boolean>>
   >({
-    "Workspace Admin": {
+    Owner: {
       ...adminDefaults,
       adminConsoleAccess: false,
       apiKeyAccess: false,
       billingAccess: false,
     },
-    "Workspace Member": {
+    Member: {
       ...adminDefaults,
       workflowPublishing: false,
       adminConsoleAccess: false,
@@ -5398,7 +5572,7 @@ function RolesPermissionsConsoleContent() {
   const selectedPermissions =
     selectedRole === "Super Admin" || selectedRole === "Admin"
       ? adminDefaults
-      : rolePermissions[selectedRole]
+      : rolePermissions[selectedRole as "Owner" | "Member"]
 
   return (
     <AdminPage section="Roles & permissions">
@@ -5450,7 +5624,7 @@ function RolesPermissionsConsoleContent() {
                     setRolePermissions((previous) => ({
                       ...previous,
                       [selectedRole]: {
-                        ...previous[selectedRole],
+                        ...previous[selectedRole as "Owner" | "Member"],
                         [key]: checked,
                       },
                     }))
@@ -6299,6 +6473,7 @@ function RequestsConsoleContent() {
   const [requests, setRequests] = React.useState<WaitlistRequest[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [actionLoading, setActionLoading] = React.useState<string | null>(null)
+  const [actionError, setActionError] = React.useState<string | null>(null)
   const [statusFilter, setStatusFilter] = React.useState("All")
   const [query, setQuery] = React.useState("")
 
@@ -6320,21 +6495,30 @@ function RequestsConsoleContent() {
   const handleAction = React.useCallback(
     async (id: string, action: "approve" | "reject") => {
       setActionLoading(id + action)
+      setActionError(null)
       try {
         const res = await fetch(`/api/admin/waitlist/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action }),
         })
+        const payload = (await res.json()) as { error?: { message?: string } }
         if (res.ok) {
           setRequests((prev) =>
             prev.map((r) =>
-              r.id === id ? { ...r, status: action === "approve" ? "approved" : "rejected" } : r
+              r.id === id
+                ? {
+                    ...r,
+                    status: action === "approve" ? "approved" : "rejected",
+                  }
+                : r
             )
           )
+          return
         }
+        setActionError(payload.error?.message ?? "Unable to update this request.")
       } catch {
-        /* silent */
+        setActionError("Unable to update this request. Please try again.")
       } finally {
         setActionLoading(null)
       }
@@ -6388,6 +6572,12 @@ function RequestsConsoleContent() {
             className="sm:w-36"
           />
         </div>
+
+        {actionError ? (
+          <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {actionError}
+          </div>
+        ) : null}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
@@ -6566,7 +6756,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   }, [router])
 
-  const isPlatformAdmin = liveUser?.platform_role === "super_admin"
+  const isPlatformAdmin = liveUser?.platform_role === "super_admin" || liveUser?.platform_role === "admin"
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [adminConsoleOpen, setAdminConsoleOpen] = React.useState(false)
   const [isSettingsCloseConfirmOpen, setIsSettingsCloseConfirmOpen] =
