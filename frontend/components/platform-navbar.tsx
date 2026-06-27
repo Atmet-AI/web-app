@@ -222,7 +222,7 @@ export function PlatformNavbar() {
     () => (workflowProjectId ? getWorkflowProject(workflowProjectId) ?? null : null),
     [workflowProjectId]
   )
-  const isWorkflowProject = Boolean(activeWorkflowProject && workflowProjectId)
+  const isWorkflowProject = Boolean(workflowProjectId)
   const isSkills = pathname.startsWith("/skills")
   const integrationAppId = pathname.startsWith("/integrations")
     ? searchParams.get("app")
@@ -754,7 +754,7 @@ export function PlatformNavbar() {
                   <DropdownMenuItem
                     onClick={requestWorkflowPublish}
                     disabled={activeWorkflowControlState.isPublishing}
-                    className="bg-foreground text-background hover:bg-foreground/90 focus:bg-foreground/90 focus:text-background"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/90 focus:text-primary-foreground"
                   >
                     <Rocket className="h-3.5 w-3.5" />
                     Update Workflow
