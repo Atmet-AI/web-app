@@ -22,10 +22,53 @@ const fontMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://atmetai.com"),
+  title: {
+    default: "Atmet",
+    template: "%s | Atmet",
+  },
+  description: "Atmet helps teams build, automate, and operate AI-powered workflows.",
+  alternates: {
+    canonical: "/",
+  },
   icons: {
-    icon: "/Logos/Favicon%20Atmet.png",
+    icon: [
+      {
+        url: "/Logos/Favicon%20Atmet.png",
+        type: "image/png",
+        sizes: "603x603",
+      },
+    ],
     shortcut: "/Logos/Favicon%20Atmet.png",
-    apple: "/Logos/Favicon%20Atmet.png",
+    apple: [
+      {
+        url: "/Logos/Favicon%20Atmet.png",
+        type: "image/png",
+        sizes: "603x603",
+      },
+    ],
+  },
+  openGraph: {
+    type: "website",
+    url: "https://atmetai.com",
+    siteName: "Atmet",
+    title: "Atmet",
+    description: "Build, automate, and operate AI-powered workflows with Atmet.",
+    images: [
+      {
+        url: "/Preview%20Atmet.png",
+        width: 1200,
+        height: 630,
+        alt: "Atmet preview",
+        type: "image/png",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Atmet",
+    description: "Build, automate, and operate AI-powered workflows with Atmet.",
+    images: ["/Preview%20Atmet.png"],
   },
 }
 

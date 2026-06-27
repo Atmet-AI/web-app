@@ -6,6 +6,8 @@ import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import packageJson from "@/package.json"
 import { useWorkspace } from "@/lib/workspace-context"
+import { countries } from "@/lib/countries"
+import { buildInternationalPhone, buildWhatsappUrl, getPhoneCountry } from "@/lib/phone-countries"
 
 import { SearchForm } from "@/components/search-form"
 import {
@@ -5066,7 +5068,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       email: string
       workspace: string
       role: PlatformRole
-      status: "Active" | "Invited" | "Suspended"
+      status: "Active" | "Not active" | "Suspended"
       lastActive: string
       ownedWorkspaces: Array<{ id: string; name: string }>
     }>
@@ -5083,7 +5085,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
   const [removeUserError, setRemoveUserError] = React.useState<string | null>(null)
   const statusTones: Record<string, AdminBadgeTone> = {
     Active: "success",
-    Invited: "info",
+    "Not active": "info",
     Suspended: "warning",
   }
 
@@ -5142,7 +5144,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                   user.status === "suspended"
                     ? "Suspended"
                     : user.status === "inactive"
-                      ? "Invited"
+                      ? "Not active"
                       : "Active",
                 lastActive: user.updated_at
                   ? new Date(user.updated_at).toLocaleString()
@@ -5250,7 +5252,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           />
           <AdminSelect
             value={statusFilter}
-            options={["All", "Active", "Invited", "Suspended"]}
+            options={["All", "Active", "Not active", "Suspended"]}
             onChange={setStatusFilter}
             className="sm:w-36"
           />
@@ -6463,10 +6465,30 @@ type WaitlistRequest = {
   role: string | null
   company_size: string | null
   country: string | null
+  referral: string | null
   profile_type: string | null
   notes: string | null
+  user_status: "active" | "inactive" | "suspended" | null
+  onboarding_completed: boolean
+  phone_country: string | null
+  phone_country_code: string | null
+  phone_number: string | null
   status: "pending" | "approved" | "rejected"
   created_at: string
+}
+
+function csvCell(value: unknown) {
+  const text = value == null ? "" : String(value)
+  return `"${text.replaceAll('"', '""')}"`
+}
+
+function getWaitlistCountry(country: string | null) {
+  if (!country) return null
+  return countries.find(
+    (item) =>
+      item.value.toLowerCase() === country.toLowerCase() ||
+      item.label.toLowerCase() === country.toLowerCase()
+  )
 }
 
 function RequestsConsoleContent() {
@@ -6475,8 +6497,6 @@ function RequestsConsoleContent() {
   const [actionLoading, setActionLoading] = React.useState<string | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [actionNotice, setActionNotice] = React.useState<string | null>(null)
-  const [cleanDialogOpen, setCleanDialogOpen] = React.useState(false)
-  const [isCleaning, setIsCleaning] = React.useState(false)
   const [statusFilter, setStatusFilter] = React.useState("All")
   const [query, setQuery] = React.useState("")
 
@@ -6496,7 +6516,7 @@ function RequestsConsoleContent() {
   React.useEffect(() => { void loadRequests() }, [loadRequests])
 
   const handleAction = React.useCallback(
-    async (id: string, action: "approve" | "reject") => {
+    async (id: string, action: "approve" | "reject" | "resend") => {
       setActionLoading(id + action)
       setActionError(null)
       setActionNotice(null)
@@ -6510,6 +6530,7 @@ function RequestsConsoleContent() {
           data?: {
             approvalEmailSent?: boolean
             approvalEmailWarning?: string
+            status?: WaitlistRequest["status"]
           }
           error?: { message?: string }
         }
@@ -6519,16 +6540,23 @@ function RequestsConsoleContent() {
               r.id === id
                 ? {
                     ...r,
-                    status: action === "approve" ? "approved" : "rejected",
+                    status:
+                      action === "approve"
+                        ? "approved"
+                        : action === "reject"
+                          ? "rejected"
+                          : r.status,
+                    user_status: action === "approve" ? "inactive" : r.user_status,
+                    onboarding_completed: action === "approve" ? false : r.onboarding_completed,
                   }
                 : r
             )
           )
-          if (action === "approve") {
+          if (action === "approve" || action === "resend") {
             if (payload.data?.approvalEmailSent) {
-              setActionNotice("Approved and approval email sent.")
+              setActionNotice(action === "approve" ? "Approved and approval email sent." : "Approval email sent again.")
             } else if (payload.data?.approvalEmailWarning) {
-              setActionNotice(`Approved, but email was not sent: ${payload.data.approvalEmailWarning}`)
+              setActionNotice(`${action === "approve" ? "Approved" : "Resend requested"}, but email was not sent: ${payload.data.approvalEmailWarning}`)
             }
           }
           return
@@ -6543,39 +6571,6 @@ function RequestsConsoleContent() {
     []
   )
 
-  const reviewedCount = requests.filter((r) => r.status !== "pending").length
-
-  const handleClearReviewed = React.useCallback(async () => {
-    setIsCleaning(true)
-    setActionError(null)
-    setActionNotice(null)
-    try {
-      const res = await fetch("/api/admin/waitlist", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "reviewed" }),
-      })
-      const payload = (await res.json()) as {
-        data?: { deletedCount?: number }
-        error?: { message?: string }
-      }
-
-      if (!res.ok) {
-        setActionError(payload.error?.message ?? "Unable to clean the waitlist.")
-        return
-      }
-
-      const deletedCount = payload.data?.deletedCount ?? 0
-      setRequests((prev) => prev.filter((r) => r.status === "pending"))
-      setActionNotice(`Cleaned ${deletedCount} reviewed waitlist request${deletedCount === 1 ? "" : "s"}.`)
-      setCleanDialogOpen(false)
-    } catch {
-      setActionError("Unable to clean the waitlist. Please try again.")
-    } finally {
-      setIsCleaning(false)
-    }
-  }, [])
-
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
     return requests.filter((r) => {
@@ -6586,12 +6581,73 @@ function RequestsConsoleContent() {
         !q ||
         r.name.toLowerCase().includes(q) ||
         r.email.toLowerCase().includes(q) ||
-        (r.company ?? "").toLowerCase().includes(q)
+        (r.company ?? "").toLowerCase().includes(q) ||
+        (r.role ?? "").toLowerCase().includes(q) ||
+        (r.notes ?? "").toLowerCase().includes(q) ||
+        (r.phone_number ?? "").toLowerCase().includes(q)
       return matchesStatus && matchesQuery
     })
   }, [requests, statusFilter, query])
 
   const pendingCount = requests.filter((r) => r.status === "pending").length
+
+  const handleExportCsv = React.useCallback(() => {
+    const rows = filtered.map((request) => {
+      const country = getWaitlistCountry(request.country)
+      const phoneCountry = getPhoneCountry(request.phone_country)
+      return [
+        request.name,
+        request.email,
+        request.profile_type,
+        request.company,
+        request.role,
+        request.company_size,
+        country ? `${country.flag} ${country.label}` : request.country,
+        request.referral,
+        buildInternationalPhone(request.phone_country, request.phone_number),
+        phoneCountry ? phoneCountry.label : request.phone_country,
+        request.phone_country_code,
+        request.phone_number,
+        request.notes,
+        request.status,
+        request.user_status,
+        request.onboarding_completed ? "Yes" : "No",
+        new Date(request.created_at).toISOString(),
+      ]
+    })
+
+    const csv = [
+      [
+        "Name",
+        "Email",
+        "Profile type",
+        "Company",
+        "Role",
+        "Company size",
+        "Country",
+        "Referral",
+        "Phone",
+        "Phone country",
+        "Phone country code",
+        "Phone number",
+        "Description",
+        "Request status",
+        "User status",
+        "Onboarding completed",
+        "Created at",
+      ],
+      ...rows,
+    ]
+      .map((row) => row.map(csvCell).join(","))
+      .join("\n")
+
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `atmet-requests-${new Date().toISOString().slice(0, 10)}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [filtered])
 
   return (
     <AdminPage
@@ -6607,12 +6663,12 @@ function RequestsConsoleContent() {
             type="button"
             size="xs"
             variant="outline"
-            disabled={reviewedCount === 0 || isCleaning}
-            onClick={() => setCleanDialogOpen(true)}
+            disabled={filtered.length === 0}
+            onClick={handleExportCsv}
             className="h-7 gap-1.5 text-xs"
           >
-            <Trash2 className="h-3.5 w-3.5" />
-            Clean reviewed
+            <IconDownload className="h-3.5 w-3.5" />
+            Export CSV
           </Button>
         </div>
       }
@@ -6671,8 +6727,11 @@ function RequestsConsoleContent() {
                   <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
                     <th className="px-3 py-2.5 text-left font-medium">Name</th>
                     <th className="px-3 py-2.5 text-left font-medium">Email</th>
-                    <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Company / Role</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Profile</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">Size</th>
                     <th className="hidden px-3 py-2.5 text-left font-medium md:table-cell">Country</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">Phone</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">Description</th>
                     <th className="px-3 py-2.5 text-left font-medium">Status</th>
                     <th className="px-3 py-2.5 text-left font-medium">Date</th>
                     <th className="px-3 py-2.5 text-right font-medium">Actions</th>
@@ -6685,20 +6744,62 @@ function RequestsConsoleContent() {
                       approved: "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10",
                       rejected: "text-red-700 dark:text-red-300 bg-red-500/10",
                     }
+                    const country = getWaitlistCountry(req.country)
+                    const phoneCountry = getPhoneCountry(req.phone_country)
+                    const phone = buildInternationalPhone(req.phone_country, req.phone_number)
+                    const whatsappUrl = buildWhatsappUrl(req.phone_country, req.phone_number)
                     return (
                       <tr key={req.id} className="hover:bg-muted/20">
                         <td className="px-3 py-2.5 font-medium">{req.name}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">{req.email}</td>
                         <td className="hidden px-3 py-2.5 text-muted-foreground sm:table-cell">
-                          {[req.company, req.role].filter(Boolean).join(" · ") || "—"}
+                          <div className="max-w-52 space-y-0.5">
+                            <p className="truncate text-foreground">{req.company || req.profile_type || "—"}</p>
+                            <p className="truncate text-xs">{req.role || req.referral || "—"}</p>
+                          </div>
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground lg:table-cell">
+                          {req.company_size ?? "—"}
                         </td>
                         <td className="hidden px-3 py-2.5 text-muted-foreground md:table-cell">
-                          {req.country ?? "—"}
+                          {country ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>{country.flag}</span>
+                              <span>{country.label}</span>
+                            </span>
+                          ) : (
+                            req.country ?? "—"
+                          )}
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground xl:table-cell">
+                          {phone ? (
+                            <a
+                              href={whatsappUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 text-emerald-600 hover:underline dark:text-emerald-300"
+                            >
+                              <span>{phoneCountry?.flag}</span>
+                              <span>{phone}</span>
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="hidden max-w-56 px-3 py-2.5 text-muted-foreground xl:table-cell">
+                          <span className="line-clamp-2">{req.notes || req.referral || "—"}</span>
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusTone[req.status] ?? ""}`}>
-                            {req.status}
-                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusTone[req.status] ?? ""}`}>
+                              {req.status}
+                            </span>
+                            {req.status === "approved" && req.user_status ? (
+                              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold capitalize text-muted-foreground">
+                                {req.user_status === "inactive" ? "Not active" : req.user_status}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-3 py-2.5 text-xs text-muted-foreground">
                           {new Date(req.created_at).toLocaleDateString()}
@@ -6735,6 +6836,22 @@ function RequestsConsoleContent() {
                                 )}
                               </Button>
                             </div>
+                          ) : req.status === "approved" ? (
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              disabled={actionLoading !== null}
+                              onClick={() => void handleAction(req.id, "resend")}
+                              className="h-6 gap-1.5"
+                            >
+                              {actionLoading === req.id + "resend" ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Mail className="h-3 w-3" />
+                              )}
+                              Resend
+                            </Button>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
@@ -6747,36 +6864,6 @@ function RequestsConsoleContent() {
             </div>
           )}
         </section>
-
-        <Dialog open={cleanDialogOpen} onOpenChange={setCleanDialogOpen}>
-          <DialogContent className="max-w-sm" showCloseButton={!isCleaning}>
-            <DialogHeader>
-              <DialogTitle>Clean reviewed requests?</DialogTitle>
-              <DialogDescription>
-                This removes approved and rejected waitlist requests from the admin console. Pending requests will stay available for review.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isCleaning}
-                onClick={() => setCleanDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={isCleaning}
-                onClick={() => void handleClearReviewed()}
-              >
-                {isCleaning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                Clean reviewed
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </>
     </AdminPage>
   )

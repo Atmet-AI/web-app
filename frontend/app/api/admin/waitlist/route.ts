@@ -1,12 +1,6 @@
-import { type NextRequest } from "next/server"
 import { getUser } from "@/lib/api/auth"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { ok, Errors } from "@/lib/api/response"
-import { z } from "zod"
-
-const deleteSchema = z.object({
-  scope: z.literal("reviewed").default("reviewed"),
-})
 
 async function getAdminRole() {
   const auth = await getUser()
@@ -39,35 +33,29 @@ export async function GET() {
 
   if (error) return Errors.internal()
 
-  return ok({ requests: data ?? [] })
-}
+  const emails = Array.from(new Set((data ?? []).map((request) => request.email).filter(Boolean)))
+  const { data: profiles } = emails.length
+    ? await supabaseAdmin
+        .from("users")
+        .select("email, status, phone_country, phone_country_code, phone_number, onboarding_completed")
+        .in("email", emails)
+    : { data: [] }
 
-export async function DELETE(request: NextRequest) {
-  const admin = await getAdminRole()
-  if (!admin.ok) return admin.response
+  const profileByEmail = new Map(
+    (profiles ?? []).map((profile) => [profile.email.toLowerCase(), profile])
+  )
 
-  if (admin.role !== "super_admin") {
-    return Errors.forbidden("Only super admins can clean the waitlist.")
-  }
-
-  let body: unknown = {}
-  try {
-    body = await request.json()
-  } catch {
-    body = {}
-  }
-
-  const parsed = deleteSchema.safeParse(body)
-  if (!parsed.success) {
-    return Errors.validationError(parsed.error.issues[0].message)
-  }
-
-  const { error, count } = await supabaseAdmin
-    .from("waitlist")
-    .delete({ count: "exact" })
-    .in("status", ["approved", "rejected"])
-
-  if (error) return Errors.internal()
-
-  return ok({ success: true, deletedCount: count ?? 0 })
+  return ok({
+    requests: (data ?? []).map((request) => {
+      const profile = profileByEmail.get(request.email.toLowerCase())
+      return {
+        ...request,
+        user_status: profile?.status ?? null,
+        onboarding_completed: profile?.onboarding_completed ?? false,
+        phone_country: profile?.phone_country ?? null,
+        phone_country_code: profile?.phone_country_code ?? null,
+        phone_number: profile?.phone_number ?? null,
+      }
+    }),
+  })
 }
