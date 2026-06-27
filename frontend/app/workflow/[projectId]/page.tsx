@@ -12,6 +12,7 @@ import {
 } from "react"
 import { useParams } from "next/navigation"
 import AIPrompt from "@/components/kokonutui/ai-prompt"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
@@ -2292,41 +2293,47 @@ export default function WorkflowProjectPage() {
                     </div>
                   </div>
 
-                  <div className="mt-1.5 !rounded-[8px] border border-border/80 bg-muted/40 p-2">
+                  <div className="mt-1.5 !rounded-[8px] bg-muted/40 p-2">
                     <p className="line-clamp-4 text-[13px] leading-[1.45] text-muted-foreground">
                       {node.prompt}
                     </p>
                   </div>
 
                   {isSelected && (
-                    <div className="absolute -top-[36px] right-0 z-10 flex items-center gap-1">
-                      <button
+                    <div className="absolute -top-[34px] right-0 z-10 flex items-center gap-1">
+                      <Button
                         type="button"
-                        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+                        variant="outline"
+                        size="xs"
+                        className="h-7 bg-background shadow-sm"
                         onClick={() => addNodeNextTo(node.id)}
                         aria-label="Add node"
                       >
-                        <Plus className="h-2.5 w-2.5" />
+                        <Plus className="h-3 w-3" />
                         Add
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+                        variant="outline"
+                        size="xs"
+                        className="h-7 bg-background shadow-sm"
                         onClick={() => setFilesDialogOpen(true)}
                         aria-label="Open node files"
                       >
-                        <Files className="h-2.5 w-2.5" />
+                        <Files className="h-3 w-3" />
                         Files
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-destructive/30 bg-background px-1.5 text-[10px] font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/10"
+                        variant="outline"
+                        size="xs"
+                        className="h-7 border-destructive/30 bg-background text-destructive shadow-sm hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => deleteNode(node.id)}
                         aria-label="Delete node"
                       >
-                        <Trash2 className="h-2.5 w-2.5" />
+                        <Trash2 className="h-3 w-3" />
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   )}
 

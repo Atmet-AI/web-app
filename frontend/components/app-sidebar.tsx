@@ -6474,6 +6474,9 @@ function RequestsConsoleContent() {
   const [isLoading, setIsLoading] = React.useState(true)
   const [actionLoading, setActionLoading] = React.useState<string | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
+  const [actionNotice, setActionNotice] = React.useState<string | null>(null)
+  const [cleanDialogOpen, setCleanDialogOpen] = React.useState(false)
+  const [isCleaning, setIsCleaning] = React.useState(false)
   const [statusFilter, setStatusFilter] = React.useState("All")
   const [query, setQuery] = React.useState("")
 
@@ -6496,13 +6499,20 @@ function RequestsConsoleContent() {
     async (id: string, action: "approve" | "reject") => {
       setActionLoading(id + action)
       setActionError(null)
+      setActionNotice(null)
       try {
         const res = await fetch(`/api/admin/waitlist/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action }),
         })
-        const payload = (await res.json()) as { error?: { message?: string } }
+        const payload = (await res.json()) as {
+          data?: {
+            approvalEmailSent?: boolean
+            approvalEmailWarning?: string
+          }
+          error?: { message?: string }
+        }
         if (res.ok) {
           setRequests((prev) =>
             prev.map((r) =>
@@ -6514,6 +6524,13 @@ function RequestsConsoleContent() {
                 : r
             )
           )
+          if (action === "approve") {
+            if (payload.data?.approvalEmailSent) {
+              setActionNotice("Approved and approval email sent.")
+            } else if (payload.data?.approvalEmailWarning) {
+              setActionNotice(`Approved, but email was not sent: ${payload.data.approvalEmailWarning}`)
+            }
+          }
           return
         }
         setActionError(payload.error?.message ?? "Unable to update this request.")
@@ -6525,6 +6542,39 @@ function RequestsConsoleContent() {
     },
     []
   )
+
+  const reviewedCount = requests.filter((r) => r.status !== "pending").length
+
+  const handleClearReviewed = React.useCallback(async () => {
+    setIsCleaning(true)
+    setActionError(null)
+    setActionNotice(null)
+    try {
+      const res = await fetch("/api/admin/waitlist", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "reviewed" }),
+      })
+      const payload = (await res.json()) as {
+        data?: { deletedCount?: number }
+        error?: { message?: string }
+      }
+
+      if (!res.ok) {
+        setActionError(payload.error?.message ?? "Unable to clean the waitlist.")
+        return
+      }
+
+      const deletedCount = payload.data?.deletedCount ?? 0
+      setRequests((prev) => prev.filter((r) => r.status === "pending"))
+      setActionNotice(`Cleaned ${deletedCount} reviewed waitlist request${deletedCount === 1 ? "" : "s"}.`)
+      setCleanDialogOpen(false)
+    } catch {
+      setActionError("Unable to clean the waitlist. Please try again.")
+    } finally {
+      setIsCleaning(false)
+    }
+  }, [])
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -6547,136 +6597,187 @@ function RequestsConsoleContent() {
     <AdminPage
       section={"Requests" as AdminConsoleSection}
       actions={
-        pendingCount > 0 ? (
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-            {pendingCount}
-          </span>
-        ) : null
+        <div className="flex items-center gap-2">
+          {pendingCount > 0 ? (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+              {pendingCount}
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            disabled={reviewedCount === 0 || isCleaning}
+            onClick={() => setCleanDialogOpen(true)}
+            className="h-7 gap-1.5 text-xs"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Clean reviewed
+          </Button>
+        </div>
       }
     >
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-40">
-            <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, email, or company"
-              className="h-7 pl-8 text-xs"
+      <>
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-40">
+              <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name, email, or company"
+                className="h-7 pl-8 text-xs"
+              />
+            </div>
+            <AdminSelect
+              value={statusFilter}
+              options={["All", "Pending", "Approved", "Rejected"]}
+              onChange={setStatusFilter}
+              className="sm:w-36"
             />
           </div>
-          <AdminSelect
-            value={statusFilter}
-            options={["All", "Pending", "Approved", "Rejected"]}
-            onChange={setStatusFilter}
-            className="sm:w-36"
-          />
-        </div>
 
-        {actionError ? (
-          <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {actionError}
-          </div>
-        ) : null}
+          {actionError ? (
+            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {actionError}
+            </div>
+          ) : null}
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading requests…
-          </div>
-        ) : filtered.length === 0 ? (
-          <AdminEmptyState
-            icon={IconListDetails}
-            title="No requests found"
-            description={
-              statusFilter === "All"
-                ? "No waitlist submissions yet."
-                : `No ${statusFilter.toLowerCase()} requests.`
-            }
-          />
-        ) : (
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
-                  <th className="px-3 py-2.5 text-left font-medium">Name</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Email</th>
-                  <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Company / Role</th>
-                  <th className="hidden px-3 py-2.5 text-left font-medium md:table-cell">Country</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Status</th>
-                  <th className="px-3 py-2.5 text-left font-medium">Date</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((req) => {
-                  const statusTone: Record<string, string> = {
-                    pending: "text-amber-700 dark:text-amber-300 bg-amber-500/10",
-                    approved: "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10",
-                    rejected: "text-red-700 dark:text-red-300 bg-red-500/10",
-                  }
-                  return (
-                    <tr key={req.id} className="hover:bg-muted/20">
-                      <td className="px-3 py-2.5 font-medium">{req.name}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{req.email}</td>
-                      <td className="hidden px-3 py-2.5 text-muted-foreground sm:table-cell">
-                        {[req.company, req.role].filter(Boolean).join(" · ") || "—"}
-                      </td>
-                      <td className="hidden px-3 py-2.5 text-muted-foreground md:table-cell">
-                        {req.country ?? "—"}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusTone[req.status] ?? ""}`}>
-                          {req.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                        {new Date(req.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        {req.status === "pending" ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              type="button"
-                              size="xs"
-                              variant="outline"
-                              disabled={actionLoading !== null}
-                              onClick={() => void handleAction(req.id, "approve")}
-                              className="h-6 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
-                            >
-                              {actionLoading === req.id + "approve" ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                "Approve"
-                              )}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="xs"
-                              variant="outline"
-                              disabled={actionLoading !== null}
-                              onClick={() => void handleAction(req.id, "reject")}
-                              className="h-6 border-red-500/40 text-red-700 hover:bg-red-500/10 dark:text-red-300"
-                            >
-                              {actionLoading === req.id + "reject" ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                "Reject"
-                              )}
-                            </Button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+          {actionNotice ? (
+            <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              {actionNotice}
+            </div>
+          ) : null}
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading requests…
+            </div>
+          ) : filtered.length === 0 ? (
+            <AdminEmptyState
+              icon={IconListDetails}
+              title="No requests found"
+              description={
+                statusFilter === "All"
+                  ? "No waitlist submissions yet."
+                  : `No ${statusFilter.toLowerCase()} requests.`
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left font-medium">Name</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Email</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Company / Role</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium md:table-cell">Country</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Date</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtered.map((req) => {
+                    const statusTone: Record<string, string> = {
+                      pending: "text-amber-700 dark:text-amber-300 bg-amber-500/10",
+                      approved: "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10",
+                      rejected: "text-red-700 dark:text-red-300 bg-red-500/10",
+                    }
+                    return (
+                      <tr key={req.id} className="hover:bg-muted/20">
+                        <td className="px-3 py-2.5 font-medium">{req.name}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{req.email}</td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground sm:table-cell">
+                          {[req.company, req.role].filter(Boolean).join(" · ") || "—"}
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground md:table-cell">
+                          {req.country ?? "—"}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusTone[req.status] ?? ""}`}>
+                            {req.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                          {new Date(req.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {req.status === "pending" ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                disabled={actionLoading !== null}
+                                onClick={() => void handleAction(req.id, "approve")}
+                                className="h-6 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                              >
+                                {actionLoading === req.id + "approve" ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Approve"
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                disabled={actionLoading !== null}
+                                onClick={() => void handleAction(req.id, "reject")}
+                                className="h-6 border-red-500/40 text-red-700 hover:bg-red-500/10 dark:text-red-300"
+                              >
+                                {actionLoading === req.id + "reject" ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Reject"
+                                )}
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <Dialog open={cleanDialogOpen} onOpenChange={setCleanDialogOpen}>
+          <DialogContent className="max-w-sm" showCloseButton={!isCleaning}>
+            <DialogHeader>
+              <DialogTitle>Clean reviewed requests?</DialogTitle>
+              <DialogDescription>
+                This removes approved and rejected waitlist requests from the admin console. Pending requests will stay available for review.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isCleaning}
+                onClick={() => setCleanDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isCleaning}
+                onClick={() => void handleClearReviewed()}
+              >
+                {isCleaning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Clean reviewed
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     </AdminPage>
   )
 }

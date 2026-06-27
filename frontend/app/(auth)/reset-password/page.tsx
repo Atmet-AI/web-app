@@ -36,7 +36,14 @@ export default function ResetPasswordPage() {
     const prepareSession = async () => {
       const url = new URL(window.location.href)
       const code = url.searchParams.get("code")
-      const linkError = url.searchParams.get("error_description") ?? url.searchParams.get("error")
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""))
+      const linkError =
+        url.searchParams.get("error_description") ??
+        url.searchParams.get("error") ??
+        hashParams.get("error_description") ??
+        hashParams.get("error")
+      const accessToken = hashParams.get("access_token")
+      const refreshToken = hashParams.get("refresh_token")
 
       if (linkError) {
         setErrors({ link: linkError })
@@ -48,6 +55,21 @@ export default function ResetPasswordPage() {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (!cancelled && error) {
           setErrors({ link: "This password setup link is invalid or has expired." })
+        }
+        if (!cancelled) setIsPreparing(false)
+        return
+      }
+
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        if (!cancelled && error) {
+          setErrors({ link: "This password setup link is invalid or has expired." })
+        }
+        if (!cancelled && !error) {
+          window.history.replaceState(null, "", "/reset-password")
         }
         if (!cancelled) setIsPreparing(false)
         return

@@ -3,11 +3,14 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "motion/react"
-import { Check, CornerDownLeft, Loader2 } from "lucide-react"
+import { Check, CornerDownLeft, Loader2, Upload } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Kbd } from "@/components/ui/kbd"
+import { PlatformSelect } from "@/components/platform-select"
+import { cn } from "@/lib/utils"
 
 type Step = "workspace" | "profile" | "done"
 
@@ -31,28 +34,147 @@ const roleOptions = [
   "Design",
   "Marketing",
   "Other",
-]
+].map((role) => ({ value: role, label: role }))
+
+function getInitials(value: string, fallback = "A") {
+  const parts = value.trim().split(/\s+/).filter(Boolean)
+  return (
+    parts
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || fallback
+  )
+}
+
+function splitName(fullName: string | null | undefined) {
+  const parts = (fullName ?? "").trim().split(/\s+/).filter(Boolean)
+  return {
+    firstName: parts[0] ?? "",
+    secondName: parts.slice(1).join(" "),
+  }
+}
+
+async function uploadAvatar(file: File, scope: "user" | "workspace") {
+  const formData = new FormData()
+  formData.append("file", file)
+  formData.append("scope", scope)
+
+  const response = await fetch("/api/avatars", {
+    method: "POST",
+    body: formData,
+  })
+
+  const payload = (await response.json()) as {
+    data?: { url?: string }
+    error?: { message?: string }
+  }
+
+  if (!response.ok || !payload.data?.url) {
+    throw new Error(payload.error?.message ?? "Unable to upload image.")
+  }
+
+  return payload.data.url
+}
+
+function OptionalImagePicker({
+  label,
+  value,
+  fallback,
+  isUploading,
+  onFile,
+}: {
+  label: string
+  value: string | null
+  fallback: string
+  isUploading: boolean
+  onFile: (file: File) => void
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.currentTarget.value = ""
+          if (file) onFile(file)
+        }}
+      />
+      <Avatar className="size-14 !rounded-xl border border-border/80 bg-sidebar-accent shadow-sm">
+        <AvatarImage src={value ?? undefined} alt={label} className="!rounded-xl object-cover" />
+        <AvatarFallback className="!rounded-xl text-sm font-semibold">
+          {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : fallback}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <Label className="text-muted-foreground">{label}</Label>
+        <p className="mt-0.5 text-xs text-muted-foreground">Optional image</p>
+      </div>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="outline"
+        disabled={isUploading}
+        onClick={() => inputRef.current?.click()}
+        aria-label={`Upload ${label.toLowerCase()}`}
+        className="shrink-0"
+      >
+        {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+      </Button>
+    </div>
+  )
+}
 
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = React.useState<Step>("workspace")
   const [workspaceName, setWorkspaceName] = React.useState("")
+  const [workspaceAvatarUrl, setWorkspaceAvatarUrl] = React.useState<string | null>(null)
   const [workspaceId, setWorkspaceId] = React.useState<string | null>(null)
-  const [fullName, setFullName] = React.useState("")
+  const [firstName, setFirstName] = React.useState("")
+  const [secondName, setSecondName] = React.useState("")
+  const [profileAvatarUrl, setProfileAvatarUrl] = React.useState<string | null>(null)
   const [role, setRole] = React.useState("")
   const [isLoading, setIsLoading] = React.useState(false)
+  const [isUploadingWorkspaceImage, setIsUploadingWorkspaceImage] = React.useState(false)
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  // Prefill name from existing session if available
   React.useEffect(() => {
     fetch("/api/users/me")
       .then((r) => r.json())
-      .then((res: { data?: { user: { full_name: string | null } } }) => {
-        const name = res.data?.user?.full_name
-        if (name) setFullName(name)
+      .then((res: { data?: { user: { full_name: string | null; avatar_url: string | null } } }) => {
+        const user = res.data?.user
+        if (!user) return
+        const parsedName = splitName(user.full_name)
+        setFirstName(parsedName.firstName)
+        setSecondName(parsedName.secondName)
+        setProfileAvatarUrl(user.avatar_url)
       })
       .catch(() => {})
   }, [])
+
+  const handleImageUpload = React.useCallback(
+    async (file: File, scope: "user" | "workspace") => {
+      const setUploading = scope === "workspace" ? setIsUploadingWorkspaceImage : setIsUploadingProfileImage
+      setUploading(true)
+      setError(null)
+      try {
+        const url = await uploadAvatar(file, scope)
+        if (scope === "workspace") setWorkspaceAvatarUrl(url)
+        else setProfileAvatarUrl(url)
+      } catch (uploadError) {
+        setError(uploadError instanceof Error ? uploadError.message : "Unable to upload image.")
+      } finally {
+        setUploading(false)
+      }
+    },
+    []
+  )
 
   const handleWorkspaceSubmit = React.useCallback(
     async (e: React.FormEvent) => {
@@ -67,7 +189,7 @@ export default function OnboardingPage() {
         const res = await fetch("/api/workspaces", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, avatar_url: workspaceAvatarUrl }),
         })
         const payload = (await res.json()) as {
           data?: { workspace: { id: string } }
@@ -89,14 +211,14 @@ export default function OnboardingPage() {
         setIsLoading(false)
       }
     },
-    [workspaceName]
+    [workspaceAvatarUrl, workspaceName]
   )
 
   const handleProfileSubmit = React.useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
-      const name = fullName.trim()
-      if (!name) return
+      const fullName = `${firstName.trim()} ${secondName.trim()}`.trim()
+      if (!firstName.trim()) return
 
       setIsLoading(true)
       setError(null)
@@ -105,7 +227,11 @@ export default function OnboardingPage() {
         const res = await fetch("/api/users/me", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ full_name: name, onboarding_completed: true }),
+          body: JSON.stringify({
+            full_name: fullName,
+            avatar_url: profileAvatarUrl,
+            onboarding_completed: true,
+          }),
         })
 
         if (!res.ok) {
@@ -121,7 +247,7 @@ export default function OnboardingPage() {
         setIsLoading(false)
       }
     },
-    [fullName]
+    [firstName, profileAvatarUrl, secondName]
   )
 
   const handleEnterApp = React.useCallback(() => {
@@ -138,9 +264,10 @@ export default function OnboardingPage() {
           {Array.from({ length: totalSteps }).map((_, i) => (
             <div
               key={i}
-              className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+              className={cn(
+                "h-1 flex-1 rounded-full transition-colors duration-300",
                 i <= stepIndex ? "bg-foreground" : "bg-border"
-              }`}
+              )}
             />
           ))}
         </div>
@@ -165,10 +292,15 @@ export default function OnboardingPage() {
               </p>
             </div>
 
-            <form
-              onSubmit={(e) => void handleWorkspaceSubmit(e)}
-              className="space-y-4"
-            >
+            <form onSubmit={(e) => void handleWorkspaceSubmit(e)} className="space-y-4">
+              <OptionalImagePicker
+                label="Workspace image"
+                value={workspaceAvatarUrl}
+                fallback={getInitials(workspaceName, "W")}
+                isUploading={isUploadingWorkspaceImage}
+                onFile={(file) => void handleImageUpload(file, "workspace")}
+              />
+
               <div className="space-y-1.5">
                 <Label htmlFor="ws-name" className="text-muted-foreground">
                   Workspace name
@@ -186,15 +318,13 @@ export default function OnboardingPage() {
                 />
               </div>
 
-              {error && (
-                <p className="text-xs text-destructive">{error}</p>
-              )}
+              {error && <p className="text-xs text-destructive">{error}</p>}
 
               <Button
                 type="submit"
                 size="sm"
                 data-auth-primary-action="true"
-                disabled={isLoading || !workspaceName.trim()}
+                disabled={isLoading || isUploadingWorkspaceImage || !workspaceName.trim()}
                 className="mt-2 w-full transition-transform active:scale-[0.96]"
               >
                 {isLoading ? (
@@ -233,53 +363,68 @@ export default function OnboardingPage() {
               </p>
             </div>
 
-            <form
-              onSubmit={(e) => void handleProfileSubmit(e)}
-              className="space-y-4"
-            >
-              <div className="space-y-1.5">
-                <Label htmlFor="full-name" className="text-muted-foreground">
-                  Full name
-                </Label>
-                <Input
-                  id="full-name"
-                  value={fullName}
-                  onChange={(e) => {
-                    setFullName(e.target.value)
-                    setError(null)
-                  }}
-                  placeholder="Your full name"
-                  autoFocus
-                  required
-                />
+            <form onSubmit={(e) => void handleProfileSubmit(e)} className="space-y-4">
+              <OptionalImagePicker
+                label="Profile image"
+                value={profileAvatarUrl}
+                fallback={getInitials(`${firstName} ${secondName}`, "U")}
+                isUploading={isUploadingProfileImage}
+                onFile={(file) => void handleImageUpload(file, "user")}
+              />
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="first-name" className="text-muted-foreground">
+                    First name
+                  </Label>
+                  <Input
+                    id="first-name"
+                    value={firstName}
+                    onChange={(e) => {
+                      setFirstName(e.target.value)
+                      setError(null)
+                    }}
+                    placeholder="First name"
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="second-name" className="text-muted-foreground">
+                    Second name
+                  </Label>
+                  <Input
+                    id="second-name"
+                    value={secondName}
+                    onChange={(e) => {
+                      setSecondName(e.target.value)
+                      setError(null)
+                    }}
+                    placeholder="Second name"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="role" className="text-muted-foreground">
                   Your role <span>(optional)</span>
                 </Label>
-                <select
+                <PlatformSelect
                   id="role"
                   value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80"
-                >
-                  <option value="">Select your role...</option>
-                  {roleOptions.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
+                  options={roleOptions}
+                  placeholder="Select your role..."
+                  onChange={setRole}
+                />
               </div>
 
-              {error && (
-                <p className="text-xs text-destructive">{error}</p>
-              )}
+              {error && <p className="text-xs text-destructive">{error}</p>}
 
               <Button
                 type="submit"
                 size="sm"
                 data-auth-primary-action="true"
-                disabled={isLoading || !fullName.trim()}
+                disabled={isLoading || isUploadingProfileImage || !firstName.trim()}
                 className="mt-2 w-full transition-transform active:scale-[0.96]"
               >
                 {isLoading ? (

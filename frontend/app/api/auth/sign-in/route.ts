@@ -47,6 +47,46 @@ function isFirstLoginUser(user: AuthListUser) {
   return Boolean(user.email) && user.user_metadata?.password_set !== true
 }
 
+async function ensureApprovedAuthUser(
+  email: string,
+  fullName: string
+): Promise<{ user: AuthListUser | null; error: string | null }> {
+  const existingUser = await findAuthUserByEmail(email)
+  if (existingUser) {
+    if (!existingUser.email_confirmed_at) {
+      const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+        existingUser.id,
+        {
+          email_confirm: true,
+          user_metadata: {
+            ...existingUser.user_metadata,
+            full_name: existingUser.user_metadata?.full_name ?? fullName,
+            password_set: existingUser.user_metadata?.password_set ?? false,
+          },
+        }
+      )
+
+      if (error) return { user: null, error: error.message }
+      return { user: data.user, error: null }
+    }
+
+    return { user: existingUser, error: null }
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+      password_set: false,
+    },
+  })
+
+  if (error) return { user: null, error: error.message }
+
+  return { user: data.user, error: null }
+}
+
 async function getApprovedWaitlistEntry(email: string) {
   const { data } = await supabaseAdmin
     .from("waitlist")
@@ -118,15 +158,16 @@ export async function POST(request: NextRequest) {
     const approvedEntry = await getApprovedWaitlistEntry(email)
 
     if (approvedEntry && (!authUser || isFirstLoginUser(authUser)) && email !== TEMP_AUTH_EMAIL) {
+      const ensured = await ensureApprovedAuthUser(email, approvedEntry.name)
+      if (ensured.error || !ensured.user) {
+        return Errors.badRequest(`OTP setup failed: ${ensured.error ?? "Unable to prepare this account."}`)
+      }
+
       const supabase = await createClient()
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          shouldCreateUser: true,
-          data: {
-            full_name: approvedEntry.name,
-            password_set: false,
-          },
+          shouldCreateUser: false,
         },
       })
 

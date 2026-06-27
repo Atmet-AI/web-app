@@ -3,18 +3,20 @@
 import Link from "next/link"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowLeft, Check, CornerDownLeft, Loader2 } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { Label } from "@/components/ui/label"
+import { createClient } from "@/lib/supabase/client"
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
 export default function ForgotPasswordPage() {
+  const supabase = useMemo(() => createClient(), [])
   const [email, setEmail] = useState("")
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -33,10 +35,8 @@ export default function ForgotPasswordPage() {
 
     setIsSubmitting(true)
     try {
-      await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: `${window.location.origin}/reset-password`,
       })
       // Always show success — don't leak whether the email exists
       setIsSubmitted(true)

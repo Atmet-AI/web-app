@@ -4,10 +4,17 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowLeft, CornerDownLeft, Eye, EyeOff, Loader2 } from "lucide-react"
+import { REGEXP_ONLY_DIGITS } from "input-otp"
 import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@/components/ui/input-otp"
 import { Kbd } from "@/components/ui/kbd"
 import { Label } from "@/components/ui/label"
 
@@ -24,6 +31,9 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+const otpSlotClass =
+  "size-10 rounded-lg border border-border/80 bg-muted/25 text-base font-semibold shadow-sm tabular-nums first:rounded-lg first:border last:rounded-lg data-[active=true]:!border-primary data-[active=true]:!ring-0 data-[active=true]:shadow-sm dark:bg-white/[0.03]"
+
 export default function SignInPage() {
   const router = useRouter()
 
@@ -38,15 +48,25 @@ export default function SignInPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isResendingVerification, setIsResendingVerification] = useState(false)
+  const [isResendingOtp, setIsResendingOtp] = useState(false)
+  const [otpResendSeconds, setOtpResendSeconds] = useState(0)
   const [errors, setErrors] = useState<SignInErrors>({})
   const [toast, setToast] = useState<string | null>(null)
   const passwordInputRef = useRef<HTMLInputElement>(null)
-  const otpInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (step === "password") passwordInputRef.current?.focus()
-    if (step === "otp") otpInputRef.current?.focus()
   }, [step])
+
+  useEffect(() => {
+    if (step !== "otp" || otpResendSeconds <= 0) return
+
+    const timer = window.setInterval(() => {
+      setOtpResendSeconds((previous) => Math.max(previous - 1, 0))
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [otpResendSeconds, step])
 
   const showToast = (message: string) => {
     setToast(message)
@@ -93,6 +113,8 @@ export default function SignInPage() {
       }
 
       if (payload.data?.status === "otp_sent") {
+        setOtp("")
+        setOtpResendSeconds(60)
         setStep("otp")
         return
       }
@@ -164,7 +186,7 @@ export default function SignInPage() {
     if (isSubmitting) return
 
     const validationErrors = validateEmail()
-    if (!otp.trim()) validationErrors.otp = "OTP is required"
+    if (otp.trim().length < 6) validationErrors.otp = "Enter the 6-character code"
     setErrors(validationErrors)
     if (Object.keys(validationErrors).length > 0) return
 
@@ -266,12 +288,48 @@ export default function SignInPage() {
     }
   }
 
+  const handleResendOtp = async () => {
+    if (isResendingOtp || otpResendSeconds > 0) return
+
+    const validationErrors = validateEmail()
+    setErrors(validationErrors)
+    if (Object.keys(validationErrors).length > 0) return
+
+    setIsResendingOtp(true)
+    try {
+      const response = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      })
+
+      const payload = (await response.json()) as {
+        data?: { status?: "password_required" | "otp_sent" }
+        error?: { message: string }
+      }
+
+      if (!response.ok || payload.data?.status !== "otp_sent") {
+        setErrors({ otp: payload.error?.message ?? "Unable to resend the code." })
+        return
+      }
+
+      setOtp("")
+      setOtpResendSeconds(60)
+      showToast("New OTP sent")
+    } catch {
+      showToast("Something went wrong. Please try again.")
+    } finally {
+      setIsResendingOtp(false)
+    }
+  }
+
   const resetToEmail = () => {
     setStep("email")
     setPassword("")
     setOtp("")
     setNewPassword("")
     setConfirmPassword("")
+    setOtpResendSeconds(0)
     setErrors({})
   }
 
@@ -404,33 +462,63 @@ export default function SignInPage() {
                     <Label htmlFor="auth-signin-otp" className="text-muted-foreground">
                       OTP
                     </Label>
-                    <Input
-                      ref={otpInputRef}
-                      id="auth-signin-otp"
-                      inputMode="numeric"
-                      value={otp}
-                      onChange={(event) => {
-                        setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
-                        setErrors((previous) => ({ ...previous, otp: undefined }))
-                      }}
-                      placeholder="000000"
-                      className="text-center font-mono tracking-[0.35em]"
-                      disabled={isSubmitting}
-                    />
+                    <div data-otp-scope="true">
+                      <InputOTP
+                        id="auth-signin-otp"
+                        maxLength={6}
+                        pattern={REGEXP_ONLY_DIGITS}
+                        value={otp}
+                        onChange={(value) => {
+                          setOtp(value.toUpperCase())
+                          setErrors((previous) => ({ ...previous, otp: undefined }))
+                        }}
+                        disabled={isSubmitting}
+                        autoFocus
+                        containerClassName="justify-center py-1"
+                        className="border-0 bg-transparent outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+                      >
+                        <InputOTPGroup className="gap-2 rounded-none">
+                          <InputOTPSlot index={0} className={otpSlotClass} />
+                          <InputOTPSlot index={1} className={otpSlotClass} />
+                          <InputOTPSlot index={2} className={otpSlotClass} />
+                        </InputOTPGroup>
+                        <InputOTPSeparator className="px-2 text-muted-foreground/70" />
+                        <InputOTPGroup className="gap-2 rounded-none">
+                          <InputOTPSlot index={3} className={otpSlotClass} />
+                          <InputOTPSlot index={4} className={otpSlotClass} />
+                          <InputOTPSlot index={5} className={otpSlotClass} />
+                        </InputOTPGroup>
+                      </InputOTP>
+                    </div>
                     {errors.otp ? (
                       <p className="text-xs text-destructive">{errors.otp}</p>
                     ) : null}
                   </div>
 
-                  <button
-                    type="button"
-                    className="inline-flex min-h-10 items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
-                    onClick={resetToEmail}
-                    disabled={isSubmitting}
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    Use another email
-                  </button>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex min-h-10 items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+                      onClick={resetToEmail}
+                      disabled={isSubmitting}
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Use another email
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-10 items-center text-xs font-medium text-muted-foreground tabular-nums hover:text-foreground hover:underline disabled:hover:text-muted-foreground disabled:hover:no-underline"
+                      onClick={() => void handleResendOtp()}
+                      disabled={isSubmitting || isResendingOtp || otpResendSeconds > 0}
+                    >
+                      {isResendingOtp ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : null}
+                      {otpResendSeconds > 0
+                        ? `Resend in ${otpResendSeconds}s`
+                        : "Resend code"}
+                    </button>
+                  </div>
                 </>
               ) : null}
 

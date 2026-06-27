@@ -554,6 +554,23 @@
     box-shadow: none !important;
     outline: none !important;
   }
+  :where(
+    [data-otp-scope="true"],
+    [data-otp-scope="true"] [data-slot="input-otp"],
+    [data-otp-scope="true"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])
+  ),
+  :where(
+    [data-otp-scope="true"] [data-slot="input-otp"]:focus,
+    [data-otp-scope="true"] [data-slot="input-otp"]:focus-visible,
+    [data-otp-scope="true"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+    [data-otp-scope="true"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible
+  ) {
+    border-color: transparent !important;
+    border-width: 0 !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
   body {
     @apply bg-background text-foreground;
   }
