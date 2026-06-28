@@ -111,7 +111,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  if (pathname === "/onboarding" && request.nextUrl.searchParams.has("code")) {
+  if ((pathname === "/" || pathname === "/onboarding") && request.nextUrl.searchParams.has("code")) {
     const resetUrl = new URL("/reset-password", request.url)
     resetUrl.search = request.nextUrl.search
     return NextResponse.redirect(resetUrl)

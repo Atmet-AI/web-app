@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { ok, Errors } from "@/lib/api/response"
 import { forgotPasswordSchema } from "@/lib/validations/auth"
 
+const DEFAULT_APP_URL = "https://atmetai.com"
+
 function isLocalUrl(value: string) {
   return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?/i.test(value)
 }
@@ -10,13 +12,17 @@ function isLocalUrl(value: string) {
 function getAppUrl(request: NextRequest) {
   const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
   const requestOrigin = request.nextUrl.origin
+  const allowLocalRedirect = process.env.NEXT_PUBLIC_ALLOW_LOCAL_AUTH_REDIRECT === "true"
 
-  if (!configuredUrl) return requestOrigin.replace(/\/$/, "")
-  if (isLocalUrl(configuredUrl) && !isLocalUrl(requestOrigin)) {
+  if (configuredUrl && (!isLocalUrl(configuredUrl) || allowLocalRedirect)) {
+    return configuredUrl.replace(/\/$/, "")
+  }
+
+  if (!isLocalUrl(requestOrigin)) {
     return requestOrigin.replace(/\/$/, "")
   }
 
-  return configuredUrl.replace(/\/$/, "")
+  return DEFAULT_APP_URL
 }
 
 export async function POST(request: NextRequest) {
