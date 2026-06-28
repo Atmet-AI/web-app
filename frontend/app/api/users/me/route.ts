@@ -28,7 +28,7 @@ export async function GET() {
   // Use admin client to bypass RLS — user always reads their own profile
   const { data, error } = await supabaseAdmin
     .from("users")
-    .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
+    .select("id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -45,6 +45,7 @@ export async function GET() {
         email: authUser.user.email ?? "",
         full_name: authUser.user.user_metadata?.full_name ?? null,
         avatar_url: authUser.user.user_metadata?.avatar_url ?? null,
+        job_role: authUser.user.user_metadata?.job_role ?? null,
         phone_country: authUser.user.user_metadata?.phone_country ?? null,
         phone_country_code: authUser.user.user_metadata?.phone_country_code ?? null,
         phone_number: authUser.user.user_metadata?.phone_number ?? null,
@@ -52,7 +53,7 @@ export async function GET() {
         platform_role: isSuperAdmin ? "super_admin" : "user",
         status: isSuperAdmin ? "active" : "inactive",
       }, { onConflict: "id" })
-      .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
+      .select("id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
       .single()
 
     return ok({
@@ -62,6 +63,7 @@ export async function GET() {
           email: authUser.user.email,
           full_name: null,
           avatar_url: null,
+          job_role: null,
           phone_country: null,
           phone_country_code: null,
           phone_number: null,
@@ -81,7 +83,7 @@ export async function GET() {
         status: "active",
       })
       .eq("id", user.id)
-      .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
+      .select("id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
       .single()
 
     if (promoted) return ok({ user: promoted })
@@ -103,9 +105,10 @@ export async function PATCH(request: NextRequest) {
     return Errors.badRequest("Invalid JSON body.")
   }
 
-  const { full_name, avatar_url, status, onboarding_completed, phone_country, phone_country_code, phone_number } = body as {
+  const { full_name, avatar_url, job_role, status, onboarding_completed, phone_country, phone_country_code, phone_number } = body as {
     full_name?: string
     avatar_url?: string | null
+    job_role?: string | null
     status?: string
     onboarding_completed?: boolean
     phone_country?: string | null
@@ -116,6 +119,7 @@ export async function PATCH(request: NextRequest) {
   const coreUpdates: Record<string, unknown> = {}
   if (full_name !== undefined) coreUpdates.full_name = full_name
   if (avatar_url !== undefined) coreUpdates.avatar_url = avatar_url
+  if (job_role !== undefined) coreUpdates.job_role = job_role
   if (status !== undefined) coreUpdates.status = status
   if (phone_country !== undefined) coreUpdates.phone_country = phone_country
   if (phone_country_code !== undefined) coreUpdates.phone_country_code = phone_country_code
@@ -140,6 +144,7 @@ export async function PATCH(request: NextRequest) {
       email: authUser?.user?.email ?? "",
       full_name: authUser?.user?.user_metadata?.full_name ?? null,
       avatar_url: authUser?.user?.user_metadata?.avatar_url ?? null,
+      job_role: authUser?.user?.user_metadata?.job_role ?? null,
       phone_country: authUser?.user?.user_metadata?.phone_country ?? null,
       phone_country_code: authUser?.user?.user_metadata?.phone_country_code ?? null,
       phone_number: authUser?.user?.user_metadata?.phone_number ?? null,
@@ -171,7 +176,7 @@ export async function PATCH(request: NextRequest) {
 
   const { data } = await supabaseAdmin
     .from("users")
-    .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
+    .select("id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
     .eq("id", user.id)
     .single()
 

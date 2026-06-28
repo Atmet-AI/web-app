@@ -3,6 +3,17 @@ import { type NextRequest } from "next/server"
 import { getUser } from "@/lib/api/auth"
 import { Errors, ok } from "@/lib/api/response"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { z } from "zod"
+
+const updateUserSchema = z.object({
+  full_name: z.string().min(1).max(120).nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
+  phone_country: z.string().nullable().optional(),
+  phone_country_code: z.string().nullable().optional(),
+  phone_number: z.string().nullable().optional(),
+  status: z.enum(["active", "inactive", "suspended"]).optional(),
+  platform_role: z.enum(["user", "admin", "super_admin"]).optional(),
+})
 
 async function assertSuperAdmin(userId: string) {
   const { data: profile } = await supabaseAdmin
@@ -12,6 +23,80 @@ async function assertSuperAdmin(userId: string) {
     .maybeSingle()
 
   return profile?.platform_role === "super_admin"
+}
+
+async function isLastSuperAdmin(targetUserId: string) {
+  const { data: target } = await supabaseAdmin
+    .from("users")
+    .select("platform_role")
+    .eq("id", targetUserId)
+    .maybeSingle()
+
+  if (target?.platform_role !== "super_admin") return false
+
+  const { count } = await supabaseAdmin
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("platform_role", "super_admin")
+
+  return (count ?? 0) <= 1
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await getUser()
+  if (!auth.ok) return auth.response
+
+  const isSuperAdmin = await assertSuperAdmin(auth.user.id)
+  if (!isSuperAdmin) return Errors.forbidden("Super admin access required.")
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return Errors.badRequest("Invalid JSON body.")
+  }
+
+  const parsed = updateUserSchema.safeParse(body)
+  if (!parsed.success) return Errors.validationError(parsed.error.issues[0].message)
+
+  const updates = parsed.data
+  if (Object.keys(updates).length === 0) return Errors.badRequest("No fields to update.")
+
+  const { id: targetUserId } = await params
+  if (
+    targetUserId === auth.user.id &&
+    (updates.status === "suspended" || updates.platform_role === "user" || updates.platform_role === "admin")
+  ) {
+    return Errors.badRequest("You cannot remove your own super admin access.")
+  }
+
+  if (
+    (updates.platform_role && updates.platform_role !== "super_admin") ||
+    updates.status === "suspended"
+  ) {
+    const lastSuperAdmin = await isLastSuperAdmin(targetUserId)
+    if (lastSuperAdmin) return Errors.badRequest("Cannot modify the last super admin.")
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", targetUserId)
+    .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, created_at, updated_at")
+    .single()
+
+  if (error || !data) return Errors.notFound("User")
+
+  if (updates.platform_role) {
+    await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
+      app_metadata: { platform_role: updates.platform_role },
+    })
+  }
+
+  return ok({ user: data })
 }
 
 export async function DELETE(

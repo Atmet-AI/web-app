@@ -98,10 +98,15 @@ CREATE TYPE integration_auth_type AS ENUM ('oauth', 'apikey');
 CREATE TABLE workspace (
   id         uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
   name       text                     NOT NULL,
+  slug       text                     UNIQUE,
   plan       workspace_plan           NOT NULL DEFAULT 'free',
   status     workspace_status         NOT NULL DEFAULT 'active',
   owner_id   uuid,                    -- FK added below after users table
   avatar_url text,
+  country    text,
+  monthly_token_cap integer,
+  seat_limit integer,
+  features   jsonb                    NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now()
 );
@@ -113,6 +118,7 @@ CREATE TABLE users (
   email                text                     NOT NULL,
   full_name            text,
   avatar_url           text,
+  job_role             text,
   phone_country        text,
   phone_country_code   text,
   phone_number         text,
@@ -152,8 +158,22 @@ CREATE TABLE workspace_member (
   workspace_id uuid                     NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
   user_id      uuid                     NOT NULL REFERENCES users(id)     ON DELETE CASCADE,
   role         workspace_member_role    NOT NULL DEFAULT 'member',
+  status       text                     NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+  monthly_token_cap integer             CHECK (monthly_token_cap IS NULL OR monthly_token_cap > 0),
   joined_at    timestamp with time zone NOT NULL DEFAULT now(),
   PRIMARY KEY (workspace_id, user_id)
+);
+
+CREATE TABLE platform_setting (
+  key        text                     PRIMARY KEY,
+  value      jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  updated_by uuid                     REFERENCES users(id) ON DELETE SET NULL,
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TABLE user_presence (
+  user_id      uuid                     PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  last_seen_at timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- invitation: token-based invite links with an explicit role
@@ -327,6 +347,7 @@ CREATE TABLE chats_skill (
 -- ============================================================
 
 CREATE INDEX ON workspace_member (user_id);
+CREATE INDEX ON user_presence (last_seen_at);
 
 CREATE INDEX ON chat (workspace_id);
 CREATE INDEX ON chat (created_by);
@@ -462,6 +483,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 ALTER TABLE workspace       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workspace_member ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_presence   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invitation      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE integration     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat            ENABLE ROW LEVEL SECURITY;
@@ -481,7 +503,9 @@ CREATE OR REPLACE FUNCTION is_workspace_member(wid uuid)
 RETURNS boolean AS $$
   SELECT EXISTS (
     SELECT 1 FROM workspace_member
-    WHERE workspace_id = wid AND user_id = auth.uid()
+    WHERE workspace_id = wid
+      AND user_id = auth.uid()
+      AND status = 'active'
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
@@ -493,6 +517,7 @@ RETURNS boolean AS $$
     WHERE workspace_id = wid
       AND user_id = auth.uid()
       AND role = 'owner'
+      AND status = 'active'
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 

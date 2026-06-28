@@ -13,7 +13,7 @@ export async function GET(
 
   const { data, error } = await supabaseAdmin
     .from("invitation")
-    .select("id, email, role, status, expires_at, workspace:workspace_id(id, name)")
+    .select("id, email, role, status, expires_at, workspace:workspace_id(id, name, avatar_url), inviter:invited_by(full_name, email)")
     .eq("token", token)
     .eq("status", "pending")
     .maybeSingle()

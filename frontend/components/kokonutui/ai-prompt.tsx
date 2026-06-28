@@ -180,7 +180,7 @@ export default function AI_Prompt({
   onAutomationConversationStart,
   onConversationActivityChange,
   onAddUserToChat,
-  userFullName = "Amir Haddad",
+  userFullName = "there",
   enableCreateAgent = true,
 }: AIPromptProps) {
   const router = useRouter();
@@ -234,7 +234,7 @@ export default function AI_Prompt({
     [fixedSkillName]
   );
   const firstName = useMemo(
-    () => userFullName.trim().split(/\s+/)[0] || "Amir",
+    () => userFullName.trim().split(/\s+/)[0] || "there",
     [userFullName]
   );
   const { apiFetch } = useWorkspace();

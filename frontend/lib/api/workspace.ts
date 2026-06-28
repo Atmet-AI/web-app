@@ -89,6 +89,7 @@ export async function getPlatformWorkspaceForSuperAdmin(user: User) {
       workspace_id: workspaceId,
       user_id: user.id,
       role: "owner",
+      status: "active",
     },
     { onConflict: "workspace_id,user_id" }
   )
@@ -121,6 +122,7 @@ export async function assertWorkspaceMember(
     .select("role")
     .eq("workspace_id", workspaceId)
     .eq("user_id", userId)
+    .eq("status", "active")
     .maybeSingle()
 
   return !!data
@@ -137,6 +139,7 @@ export async function assertWorkspaceAdmin(
     .eq("workspace_id", workspaceId)
     .eq("user_id", userId)
     .eq("role", "owner")
+    .eq("status", "active")
     .maybeSingle()
 
   return !!data
