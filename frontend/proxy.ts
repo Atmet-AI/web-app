@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { createServerClient } from "@supabase/ssr"
 
 import { getAccessPolicies, isIpAllowed, sessionTimeoutSeconds } from "@/lib/api/access-policies"
 import { TEMP_AUTH_COOKIE, TEMP_AUTH_ISSUED_AT_COOKIE, TEMP_AUTH_SESSION } from "@/lib/temp-auth"
@@ -60,8 +61,35 @@ function clearSession(response: NextResponse) {
   return response
 }
 
+async function hasSupabaseSession(request: NextRequest, response: NextResponse) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) return false
+
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options)
+        })
+      },
+    },
+  })
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  return Boolean(user)
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const response = NextResponse.next()
 
   if (isPublicAsset(pathname)) {
     return NextResponse.next()
@@ -93,6 +121,8 @@ export async function proxy(request: NextRequest) {
   const issuedAt = Number(request.cookies.get(TEMP_AUTH_ISSUED_AT_COOKIE)?.value ?? 0)
   const sessionMaxAgeMs = sessionTimeoutSeconds(accessPolicies.sessionTimeout) * 1000
   const isSessionExpired = isSignedIn && (!issuedAt || Date.now() - issuedAt > sessionMaxAgeMs)
+  const isSupabaseSignedIn = isSignedIn ? false : await hasSupabaseSession(request, response)
+  const hasAnySession = isSignedIn || isSupabaseSignedIn
 
   if (isSessionExpired) {
     if (isApiPath(pathname)) {
@@ -112,18 +142,18 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isPublicPath(pathname)) {
-    if (!isSignedIn || !REDIRECT_WHEN_SIGNED_IN_PATHS.has(pathname)) {
-      return NextResponse.next()
+    if (!hasAnySession || !REDIRECT_WHEN_SIGNED_IN_PATHS.has(pathname)) {
+      return response
     }
 
     return NextResponse.redirect(new URL("/ai-core", request.url))
   }
 
-  if (!isSignedIn) {
+  if (!hasAnySession) {
     return NextResponse.redirect(new URL("/sign-in", request.url))
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const config = {
