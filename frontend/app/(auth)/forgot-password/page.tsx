@@ -3,18 +3,40 @@
 import Link from "next/link"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowLeft, Check, CornerDownLeft, Loader2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { Label } from "@/components/ui/label"
+import { createClient } from "@/lib/supabase/client"
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+function isLocalUrl(value: string) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?/i.test(value)
+}
+
+function getResetRedirectUrl() {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  const currentOrigin = window.location.origin
+  const allowLocalRedirect = process.env.NEXT_PUBLIC_ALLOW_LOCAL_AUTH_REDIRECT === "true"
+
+  if (configuredUrl && (!isLocalUrl(configuredUrl) || allowLocalRedirect)) {
+    return `${configuredUrl.replace(/\/$/, "")}/reset-password`
+  }
+
+  if (!isLocalUrl(currentOrigin)) {
+    return `${currentOrigin.replace(/\/$/, "")}/reset-password`
+  }
+
+  return "https://atmetai.com/reset-password"
+}
+
 export default function ForgotPasswordPage() {
+  const supabase = useMemo(() => createClient(), [])
   const [email, setEmail] = useState("")
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -38,10 +60,8 @@ export default function ForgotPasswordPage() {
 
     setIsSubmitting(true)
     try {
-      await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: getResetRedirectUrl(),
       })
       // Always show success — don't leak whether the email exists
       setIsSubmitted(true)
