@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   const appUrl = getAppUrl(request)
 
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${appUrl}/auth/callback?next=/reset-password`,
+    redirectTo: `${appUrl}/reset-password`,
   })
 
   // Always return success to avoid leaking which emails are registered
