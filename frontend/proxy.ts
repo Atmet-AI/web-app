@@ -11,6 +11,7 @@ const PUBLIC_PATHS = new Set([
   "/forgot-password",
   "/reset-password",
   "/verify-email",
+  "/auth/callback",
 ])
 const REDIRECT_WHEN_SIGNED_IN_PATHS = new Set(["/sign-in", "/waitlist"])
 const PUBLIC_API_PATHS = new Set([
