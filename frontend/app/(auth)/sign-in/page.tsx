@@ -444,7 +444,7 @@ export default function SignInPage() {
                   </div>
                   <div className="flex justify-end">
                     <Link
-                      href="/forgot-password"
+                      href={`/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim().toLowerCase())}` : ""}`}
                       className="text-xs text-muted-foreground hover:underline"
                     >
                       Forgot password?

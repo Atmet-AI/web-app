@@ -11,6 +11,7 @@ const acceptInvitationSchema = z.object({
   phoneCountryCode: z.string().trim().min(1).max(8),
   phoneNumber: z.string().trim().min(4).max(32),
   jobRole: z.string().trim().min(1, "Role is required.").max(100),
+  password: z.string().min(8, "Password must be at least 8 characters."),
 })
 
 type AuthListUser = Awaited<
@@ -82,19 +83,21 @@ export async function POST(
     phone_country: parsed.data.phoneCountry,
     phone_country_code: parsed.data.phoneCountryCode,
     phone_number: parsed.data.phoneNumber,
-    password_set: existingAuthUser?.user_metadata?.password_set ?? false,
+    password_set: true,
   }
 
   const authUser = existingAuthUser
     ? (
         await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, {
           email_confirm: true,
+          password: parsed.data.password,
           user_metadata: metadata,
         })
       ).data.user
     : (
         await supabaseAdmin.auth.admin.createUser({
           email,
+          password: parsed.data.password,
           email_confirm: true,
           user_metadata: metadata,
         })
@@ -115,8 +118,8 @@ export async function POST(
       phone_country_code: parsed.data.phoneCountryCode,
       phone_number: parsed.data.phoneNumber,
       platform_role: "user",
-      onboarding_completed: authUser.user_metadata?.password_set === true,
-      status: authUser.user_metadata?.password_set === true ? "active" : "inactive",
+      onboarding_completed: true,
+      status: "active",
     },
     { onConflict: "id" }
   )
