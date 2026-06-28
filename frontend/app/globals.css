@@ -546,11 +546,24 @@
     :where(
       [data-chatbot-scope="true"] *,
       [data-quick-actions-scope="true"] *,
+      [data-invite-email-input="true"],
       [data-platform-select-command="true"] [data-slot="command-input"]
     )
   ) {
     border-color: var(--color-primary) !important;
     border-width: 1px !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  :where(
+    [data-invite-email-input="true"],
+    [data-invite-email-input="true"]:focus,
+    [data-invite-email-input="true"]:focus-visible
+  ) {
+    border-color: transparent !important;
+    border-width: 0 !important;
+    border-radius: 0 !important;
+    background-color: transparent !important;
     box-shadow: none !important;
     outline: none !important;
   }

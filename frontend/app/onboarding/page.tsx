@@ -4,7 +4,6 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "motion/react"
 import { Check, CornerDownLeft, Loader2, Upload } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -111,12 +110,14 @@ function OptionalImagePicker({
           if (file) onFile(file)
         }}
       />
-      <Avatar className="size-14 !rounded-xl border border-border/80 bg-sidebar-accent shadow-sm">
-        <AvatarImage src={value ?? undefined} alt={label} className="!rounded-xl object-cover" />
-        <AvatarFallback className="!rounded-xl text-sm font-semibold">
-          {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : fallback}
-        </AvatarFallback>
-      </Avatar>
+      <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-sidebar-accent text-sm font-semibold text-muted-foreground shadow-sm">
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={value} alt={label} className="size-full object-cover" />
+        ) : (
+          isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : fallback
+        )}
+      </div>
       <div className="min-w-0 flex-1">
         <Label className="text-muted-foreground">{label}</Label>
         <p className="mt-0.5 text-xs text-muted-foreground">Optional image</p>

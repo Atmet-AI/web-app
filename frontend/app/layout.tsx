@@ -34,17 +34,15 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/Logos/Favicon%20Atmet.png",
+        url: "/faciconatmet.png",
         type: "image/png",
-        sizes: "603x603",
       },
     ],
-    shortcut: "/Logos/Favicon%20Atmet.png",
+    shortcut: "/faciconatmet.png",
     apple: [
       {
-        url: "/Logos/Favicon%20Atmet.png",
+        url: "/faciconatmet.png",
         type: "image/png",
-        sizes: "603x603",
       },
     ],
   },

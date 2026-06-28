@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { TEMP_AUTH_COOKIE, TEMP_AUTH_SESSION } from "@/lib/temp-auth"
+import { getAccessPolicies, isIpAllowed, sessionTimeoutSeconds } from "@/lib/api/access-policies"
+import { TEMP_AUTH_COOKIE, TEMP_AUTH_ISSUED_AT_COOKIE, TEMP_AUTH_SESSION } from "@/lib/temp-auth"
 
 const PUBLIC_PATHS = new Set([
   "/sign-in",
@@ -19,6 +20,17 @@ const PUBLIC_API_PATHS = new Set([
   "/api/auth/resend-verification",
 ])
 
+function isPublicPath(pathname: string) {
+  return PUBLIC_PATHS.has(pathname) || pathname.startsWith("/invite/")
+}
+
+function isPublicApiPath(pathname: string) {
+  return (
+    PUBLIC_API_PATHS.has(pathname) ||
+    (pathname.startsWith("/api/invitations/") && !pathname.endsWith("/revoke"))
+  )
+}
+
 function isPublicAsset(pathname: string) {
   return (
     pathname.startsWith("/_next/") ||
@@ -29,10 +41,45 @@ function isPublicAsset(pathname: string) {
   )
 }
 
-export function proxy(request: NextRequest) {
+function getClientIp(request: NextRequest) {
+  return (
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-real-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    ""
+  )
+}
+
+function isApiPath(pathname: string) {
+  return pathname.startsWith("/api/")
+}
+
+function clearSession(response: NextResponse) {
+  response.cookies.delete(TEMP_AUTH_COOKIE)
+  response.cookies.delete(TEMP_AUTH_ISSUED_AT_COOKIE)
+  return response
+}
+
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (isPublicAsset(pathname) || PUBLIC_API_PATHS.has(pathname)) {
+  if (isPublicAsset(pathname)) {
+    return NextResponse.next()
+  }
+
+  const accessPolicies = await getAccessPolicies()
+  if (accessPolicies.ipEnabled && !isIpAllowed(getClientIp(request), accessPolicies)) {
+    if (isApiPath(pathname)) {
+      return NextResponse.json(
+        { error: { code: "ip_not_allowed", message: "This network is not allowed to access Atmet." } },
+        { status: 403 }
+      )
+    }
+
+    return new NextResponse("This network is not allowed to access Atmet.", { status: 403 })
+  }
+
+  if (isPublicApiPath(pathname)) {
     return NextResponse.next()
   }
 
@@ -43,8 +90,28 @@ export function proxy(request: NextRequest) {
   }
 
   const isSignedIn = request.cookies.get(TEMP_AUTH_COOKIE)?.value === TEMP_AUTH_SESSION
+  const issuedAt = Number(request.cookies.get(TEMP_AUTH_ISSUED_AT_COOKIE)?.value ?? 0)
+  const sessionMaxAgeMs = sessionTimeoutSeconds(accessPolicies.sessionTimeout) * 1000
+  const isSessionExpired = isSignedIn && (!issuedAt || Date.now() - issuedAt > sessionMaxAgeMs)
 
-  if (PUBLIC_PATHS.has(pathname)) {
+  if (isSessionExpired) {
+    if (isApiPath(pathname)) {
+      return clearSession(
+        NextResponse.json(
+          { error: { code: "session_expired", message: "Your session has expired. Please sign in again." } },
+          { status: 401 }
+        )
+      )
+    }
+
+    if (isPublicPath(pathname)) {
+      return clearSession(NextResponse.next())
+    }
+
+    return clearSession(NextResponse.redirect(new URL("/sign-in", request.url)))
+  }
+
+  if (isPublicPath(pathname)) {
     if (!isSignedIn || !REDIRECT_WHEN_SIGNED_IN_PATHS.has(pathname)) {
       return NextResponse.next()
     }

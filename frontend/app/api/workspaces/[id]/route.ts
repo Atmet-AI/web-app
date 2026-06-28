@@ -16,7 +16,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("workspace")
-    .select("id, name, plan, status, owner_id, avatar_url, created_at, updated_at")
+    .select("id, name, plan, status, owner_id, avatar_url, country, created_at, updated_at, owner:owner_id(email, phone_country)")
     .eq("id", id)
     .maybeSingle()
 

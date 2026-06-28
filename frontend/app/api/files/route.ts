@@ -3,9 +3,41 @@ import { randomUUID } from "crypto"
 import { getUser } from "@/lib/api/auth"
 import { getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 
 const BUCKET = "workspace-files"
-const MAX_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+function featureRecord(features: unknown) {
+  return features && typeof features === "object" && !Array.isArray(features)
+    ? (features as Record<string, unknown>)
+    : {}
+}
+
+async function getWorkspaceFileLimits(workspaceId: string) {
+  const [settingsRes, workspaceRes, filesRes] = await Promise.all([
+    supabaseAdmin.from("platform_setting").select("value").eq("key", "usage_limits").maybeSingle(),
+    supabaseAdmin.from("workspace").select("features").eq("id", workspaceId).maybeSingle(),
+    supabaseAdmin.from("file").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
+  ])
+
+  const globalValue = settingsRes.data?.value && typeof settingsRes.data.value === "object"
+    ? settingsRes.data.value as Record<string, unknown>
+    : {}
+  const globalMaxFileSizeMb = readNumber(globalValue.maxFileSizeMb) || 250
+  const globalMaxFilesPerWorkspace = readNumber(globalValue.maxFilesPerWorkspace) || 10000
+  const workspaceFeatures = featureRecord(workspaceRes.data?.features)
+  const limits = featureRecord(workspaceFeatures.limits)
+
+  return {
+    maxFileSizeMb: readNumber(limits.maxFileSizeMb) || globalMaxFileSizeMb,
+    maxFilesPerWorkspace: readNumber(limits.maxFilesPerWorkspace) || globalMaxFilesPerWorkspace,
+    filesCount: filesRes.count ?? 0,
+  }
+}
 
 export async function POST(request: NextRequest) {
   const auth = await getUser()
@@ -28,8 +60,14 @@ export async function POST(request: NextRequest) {
     return Errors.badRequest("Missing required field: file.")
   }
 
-  if (file.size > MAX_SIZE_BYTES) {
-    return Errors.badRequest("File exceeds the 25 MB size limit.")
+  const fileLimits = await getWorkspaceFileLimits(ws.workspaceId)
+
+  if (file.size > fileLimits.maxFileSizeMb * 1024 * 1024) {
+    return Errors.badRequest(`File exceeds the ${fileLimits.maxFileSizeMb} MB size limit.`)
+  }
+
+  if (fileLimits.filesCount >= fileLimits.maxFilesPerWorkspace) {
+    return Errors.badRequest(`Workspace has reached the ${fileLimits.maxFilesPerWorkspace.toLocaleString()} file limit.`)
   }
 
   const messageId = formData.get("message_id")

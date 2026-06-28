@@ -38,6 +38,7 @@ export function VersionSwitcher({
   onSelectedWorkspaceIdChange,
   onCreateWorkspace,
   onAddUsersToWorkspace,
+  onOpenWorkspaceProfile,
   showWorkspaceActions = true,
 }: {
   workspaces: WorkspaceSwitcherItem[]
@@ -45,6 +46,7 @@ export function VersionSwitcher({
   onSelectedWorkspaceIdChange: (workspaceId: string) => void
   onCreateWorkspace?: () => void
   onAddUsersToWorkspace?: () => void
+  onOpenWorkspaceProfile?: () => void
   showWorkspaceActions?: boolean
 }) {
   const { state, toggleSidebar } = useSidebar()
@@ -71,14 +73,14 @@ export function VersionSwitcher({
       <SidebarMenu>
         <SidebarMenuItem>
           <div className="flex w-full justify-center py-1">
-            <Avatar className="size-7 !rounded-md ring-1 ring-border/60 after:!rounded-md">
+            <Avatar className="size-6 !rounded-md ring-1 ring-border/60 after:!rounded-md">
               <AvatarImage
                 src={selectedWorkspace.avatarUrl ?? undefined}
                 alt={`${selectedWorkspace.name} avatar`}
                 className="!rounded-md object-cover"
               />
               <AvatarFallback
-                className={`!rounded-md text-xs font-semibold ${collapsedClasses.bgClass} ${collapsedClasses.textClass}`}
+                className={`!rounded-md text-[11px] font-semibold ${collapsedClasses.bgClass} ${collapsedClasses.textClass}`}
               >
                 {getWorkspaceFallback(selectedWorkspace)}
               </AvatarFallback>
@@ -103,14 +105,14 @@ export function VersionSwitcher({
                 />
               }
             >
-              <Avatar className="size-7 shrink-0 !rounded-md ring-1 ring-border/60 after:!rounded-md">
+              <Avatar className="size-6 shrink-0 !rounded-md ring-1 ring-border/60 after:!rounded-md">
                 <AvatarImage
                   src={selectedWorkspace.avatarUrl ?? undefined}
                   alt={`${selectedWorkspace.name} avatar`}
                   className="!rounded-md object-cover"
                 />
                 <AvatarFallback
-                  className={`!rounded-md text-xs font-semibold ${triggerClasses.bgClass} ${triggerClasses.textClass}`}
+                  className={`!rounded-md text-[11px] font-semibold ${triggerClasses.bgClass} ${triggerClasses.textClass}`}
                 >
                   {getWorkspaceFallback(selectedWorkspace)}
                 </AvatarFallback>
@@ -159,6 +161,10 @@ export function VersionSwitcher({
                   <DropdownMenuItem onSelect={onAddUsersToWorkspace}>
                     <Users className="h-4 w-4 opacity-80" />
                     Add users to workspace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={onOpenWorkspaceProfile}>
+                    <Crown className="h-4 w-4 opacity-80" />
+                    Workspace profile
                   </DropdownMenuItem>
                 </>
               ) : null}

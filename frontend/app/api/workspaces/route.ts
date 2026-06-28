@@ -12,18 +12,21 @@ export async function GET() {
 
   const { data, error } = await supabaseAdmin
     .from("workspace_member")
-    .select("role, workspace:workspace_id(id, name, plan, status, owner_id, avatar_url, created_at)")
+    .select("role, status, workspace:workspace_id(id, name, plan, status, owner_id, avatar_url, country, created_at, owner:owner_id(email, phone_country))")
     .eq("user_id", user.id)
+    .eq("status", "active")
 
   if (error) {
     return Errors.internal()
   }
 
   // Flatten: { role, workspace: { id, name... } } → { id, name, role, ... }
-  const workspaces = (data ?? []).map((row) => {
-    const ws = Array.isArray(row.workspace) ? row.workspace[0] : row.workspace
-    return { ...ws, role: row.role }
-  })
+  const workspaces = (data ?? [])
+    .map((row) => {
+      const ws = Array.isArray(row.workspace) ? row.workspace[0] : row.workspace
+      return { ...ws, role: row.role }
+    })
+    .filter((workspace) => workspace.status === "active")
 
   return ok({ workspaces })
 }
@@ -78,6 +81,7 @@ export async function POST(request: NextRequest) {
     workspace_id: workspace.id,
     user_id: user.id,
     role: "owner",
+    status: "active",
   })
 
   if (memberError) {

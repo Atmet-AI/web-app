@@ -10,6 +10,11 @@ export type Workspace = {
   owner_id: string
   role: string
   avatar_url?: string | null
+  country?: string | null
+  owner?: {
+    email?: string | null
+    phone_country?: string | null
+  } | null
 }
 
 type WorkspaceContextValue = {
@@ -41,6 +46,7 @@ const SKIP_REDIRECT_PATHS = [
   "/reset-password",
   "/verify-email",
   "/waitlist",
+  "/invite",
 ]
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
