@@ -18,9 +18,10 @@ export async function POST(request: NextRequest) {
 
   const { email } = parsed.data
   const supabase = await createClient()
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin).replace(/\/$/, "")
 
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
+    redirectTo: `${appUrl}/reset-password`,
   })
 
   // Always return success to avoid leaking which emails are registered

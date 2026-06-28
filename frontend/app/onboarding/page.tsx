@@ -11,6 +11,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { PlatformSelect } from "@/components/platform-select"
 import { phoneCountries } from "@/lib/phone-countries"
 import { cn } from "@/lib/utils"
+import { useWorkspace } from "@/lib/workspace-context"
 
 type Step = "workspace" | "profile" | "done"
 
@@ -139,6 +140,7 @@ function OptionalImagePicker({
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const { refreshWorkspaces } = useWorkspace()
   const [step, setStep] = React.useState<Step>("workspace")
   const [workspaceName, setWorkspaceName] = React.useState("")
   const [workspaceAvatarUrl, setWorkspaceAvatarUrl] = React.useState<string | null>(null)
@@ -267,9 +269,10 @@ export default function OnboardingPage() {
     [firstName, phoneCountry, phoneNumber, profileAvatarUrl, secondName]
   )
 
-  const handleEnterApp = React.useCallback(() => {
+  const handleEnterApp = React.useCallback(async () => {
+    await refreshWorkspaces().catch(() => {})
     router.push("/ai-core")
-  }, [router])
+  }, [refreshWorkspaces, router])
 
   const stepIndex = step === "workspace" ? 0 : step === "profile" ? 1 : 2
   const totalSteps = 2
