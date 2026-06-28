@@ -3,6 +3,22 @@ import { createClient } from "@/lib/supabase/server"
 import { ok, Errors } from "@/lib/api/response"
 import { forgotPasswordSchema } from "@/lib/validations/auth"
 
+function isLocalUrl(value: string) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?/i.test(value)
+}
+
+function getAppUrl(request: NextRequest) {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  const requestOrigin = request.nextUrl.origin
+
+  if (!configuredUrl) return requestOrigin.replace(/\/$/, "")
+  if (isLocalUrl(configuredUrl) && !isLocalUrl(requestOrigin)) {
+    return requestOrigin.replace(/\/$/, "")
+  }
+
+  return configuredUrl.replace(/\/$/, "")
+}
+
 export async function POST(request: NextRequest) {
   let body: unknown
   try {
@@ -18,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   const { email } = parsed.data
   const supabase = await createClient()
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin).replace(/\/$/, "")
+  const appUrl = getAppUrl(request)
 
   await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${appUrl}/reset-password`,

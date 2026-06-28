@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowLeft, Check, CornerDownLeft, Loader2 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,6 +19,11 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+
+  useEffect(() => {
+    const emailParam = new URLSearchParams(window.location.search).get("email")
+    if (emailParam) setEmail(emailParam)
+  }, [])
 
   const handleSubmit = async () => {
     if (!email.trim()) {

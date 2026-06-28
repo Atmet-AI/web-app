@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
-import { Camera, Check, CornerDownLeft, Loader2, Upload } from "lucide-react"
+import { useParams, useRouter } from "next/navigation"
+import { Check, CornerDownLeft, Eye, EyeOff, Loader2, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +12,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { PlatformSelect } from "@/components/platform-select"
 import { countries } from "@/lib/countries"
 import { phoneCountries } from "@/lib/phone-countries"
+import { cn } from "@/lib/utils"
 
 type InvitePayload = {
   id: string
@@ -61,6 +62,7 @@ function unwrap<T>(value: T | T[] | null | undefined) {
 }
 
 export default function InvitePage() {
+  const router = useRouter()
   const params = useParams<{ token: string }>()
   const token = params.token
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -80,6 +82,10 @@ export default function InvitePage() {
   const [phoneNumber, setPhoneNumber] = React.useState("")
   const [role, setRole] = React.useState<(typeof roleOptions)[number] | string>("")
   const [customRole, setCustomRole] = React.useState("")
+  const [password, setPassword] = React.useState("")
+  const [confirmPassword, setConfirmPassword] = React.useState("")
+  const [showPassword, setShowPassword] = React.useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
   const [signInUrl, setSignInUrl] = React.useState("/sign-in")
 
   React.useEffect(() => {
@@ -142,6 +148,14 @@ export default function InvitePage() {
       setError("Choose or type your role.")
       return
     }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.")
+      return
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
     setError("")
     setStep("join")
   }
@@ -161,6 +175,7 @@ export default function InvitePage() {
           phoneCountryCode: selectedPhoneCountry?.dialCode ?? "",
           phoneNumber: phoneNumber.trim(),
           jobRole: displayRole.trim(),
+          password,
         }),
       })
       const payload = (await response.json()) as {
@@ -170,6 +185,26 @@ export default function InvitePage() {
       if (!response.ok) {
         throw new Error(payload.error?.message ?? "Unable to join workspace.")
       }
+
+      const inviteEmail = invite?.email ?? ""
+      const signInResponse = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail, password }),
+      })
+      const signInPayload = (await signInResponse.json().catch(() => null)) as
+        | {
+            data?: {
+              success?: boolean
+              user?: { id: string; email: string; full_name: string | null }
+            }
+          }
+        | null
+
+      if (signInResponse.ok && signInPayload?.data?.user) {
+        localStorage.setItem("atmet_user", JSON.stringify(signInPayload.data.user))
+      }
+
       setSignInUrl(payload.data?.signInUrl ?? `/sign-in?email=${encodeURIComponent(invite?.email ?? "")}`)
       setStep("done")
     } catch (nextError) {
@@ -205,19 +240,26 @@ export default function InvitePage() {
   }
 
   return (
-    <div className="w-full max-w-xl space-y-8">
-      <div className="grid grid-cols-2 gap-2">
-        <div className="h-1 rounded-full bg-foreground" />
-        <div className={`h-1 rounded-full ${step === "profile" ? "bg-muted" : "bg-foreground"}`} />
+    <div className="mx-auto w-full max-w-sm space-y-8">
+      <div className="flex items-center gap-2">
+        {Array.from({ length: 2 }).map((_, index) => (
+          <div
+            key={index}
+            className={cn(
+              "h-1 flex-1 rounded-full transition-colors duration-300",
+              index === 0 || step !== "profile" ? "bg-foreground" : "bg-border"
+            )}
+          />
+        ))}
       </div>
 
       {step === "profile" ? (
-        <div className="space-y-7">
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+        <div className="space-y-8">
+          <div className="space-y-1.5 text-center">
+            <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
               Complete your profile
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-pretty text-sm text-muted-foreground">
               You were invited as {invite.email}.
             </p>
           </div>
@@ -235,51 +277,47 @@ export default function InvitePage() {
               }}
             />
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-sidebar-accent text-sm font-semibold text-muted-foreground shadow-sm"
-                aria-label="Upload avatar"
-              >
+              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-sidebar-accent text-sm font-semibold text-muted-foreground shadow-sm">
                 {avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={avatarUrl} alt="Profile avatar" className="size-full object-cover" />
                 ) : isUploading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Camera className="h-4 w-4" />
+                  firstName || lastName ? initials(`${firstName} ${lastName}`) : "U"
                 )}
-              </button>
+              </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">Profile image</p>
-                <p className="text-xs text-muted-foreground">Optional image</p>
+                <Label className="text-muted-foreground">Profile image</Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">Optional image</p>
               </div>
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="icon-sm"
                 disabled={isUploading}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Upload profile image"
+                className="shrink-0"
               >
-                <Upload className="h-4 w-4" />
+                {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               </Button>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1.5">
-                <Label>First name</Label>
-                <Input value={firstName} onChange={(event) => setFirstName(event.target.value)} className="h-8" />
+                <Label className="text-muted-foreground">First name</Label>
+                <Input value={firstName} onChange={(event) => setFirstName(event.target.value)} />
               </label>
               <label className="space-y-1.5">
-                <Label>Second name</Label>
-                <Input value={lastName} onChange={(event) => setLastName(event.target.value)} className="h-8" />
+                <Label className="text-muted-foreground">Second name</Label>
+                <Input value={lastName} onChange={(event) => setLastName(event.target.value)} />
               </label>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Phone</Label>
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,12rem)_1fr]">
+              <Label className="text-muted-foreground">Phone</Label>
+              <div className="grid grid-cols-[minmax(9rem,0.9fr)_minmax(0,1.1fr)] gap-2">
                 <PlatformSelect
                   value={phoneCountry}
                   options={phoneCountries.map((country) => ({
@@ -296,13 +334,12 @@ export default function InvitePage() {
                   value={phoneNumber}
                   onChange={(event) => setPhoneNumber(event.target.value)}
                   placeholder="Phone number"
-                  className="h-8"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Country</Label>
+              <Label className="text-muted-foreground">Country</Label>
               <PlatformSelect
                 value={phoneCountry}
                 options={countries.map((country) => ({
@@ -317,7 +354,7 @@ export default function InvitePage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Role</Label>
+              <Label className="text-muted-foreground">Role</Label>
               <PlatformSelect
                 value={role}
                 options={roleOptions.map((option) => ({
@@ -332,24 +369,73 @@ export default function InvitePage() {
                   value={customRole}
                   onChange={(event) => setCustomRole(event.target.value)}
                   placeholder="Type your role"
-                  className="h-8"
                 />
               ) : null}
             </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground">Password</Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Create a password"
+                  className="pr-8"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((previous) => !previous)}
+                  className="absolute top-1/2 right-0 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground">Confirm password</Label>
+              <div className="relative">
+                <Input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Confirm password"
+                  className="pr-8"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((previous) => !previous)}
+                  className="absolute top-1/2 right-0 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
           </div>
 
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
-          <Button type="button" className="w-full" onClick={goToJoinStep}>
+          <Button
+            type="button"
+            size="sm"
+            data-auth-primary-action="true"
+            className="w-full transition-transform active:scale-[0.96]"
+            onClick={goToJoinStep}
+          >
             Continue
-            <Kbd><CornerDownLeft /></Kbd>
+            <Kbd className="h-4 rounded-[calc(min(var(--radius-md),12px)*4/7)] border-transparent bg-primary-foreground/15 px-1 text-[10px] text-primary-foreground">
+              <CornerDownLeft className="h-2.5 w-2.5" />
+            </Kbd>
           </Button>
         </div>
       ) : null}
 
       {step === "join" ? (
-        <div className="space-y-7 text-center">
-          <div className="mx-auto flex size-20 items-center justify-center overflow-hidden rounded-2xl border border-border bg-sidebar-accent text-lg font-semibold text-foreground">
+        <div className="space-y-8 text-center">
+          <div className="mx-auto flex size-16 items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-sidebar-accent text-base font-semibold text-foreground shadow-sm">
             {workspace.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={workspace.avatar_url} alt={workspace.name} className="size-full object-cover" />
@@ -357,20 +443,20 @@ export default function InvitePage() {
               initials(workspace.name)
             )}
           </div>
-          <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+          <div className="space-y-1.5">
+            <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
               Join {workspace.name}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-pretty text-sm text-muted-foreground">
               {inviter?.full_name || inviter?.email || "A teammate"} invited you to this workspace.
             </p>
           </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep("profile")}>
+            <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => setStep("profile")}>
               Back
             </Button>
-            <Button type="button" className="flex-1" disabled={isJoining} onClick={() => void joinWorkspace()}>
+            <Button type="button" size="sm" className="flex-1" disabled={isJoining} onClick={() => void joinWorkspace()}>
               {isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               Join workspace
             </Button>
@@ -379,21 +465,32 @@ export default function InvitePage() {
       ) : null}
 
       {step === "done" ? (
-        <div className="space-y-6 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
-            <Check className="h-5 w-5" />
+        <div className="space-y-8 text-center">
+          <div className="flex justify-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+              <Check className="h-8 w-8 text-primary" strokeWidth={2.5} />
+            </div>
           </div>
-          <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+          <div className="space-y-1.5">
+            <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
               You joined {workspace.name}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              Sign in with {invite.email} to finish setting your password.
+            <p className="text-pretty text-sm text-muted-foreground">
+              Your account is ready.
             </p>
           </div>
-          <Button render={<Link href={signInUrl} />} className="w-full">
-            Continue to sign in
+          <Button
+            type="button"
+            size="sm"
+            data-auth-primary-action="true"
+            className="w-full transition-transform active:scale-[0.96]"
+            onClick={() => router.replace("/ai-core")}
+          >
+            Open Atmet
           </Button>
+          <Link href={signInUrl} className="block text-xs text-muted-foreground hover:text-foreground hover:underline">
+            Use sign in instead
+          </Link>
         </div>
       ) : null}
     </div>
