@@ -70,12 +70,13 @@ export default function InvitePage() {
   const [isLoading, setIsLoading] = React.useState(true)
   const [isUploading, setIsUploading] = React.useState(false)
   const [isJoining, setIsJoining] = React.useState(false)
-  const [step, setStep] = React.useState<"profile" | "join" | "done">("profile")
+  const [step, setStep] = React.useState<"join" | "profile" | "done">("join")
   const [error, setError] = React.useState("")
   const [firstName, setFirstName] = React.useState("")
   const [lastName, setLastName] = React.useState("")
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null)
   const [phoneCountry, setPhoneCountry] = React.useState("US")
+  const [country, setCountry] = React.useState("US")
   const selectedPhoneCountry =
     phoneCountries.find((country) => country.value === phoneCountry) ??
     phoneCountries[0]
@@ -135,7 +136,7 @@ export default function InvitePage() {
     }
   }
 
-  const goToJoinStep = () => {
+  const completeProfileAndJoin = () => {
     if (!firstName.trim() || !lastName.trim()) {
       setError("Enter your first and second name.")
       return
@@ -156,8 +157,7 @@ export default function InvitePage() {
       setError("Passwords do not match.")
       return
     }
-    setError("")
-    setStep("join")
+    void joinWorkspace()
   }
 
   const joinWorkspace = async () => {
@@ -174,6 +174,7 @@ export default function InvitePage() {
           phoneCountry,
           phoneCountryCode: selectedPhoneCountry?.dialCode ?? "",
           phoneNumber: phoneNumber.trim(),
+          country,
           jobRole: displayRole.trim(),
           password,
         }),
@@ -240,18 +241,55 @@ export default function InvitePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-sm space-y-8">
+    <div className="mx-auto w-full max-w-xl space-y-8">
       <div className="flex items-center gap-2">
         {Array.from({ length: 2 }).map((_, index) => (
           <div
             key={index}
             className={cn(
               "h-1 flex-1 rounded-full transition-colors duration-300",
-              index === 0 || step !== "profile" ? "bg-foreground" : "bg-border"
+              index === 0 || step !== "join" ? "bg-foreground" : "bg-border"
             )}
           />
         ))}
       </div>
+
+      {step === "join" ? (
+        <div className="mx-auto max-w-sm space-y-8 text-center">
+          <div className="mx-auto flex size-16 items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-sidebar-accent text-base font-semibold text-foreground shadow-sm">
+            {workspace.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={workspace.avatar_url} alt={workspace.name} className="size-full object-cover" />
+            ) : (
+              initials(workspace.name)
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
+              Join {workspace.name}
+            </h1>
+            <p className="text-pretty text-sm text-muted-foreground">
+              {inviter?.full_name || inviter?.email || "A teammate"} invited you to this workspace.
+            </p>
+          </div>
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          <Button
+            type="button"
+            size="sm"
+            data-auth-primary-action="true"
+            className="w-full transition-transform active:scale-[0.96]"
+            onClick={() => {
+              setError("")
+              setStep("profile")
+            }}
+          >
+            Join workspace
+            <Kbd className="h-4 rounded-[calc(min(var(--radius-md),12px)*4/7)] border-transparent bg-primary-foreground/15 px-1 text-[10px] text-primary-foreground">
+              <CornerDownLeft className="h-2.5 w-2.5" />
+            </Kbd>
+          </Button>
+        </div>
+      ) : null}
 
       {step === "profile" ? (
         <div className="space-y-8">
@@ -341,7 +379,7 @@ export default function InvitePage() {
             <div className="space-y-1.5">
               <Label className="text-muted-foreground">Country</Label>
               <PlatformSelect
-                value={phoneCountry}
+                value={country}
                 options={countries.map((country) => ({
                   value: country.value,
                   label: `${country.flag} ${country.label}`,
@@ -349,7 +387,7 @@ export default function InvitePage() {
                 placeholder="Choose country"
                 searchable
                 searchPlaceholder="Search country..."
-                onChange={setPhoneCountry}
+                onChange={setCountry}
               />
             </div>
 
@@ -423,44 +461,15 @@ export default function InvitePage() {
             size="sm"
             data-auth-primary-action="true"
             className="w-full transition-transform active:scale-[0.96]"
-            onClick={goToJoinStep}
+            onClick={completeProfileAndJoin}
+            disabled={isJoining || isUploading}
           >
-            Continue
+            {isJoining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Complete profile
             <Kbd className="h-4 rounded-[calc(min(var(--radius-md),12px)*4/7)] border-transparent bg-primary-foreground/15 px-1 text-[10px] text-primary-foreground">
               <CornerDownLeft className="h-2.5 w-2.5" />
             </Kbd>
           </Button>
-        </div>
-      ) : null}
-
-      {step === "join" ? (
-        <div className="space-y-8 text-center">
-          <div className="mx-auto flex size-16 items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-sidebar-accent text-base font-semibold text-foreground shadow-sm">
-            {workspace.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={workspace.avatar_url} alt={workspace.name} className="size-full object-cover" />
-            ) : (
-              initials(workspace.name)
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
-              Join {workspace.name}
-            </h1>
-            <p className="text-pretty text-sm text-muted-foreground">
-              {inviter?.full_name || inviter?.email || "A teammate"} invited you to this workspace.
-            </p>
-          </div>
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
-          <div className="flex gap-2">
-            <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => setStep("profile")}>
-              Back
-            </Button>
-            <Button type="button" size="sm" className="flex-1" disabled={isJoining} onClick={() => void joinWorkspace()}>
-              {isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              Join workspace
-            </Button>
-          </div>
         </div>
       ) : null}
 

@@ -28,7 +28,7 @@ export async function GET() {
   // Use admin client to bypass RLS — user always reads their own profile
   const { data, error } = await supabaseAdmin
     .from("users")
-    .select("id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
+    .select("id, public_user_id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -53,7 +53,7 @@ export async function GET() {
         platform_role: isSuperAdmin ? "super_admin" : "user",
         status: isSuperAdmin ? "active" : "inactive",
       }, { onConflict: "id" })
-      .select("id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
+      .select("id, public_user_id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
       .single()
 
     return ok({
@@ -83,7 +83,7 @@ export async function GET() {
         status: "active",
       })
       .eq("id", user.id)
-      .select("id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
+      .select("id, public_user_id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
       .single()
 
     if (promoted) return ok({ user: promoted })
@@ -176,7 +176,7 @@ export async function PATCH(request: NextRequest) {
 
   const { data } = await supabaseAdmin
     .from("users")
-    .select("id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
+    .select("id, public_user_id, email, full_name, avatar_url, job_role, phone_country, phone_country_code, phone_number, status, platform_role, onboarding_completed, created_at, updated_at")
     .eq("id", user.id)
     .single()
 

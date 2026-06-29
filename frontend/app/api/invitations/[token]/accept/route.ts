@@ -10,6 +10,7 @@ const acceptInvitationSchema = z.object({
   phoneCountry: z.string().trim().min(2).max(2),
   phoneCountryCode: z.string().trim().min(1).max(8),
   phoneNumber: z.string().trim().min(4).max(32),
+  country: z.string().trim().min(2).max(2).optional(),
   jobRole: z.string().trim().min(1, "Role is required.").max(100),
   password: z.string().min(8, "Password must be at least 8 characters."),
 })
@@ -83,6 +84,7 @@ export async function POST(
     phone_country: parsed.data.phoneCountry,
     phone_country_code: parsed.data.phoneCountryCode,
     phone_number: parsed.data.phoneNumber,
+    country: parsed.data.country ?? null,
     password_set: true,
   }
 

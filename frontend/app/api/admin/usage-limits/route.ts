@@ -71,7 +71,7 @@ export async function GET() {
     apiKeysRes,
   ] = await Promise.all([
     supabaseAdmin.from("platform_setting").select("value").eq("key", "usage_limits").maybeSingle(),
-    supabaseAdmin.from("users").select("id, email, full_name, avatar_url, status, platform_role, updated_at"),
+    supabaseAdmin.from("users").select("id, public_user_id, email, full_name, avatar_url, status, platform_role, updated_at"),
     supabaseAdmin.from("workspace_member").select("role, status, user_id, workspace_id, workspace:workspace_id(id, name, status)"),
     supabaseAdmin.from("workspace").select("id, name, slug, plan, status, owner_id, avatar_url, country, monthly_token_cap, seat_limit, features, created_at, updated_at"),
     supabaseAdmin.from("message").select("metadata, created_at, chat:chat_id(workspace_id, created_by, updated_at)"),

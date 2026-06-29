@@ -103,32 +103,31 @@ export async function POST(
   const { email, role } = parsed.data
   const normalizedEmail = email.trim().toLowerCase()
 
-  const [membersCountRes, pendingInvitesCountRes, seatLimit, workspaceRes, inviterRes] = await Promise.all([
-    supabaseAdmin.from("workspace_member").select("user_id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "active"),
-    supabaseAdmin.from("invitation").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "pending"),
-    getSeatLimit(workspaceId),
+  const [workspaceRes, inviterRes, existingInviteRes, existingUserRes] = await Promise.all([
     supabaseAdmin.from("workspace").select("id, name, avatar_url").eq("id", workspaceId).maybeSingle(),
     supabaseAdmin.from("users").select("full_name, email").eq("id", user.id).maybeSingle(),
+    supabaseAdmin
+      .from("invitation")
+      .select("id, token")
+      .eq("workspace_id", workspaceId)
+      .eq("email", normalizedEmail)
+      .eq("status", "pending")
+      .maybeSingle(),
+    supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("email", normalizedEmail)
+      .maybeSingle(),
   ])
 
   if (!workspaceRes.data) return Errors.notFound("Workspace")
 
-  if ((membersCountRes.count ?? 0) + (pendingInvitesCountRes.count ?? 0) >= seatLimit) {
-    return Errors.badRequest(`Workspace has reached the ${seatLimit.toLocaleString()} seat limit.`)
-  }
-
-  const { data: existingUser } = await supabaseAdmin
-    .from("users")
-    .select("id")
-    .eq("email", normalizedEmail)
-    .maybeSingle()
-
-  if (existingUser?.id) {
+  if (existingUserRes.data?.id) {
     const { data: existingMembership } = await supabaseAdmin
       .from("workspace_member")
       .select("status")
       .eq("workspace_id", workspaceId)
-      .eq("user_id", existingUser.id)
+      .eq("user_id", existingUserRes.data.id)
       .maybeSingle()
 
     if (existingMembership?.status === "active") {
@@ -136,16 +135,43 @@ export async function POST(
     }
   }
 
-  const { data: existing } = await supabaseAdmin
-    .from("invitation")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("email", normalizedEmail)
-    .eq("status", "pending")
-    .maybeSingle()
+  if (existingInviteRes.data) {
+    const nextExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: refreshedInvitation } = await supabaseAdmin
+      .from("invitation")
+      .update({
+        invited_by: user.id,
+        role,
+        expires_at: nextExpiry,
+      })
+      .eq("id", existingInviteRes.data.id)
+      .select()
+      .single()
 
-  if (existing) {
-    return Errors.conflict("A pending invitation for this email already exists.")
+    const invitation = refreshedInvitation ?? existingInviteRes.data
+    const emailResult = await sendWorkspaceInvitationEmail({
+      email: normalizedEmail,
+      workspaceName: workspaceRes.data.name,
+      invitedByName: inviterRes.data?.full_name || inviterRes.data?.email || "A teammate",
+      token: invitation.token,
+    })
+
+    return ok({
+      invitation,
+      invitationResent: true,
+      invitationEmailSent: emailResult.ok,
+      invitationEmailWarning: emailResult.ok ? null : emailResult.reason,
+    })
+  }
+
+  const [membersCountRes, pendingInvitesCountRes, seatLimit] = await Promise.all([
+    supabaseAdmin.from("workspace_member").select("user_id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "active"),
+    supabaseAdmin.from("invitation").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "pending"),
+    getSeatLimit(workspaceId),
+  ])
+
+  if ((membersCountRes.count ?? 0) + (pendingInvitesCountRes.count ?? 0) >= seatLimit) {
+    return Errors.badRequest(`Workspace has reached the ${seatLimit.toLocaleString()} seat limit.`)
   }
 
   const { data: invitation, error } = await supabaseAdmin

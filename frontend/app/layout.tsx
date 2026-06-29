@@ -54,7 +54,7 @@ export const metadata: Metadata = {
     description: "Build, automate, and operate AI-powered workflows with Atmet.",
     images: [
       {
-        url: "/Preview%20Atmet.png",
+        url: "/Atmet%20Preview%20Link.png",
         width: 1200,
         height: 630,
         alt: "Atmet preview",
@@ -66,7 +66,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Atmet",
     description: "Build, automate, and operate AI-powered workflows with Atmet.",
-    images: ["/Preview%20Atmet.png"],
+    images: ["/Atmet%20Preview%20Link.png"],
   },
 }
 

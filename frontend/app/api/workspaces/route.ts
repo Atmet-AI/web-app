@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     return Errors.validationError(parsed.error.issues[0].message)
   }
 
-  const { name, plan, avatar_url } = parsed.data
+  const { name, plan, avatar_url, country } = parsed.data
 
   // Ensure a users profile row exists — trigger may not have fired for manually-created accounts
   const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(user.id)
@@ -67,7 +67,13 @@ export async function POST(request: NextRequest) {
   // Insert workspace (admin client bypasses RLS for the FK constraint)
   const { data: workspace, error: wsError } = await supabaseAdmin
     .from("workspace")
-    .insert({ name, plan, avatar_url: avatar_url ?? null, owner_id: user.id })
+    .insert({
+      name,
+      plan,
+      avatar_url: avatar_url ?? null,
+      country: country ?? null,
+      owner_id: user.id,
+    })
     .select()
     .single()
 
