@@ -47,7 +47,17 @@ export default function ResetPasswordPage() {
       const accessToken = hashParams.get("access_token")
       const refreshToken = hashParams.get("refresh_token")
 
+      const useExistingSessionIfPresent = async () => {
+        const { data } = await supabase.auth.getSession()
+        if (cancelled || !data.session) return false
+        window.history.replaceState(null, "", "/reset-password")
+        setErrors((previous) => ({ ...previous, link: undefined }))
+        setIsPreparing(false)
+        return true
+      }
+
       if (linkError) {
+        if (await useExistingSessionIfPresent()) return
         setErrors({ link: linkError })
         setIsPreparing(false)
         return
@@ -56,7 +66,11 @@ export default function ResetPasswordPage() {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (!cancelled && error) {
+          if (await useExistingSessionIfPresent()) return
           setErrors({ link: "This password setup link is invalid or has expired." })
+        }
+        if (!cancelled && !error) {
+          window.history.replaceState(null, "", "/reset-password")
         }
         if (!cancelled) setIsPreparing(false)
         return
@@ -68,6 +82,7 @@ export default function ResetPasswordPage() {
           type: "recovery",
         })
         if (!cancelled && error) {
+          if (await useExistingSessionIfPresent()) return
           setErrors({ link: "This password setup link is invalid or has expired." })
         }
         if (!cancelled && !error) {
@@ -83,6 +98,7 @@ export default function ResetPasswordPage() {
           refresh_token: refreshToken,
         })
         if (!cancelled && error) {
+          if (await useExistingSessionIfPresent()) return
           setErrors({ link: "This password setup link is invalid or has expired." })
         }
         if (!cancelled && !error) {
