@@ -2217,7 +2217,6 @@ function MembersSettingsContent({
   const roleFilters = ["All users", ...platformRoles] as const
   const inviteRoleOptions = ["Member"] as const
   const creditsRanges = ["All time", "This month", "This week"] as const
-  const seatsLimit = 10
   const [searchQuery, setSearchQuery] = React.useState("")
   const [roleFilter, setRoleFilter] =
     React.useState<(typeof roleFilters)[number]>("All users")
@@ -2235,7 +2234,13 @@ function MembersSettingsContent({
   const [isInviteSending, setIsInviteSending] = React.useState(false)
   const [members, setMembers] = React.useState<WorkspaceMember[]>([])
   const [isMembersLoading, setIsMembersLoading] = React.useState(false)
+  const [currentMemberRole, setCurrentMemberRole] = React.useState<
+    "owner" | "admin" | "member" | null
+  >(null)
+  const [seatsLimit, setSeatsLimit] = React.useState(10)
   const workspaceMembers = members
+  const canInviteMembers =
+    currentMemberRole === "owner" || currentMemberRole === "admin"
   const roleBadgeClasses: Record<WorkspaceMember["role"], BadgeVariant> = {
     "Super Admin": "violet",
     Admin: "blue",
@@ -2250,6 +2255,7 @@ function MembersSettingsContent({
   const loadMembers = React.useCallback(async () => {
     if (!activeWorkspaceId) {
       setMembers([])
+      setCurrentMemberRole(null)
       return
     }
     setIsMembersLoading(true)
@@ -2257,12 +2263,15 @@ function MembersSettingsContent({
       const response = await apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
       if (!response.ok) {
         setMembers([])
+        setCurrentMemberRole(null)
         return
       }
       const payload = (await response.json()) as {
         data?: {
+          currentMemberRole?: "owner" | "admin" | "member"
+          seatLimit?: number
           members?: Array<{
-            role: "owner" | "member"
+            role: "owner" | "admin" | "member"
             joined_at: string
             user: {
               id: string
@@ -2274,6 +2283,8 @@ function MembersSettingsContent({
           }>
         }
       }
+      setCurrentMemberRole(payload.data?.currentMemberRole ?? null)
+      setSeatsLimit(payload.data?.seatLimit ?? 10)
       setMembers(
         (payload.data?.members ?? []).map((row) => {
           const user = Array.isArray(row.user) ? row.user[0] : row.user
@@ -2282,6 +2293,8 @@ function MembersSettingsContent({
           const role: PlatformRole =
             row.role === "owner"
               ? "Owner"
+              : row.role === "admin"
+                ? "Admin"
               : "Member"
           return {
             id: user?.id ?? `${row.role}-${row.joined_at}`,
@@ -2326,7 +2339,7 @@ function MembersSettingsContent({
     })
   }, [searchQuery, roleFilter])
   const seatsUsed = workspaceMembers.length
-  const seatsProgress = Math.min(100, (seatsUsed / seatsLimit) * 100)
+  const seatsProgress = Math.min(100, (seatsUsed / Math.max(seatsLimit, 1)) * 100)
   const selectedMember = React.useMemo(
     () =>
       workspaceMembers.find((member) => member.id === selectedMemberId) ?? null,
@@ -2454,6 +2467,7 @@ function MembersSettingsContent({
 
   React.useEffect(() => {
     if (quickInviteToken === 0) return
+    if (!canInviteMembers) return
     setSelectedMemberId(null)
     setSearchQuery("")
     setRoleFilter("All users")
@@ -2462,10 +2476,14 @@ function MembersSettingsContent({
     setInviteError("")
     setInviteRole("Member")
     setIsInviteOpen(true)
-  }, [quickInviteToken])
+  }, [canInviteMembers, quickInviteToken])
 
   const submitInvite = async () => {
     if (isInviteSending) return
+    if (!canInviteMembers) {
+      setInviteError("Only workspace owners or admins can invite members.")
+      return
+    }
     const tokens = inviteInput
       .split(/[\s,;]+/)
       .map((value) => value.trim().toLowerCase())
@@ -2510,9 +2528,12 @@ function MembersSettingsContent({
     )
     setIsInviteSending(false)
 
-    const failed = results.filter((result) => !result.response.ok).length
+    const failedResults = results.filter((result) => !result.response.ok)
+    const failed = failedResults.length
     if (failed > 0) {
-      setInviteError(`${failed} invite${failed === 1 ? "" : "s"} could not be sent.`)
+      const firstError = failedResults.find((result) => result.payload?.error?.message)
+        ?.payload?.error?.message
+      setInviteError(firstError ?? `${failed} invite${failed === 1 ? "" : "s"} could not be sent.`)
       return
     }
 
@@ -2750,14 +2771,16 @@ function MembersSettingsContent({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setIsInviteOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Invite
-            </Button>
+            {canInviteMembers && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setIsInviteOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Invite
+              </Button>
+            )}
           </div>
 
           <section className="mt-3 space-y-2 px-1 py-1">
@@ -2844,54 +2867,56 @@ function MembersSettingsContent({
                         {member.lastLogin}
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button
-                                type="button"
-                                size="icon-xs"
-                                variant="ghost"
-                                className="border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
-                                aria-label={`Actions for ${member.name}`}
-                                onClick={(event) => event.stopPropagation()}
-                              />
-                            }
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="min-w-40 rounded-lg p-1"
-                          >
-                            <DropdownMenuItem
-                              onClick={() => setSelectedMemberId(member.id)}
+                        {canInviteMembers ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  className="border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
+                                  aria-label={`Actions for ${member.name}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                />
+                              }
                             >
-                              <User className="h-3.5 w-3.5" />
-                              Go to profile
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={async (event) => {
-                                event.stopPropagation()
-                                if (!activeWorkspaceId) return
-                                const confirmed = window.confirm(`Remove ${member.name} from this workspace?`)
-                                if (!confirmed) return
-                                const response = await apiFetch(
-                                  `/api/workspaces/${activeWorkspaceId}/members/${member.id}`,
-                                  { method: "DELETE" }
-                                ).catch(() => null)
-                                if (response?.ok) {
-                                  setMembers((previous) =>
-                                    previous.filter((item) => item.id !== member.id)
-                                  )
-                                }
-                              }}
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="min-w-40 rounded-lg p-1"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Delete user
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <DropdownMenuItem
+                                onClick={() => setSelectedMemberId(member.id)}
+                              >
+                                <User className="h-3.5 w-3.5" />
+                                Go to profile
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={async (event) => {
+                                  event.stopPropagation()
+                                  if (!activeWorkspaceId) return
+                                  const confirmed = window.confirm(`Remove ${member.name} from this workspace?`)
+                                  if (!confirmed) return
+                                  const response = await apiFetch(
+                                    `/api/workspaces/${activeWorkspaceId}/members/${member.id}`,
+                                    { method: "DELETE" }
+                                  ).catch(() => null)
+                                  if (response?.ok) {
+                                    setMembers((previous) =>
+                                      previous.filter((item) => item.id !== member.id)
+                                    )
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete user
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -2909,7 +2934,7 @@ function MembersSettingsContent({
         </>
       )}
 
-      {isInviteOpen && (
+      {isInviteOpen && canInviteMembers && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 p-4 backdrop-blur-[1px]"
           onClick={(event) => {

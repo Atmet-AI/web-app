@@ -1,10 +1,11 @@
 import { type NextRequest } from "next/server"
 import { getUser } from "@/lib/api/auth"
-import { assertWorkspaceAdmin } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { inviteMemberSchema } from "@/lib/validations/workspace"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { sendWorkspaceInvitationEmail } from "@/lib/email/invitation"
+
+type WorkspaceMemberRole = "owner" | "admin" | "member"
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
@@ -21,6 +22,22 @@ async function getSeatLimit(workspaceId: string) {
   return workspaceRes.data?.seat_limit ?? (readNumber(globalValue.seatLimit) || 10)
 }
 
+async function getCurrentMembership(workspaceId: string, userId: string) {
+  const { data } = await supabaseAdmin
+    .from("workspace_member")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle()
+
+  return data?.role as WorkspaceMemberRole | undefined
+}
+
+function canManageMembers(role: WorkspaceMemberRole | undefined) {
+  return role === "owner" || role === "admin"
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -28,20 +45,32 @@ export async function GET(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { supabase } = auth
+  const { user } = auth
   const { id: workspaceId } = await params
+  const currentMemberRole = await getCurrentMembership(workspaceId, user.id)
 
-  const { data, error } = await supabase
-    .from("workspace_member")
-    .select("role, joined_at, user:user_id(id, email, full_name, avatar_url, status)")
-    .eq("workspace_id", workspaceId)
-    .eq("status", "active")
+  if (!currentMemberRole) return Errors.forbidden()
 
-  if (error) {
+  const [membersRes, seatLimit] = await Promise.all([
+    supabaseAdmin
+      .from("workspace_member")
+      .select("role, joined_at, user:user_id(id, email, full_name, avatar_url, status)")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "active")
+      .order("joined_at", { ascending: true }),
+    getSeatLimit(workspaceId),
+  ])
+
+  if (membersRes.error) {
     return Errors.internal()
   }
 
-  return ok({ members: data })
+  return ok({
+    members: membersRes.data,
+    currentMemberRole,
+    canInvite: canManageMembers(currentMemberRole),
+    seatLimit,
+  })
 }
 
 export async function POST(
@@ -51,11 +80,13 @@ export async function POST(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { supabase, user } = auth
+  const { user } = auth
   const { id: workspaceId } = await params
 
-  const isAdmin = await assertWorkspaceAdmin(supabase, workspaceId, user.id)
-  if (!isAdmin) return Errors.forbidden()
+  const currentMemberRole = await getCurrentMembership(workspaceId, user.id)
+  if (!canManageMembers(currentMemberRole)) {
+    return Errors.forbidden("Only workspace owners or admins can invite members.")
+  }
 
   let body: unknown
   try {
@@ -86,8 +117,26 @@ export async function POST(
     return Errors.badRequest(`Workspace has reached the ${seatLimit.toLocaleString()} seat limit.`)
   }
 
-  // Check for existing pending invitation
-  const { data: existing } = await supabase
+  const { data: existingUser } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("email", normalizedEmail)
+    .maybeSingle()
+
+  if (existingUser?.id) {
+    const { data: existingMembership } = await supabaseAdmin
+      .from("workspace_member")
+      .select("status")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", existingUser.id)
+      .maybeSingle()
+
+    if (existingMembership?.status === "active") {
+      return Errors.conflict("This user is already a member of the workspace.")
+    }
+  }
+
+  const { data: existing } = await supabaseAdmin
     .from("invitation")
     .select("id")
     .eq("workspace_id", workspaceId)
@@ -99,7 +148,7 @@ export async function POST(
     return Errors.conflict("A pending invitation for this email already exists.")
   }
 
-  const { data: invitation, error } = await supabase
+  const { data: invitation, error } = await supabaseAdmin
     .from("invitation")
     .insert({
       workspace_id: workspaceId,
