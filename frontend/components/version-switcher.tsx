@@ -126,7 +126,7 @@ export function VersionSwitcher({
               {workspaces.map((workspace) => (
                 <DropdownMenuItem
                   key={workspace.id}
-                  onSelect={() => onSelectedWorkspaceIdChange(workspace.id)}
+                  onClick={() => onSelectedWorkspaceIdChange(workspace.id)}
                   className="flex items-center justify-between"
                 >
                   <span className="flex items-center gap-2">
@@ -154,15 +154,15 @@ export function VersionSwitcher({
               {showWorkspaceActions ? (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={onCreateWorkspace}>
+                  <DropdownMenuItem onClick={onCreateWorkspace}>
                     <Plus className="h-4 w-4 opacity-80" />
                     Create workspace
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={onAddUsersToWorkspace}>
+                  <DropdownMenuItem onClick={onAddUsersToWorkspace}>
                     <Users className="h-4 w-4 opacity-80" />
                     Add users to workspace
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={onOpenWorkspaceProfile}>
+                  <DropdownMenuItem onClick={onOpenWorkspaceProfile}>
                     <Crown className="h-4 w-4 opacity-80" />
                     Workspace profile
                   </DropdownMenuItem>

@@ -85,7 +85,7 @@ export async function PATCH(
     .from("users")
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq("id", targetUserId)
-    .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, created_at, updated_at")
+    .select("id, public_user_id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, created_at, updated_at")
     .single()
 
   if (error || !data) return Errors.notFound("User")

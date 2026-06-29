@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     supabaseAdmin.from("user_presence").select("user_id", { count: "exact", head: true }).gte("last_seen_at", new Date(Date.now() - 2 * 60 * 1000).toISOString()),
     supabaseAdmin.from("automation").select("id", { count: "exact", head: true }),
     supabaseAdmin.from("chat").select("id", { count: "exact", head: true }),
-    supabaseAdmin.from("users").select("id, full_name, email, avatar_url, created_at").order("created_at", { ascending: false }).limit(5),
+    supabaseAdmin.from("users").select("id, public_user_id, full_name, email, avatar_url, created_at").order("created_at", { ascending: false }).limit(5),
     supabaseAdmin.from("workspace").select("id, name, created_at").order("created_at", { ascending: false }).limit(5),
     supabaseAdmin.from("waitlist").select("id, name, email, status, created_at").order("created_at", { ascending: false }).limit(5),
     listAuthUsers(),

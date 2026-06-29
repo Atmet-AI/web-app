@@ -130,6 +130,7 @@ import {
   Share2,
   SlidersHorizontal,
   Trash2,
+  Upload,
   User,
   UserPlus,
 } from "lucide-react"
@@ -708,6 +709,7 @@ function AccountSettingsContent() {
     "Other",
   ] as const
   const [userId, setUserId] = React.useState("")
+  const [publicUserId, setPublicUserId] = React.useState("")
   const [userInitials, setUserInitials] = React.useState("U")
   const [savedProfile, setSavedProfile] = React.useState({
     firstName: "",
@@ -732,7 +734,7 @@ function AccountSettingsContent() {
   React.useEffect(() => {
     fetch("/api/users/me")
       .then((r) => r.json())
-      .then((res: { data?: { user: { id: string; full_name: string | null; email: string | null; avatar_url: string | null; job_role?: string | null; phone_number?: string | null } } }) => {
+      .then((res: { data?: { user: { id: string; public_user_id?: string | null; full_name: string | null; email: string | null; avatar_url: string | null; job_role?: string | null; phone_number?: string | null } } }) => {
         const u = res.data?.user
         if (!u) return
         const parts = (u.full_name ?? "").trim().split(/\s+/).filter(Boolean)
@@ -755,6 +757,7 @@ function AccountSettingsContent() {
           avatarUrl: u.avatar_url ?? null,
         }
         setUserId(u.id)
+        setPublicUserId(u.public_user_id ?? "")
         setUserInitials(initials)
         setSavedProfile(profile)
         setFirstName(fn)
@@ -1015,7 +1018,7 @@ function AccountSettingsContent() {
                 id="settings-user-id"
                 className="font-mono text-sm text-foreground"
               >
-                {userId}
+                {publicUserId || userId}
               </p>
               <Button
                 type="button"
@@ -1023,7 +1026,7 @@ function AccountSettingsContent() {
                 size="icon-xs"
                 aria-label="Copy user ID"
                 onClick={() =>
-                  void navigator.clipboard.writeText(userId)
+                  void navigator.clipboard.writeText(publicUserId || userId)
                 }
               >
                 <Copy className="h-3.5 w-3.5" />
@@ -2217,7 +2220,6 @@ function MembersSettingsContent({
   const roleFilters = ["All users", ...platformRoles] as const
   const inviteRoleOptions = ["Member"] as const
   const creditsRanges = ["All time", "This month", "This week"] as const
-  const seatsLimit = 10
   const [searchQuery, setSearchQuery] = React.useState("")
   const [roleFilter, setRoleFilter] =
     React.useState<(typeof roleFilters)[number]>("All users")
@@ -2235,7 +2237,13 @@ function MembersSettingsContent({
   const [isInviteSending, setIsInviteSending] = React.useState(false)
   const [members, setMembers] = React.useState<WorkspaceMember[]>([])
   const [isMembersLoading, setIsMembersLoading] = React.useState(false)
+  const [currentMemberRole, setCurrentMemberRole] = React.useState<
+    "owner" | "admin" | "member" | null
+  >(null)
+  const [seatsLimit, setSeatsLimit] = React.useState(10)
   const workspaceMembers = members
+  const canInviteMembers =
+    currentMemberRole === "owner" || currentMemberRole === "admin"
   const roleBadgeClasses: Record<WorkspaceMember["role"], BadgeVariant> = {
     "Super Admin": "violet",
     Admin: "blue",
@@ -2250,6 +2258,7 @@ function MembersSettingsContent({
   const loadMembers = React.useCallback(async () => {
     if (!activeWorkspaceId) {
       setMembers([])
+      setCurrentMemberRole(null)
       return
     }
     setIsMembersLoading(true)
@@ -2257,12 +2266,15 @@ function MembersSettingsContent({
       const response = await apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
       if (!response.ok) {
         setMembers([])
+        setCurrentMemberRole(null)
         return
       }
       const payload = (await response.json()) as {
         data?: {
+          currentMemberRole?: "owner" | "admin" | "member"
+          seatLimit?: number
           members?: Array<{
-            role: "owner" | "member"
+            role: "owner" | "admin" | "member"
             joined_at: string
             user: {
               id: string
@@ -2274,6 +2286,8 @@ function MembersSettingsContent({
           }>
         }
       }
+      setCurrentMemberRole(payload.data?.currentMemberRole ?? null)
+      setSeatsLimit(payload.data?.seatLimit ?? 10)
       setMembers(
         (payload.data?.members ?? []).map((row) => {
           const user = Array.isArray(row.user) ? row.user[0] : row.user
@@ -2282,6 +2296,8 @@ function MembersSettingsContent({
           const role: PlatformRole =
             row.role === "owner"
               ? "Owner"
+              : row.role === "admin"
+                ? "Admin"
               : "Member"
           return {
             id: user?.id ?? `${row.role}-${row.joined_at}`,
@@ -2324,13 +2340,13 @@ function MembersSettingsContent({
         member.email.toLowerCase().includes(query)
       )
     })
-  }, [searchQuery, roleFilter])
+  }, [searchQuery, roleFilter, workspaceMembers])
   const seatsUsed = workspaceMembers.length
-  const seatsProgress = Math.min(100, (seatsUsed / seatsLimit) * 100)
+  const seatsProgress = Math.min(100, (seatsUsed / Math.max(seatsLimit, 1)) * 100)
   const selectedMember = React.useMemo(
     () =>
       workspaceMembers.find((member) => member.id === selectedMemberId) ?? null,
-    [selectedMemberId]
+    [selectedMemberId, workspaceMembers]
   )
   const selectedCreditsUsage = React.useMemo(() => {
     if (!selectedMember) return 0
@@ -2454,6 +2470,7 @@ function MembersSettingsContent({
 
   React.useEffect(() => {
     if (quickInviteToken === 0) return
+    if (!canInviteMembers) return
     setSelectedMemberId(null)
     setSearchQuery("")
     setRoleFilter("All users")
@@ -2462,10 +2479,14 @@ function MembersSettingsContent({
     setInviteError("")
     setInviteRole("Member")
     setIsInviteOpen(true)
-  }, [quickInviteToken])
+  }, [canInviteMembers, quickInviteToken])
 
   const submitInvite = async () => {
     if (isInviteSending) return
+    if (!canInviteMembers) {
+      setInviteError("Only workspace owners or admins can invite members.")
+      return
+    }
     const tokens = inviteInput
       .split(/[\s,;]+/)
       .map((value) => value.trim().toLowerCase())
@@ -2510,9 +2531,12 @@ function MembersSettingsContent({
     )
     setIsInviteSending(false)
 
-    const failed = results.filter((result) => !result.response.ok).length
+    const failedResults = results.filter((result) => !result.response.ok)
+    const failed = failedResults.length
     if (failed > 0) {
-      setInviteError(`${failed} invite${failed === 1 ? "" : "s"} could not be sent.`)
+      const firstError = failedResults.find((result) => result.payload?.error?.message)
+        ?.payload?.error?.message
+      setInviteError(firstError ?? `${failed} invite${failed === 1 ? "" : "s"} could not be sent.`)
       return
     }
 
@@ -2520,7 +2544,7 @@ function MembersSettingsContent({
       (result) => result.payload?.data?.invitationEmailSent === false
     ).length
     if (emailFailed > 0) {
-      setInviteError(`${emailFailed} invite${emailFailed === 1 ? "" : "s"} were created, but the email was not sent. Check Resend settings.`)
+      setInviteError(`${emailFailed} invite email${emailFailed === 1 ? "" : "s"} could not be sent. Check Resend settings.`)
       void loadMembers()
       return
     }
@@ -2750,14 +2774,16 @@ function MembersSettingsContent({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setIsInviteOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Invite
-            </Button>
+            {canInviteMembers && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setIsInviteOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Invite
+              </Button>
+            )}
           </div>
 
           <section className="mt-3 space-y-2 px-1 py-1">
@@ -2844,54 +2870,56 @@ function MembersSettingsContent({
                         {member.lastLogin}
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button
-                                type="button"
-                                size="icon-xs"
-                                variant="ghost"
-                                className="border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
-                                aria-label={`Actions for ${member.name}`}
-                                onClick={(event) => event.stopPropagation()}
-                              />
-                            }
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="min-w-40 rounded-lg p-1"
-                          >
-                            <DropdownMenuItem
-                              onClick={() => setSelectedMemberId(member.id)}
+                        {canInviteMembers ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  className="border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
+                                  aria-label={`Actions for ${member.name}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                />
+                              }
                             >
-                              <User className="h-3.5 w-3.5" />
-                              Go to profile
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={async (event) => {
-                                event.stopPropagation()
-                                if (!activeWorkspaceId) return
-                                const confirmed = window.confirm(`Remove ${member.name} from this workspace?`)
-                                if (!confirmed) return
-                                const response = await apiFetch(
-                                  `/api/workspaces/${activeWorkspaceId}/members/${member.id}`,
-                                  { method: "DELETE" }
-                                ).catch(() => null)
-                                if (response?.ok) {
-                                  setMembers((previous) =>
-                                    previous.filter((item) => item.id !== member.id)
-                                  )
-                                }
-                              }}
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="min-w-40 rounded-lg p-1"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Delete user
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <DropdownMenuItem
+                                onClick={() => setSelectedMemberId(member.id)}
+                              >
+                                <User className="h-3.5 w-3.5" />
+                                Go to profile
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={async (event) => {
+                                  event.stopPropagation()
+                                  if (!activeWorkspaceId) return
+                                  const confirmed = window.confirm(`Remove ${member.name} from this workspace?`)
+                                  if (!confirmed) return
+                                  const response = await apiFetch(
+                                    `/api/workspaces/${activeWorkspaceId}/members/${member.id}`,
+                                    { method: "DELETE" }
+                                  ).catch(() => null)
+                                  if (response?.ok) {
+                                    setMembers((previous) =>
+                                      previous.filter((item) => item.id !== member.id)
+                                    )
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete user
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -2909,7 +2937,7 @@ function MembersSettingsContent({
         </>
       )}
 
-      {isInviteOpen && (
+      {isInviteOpen && canInviteMembers && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 p-4 backdrop-blur-[1px]"
           onClick={(event) => {
@@ -5308,6 +5336,7 @@ type AdminWorkspaceRow = {
 
 type AdminUserRow = {
   id: string
+  publicUserId: string
   name: string
   initials: string
   avatarUrl: string | null
@@ -5467,7 +5496,7 @@ function AdminUserProfilePanel({
           <div className="grid gap-2 text-[13px]">
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">User ID</span>
-              <span className="truncate font-mono text-foreground">{user.id}</span>
+              <span className="truncate font-mono text-foreground">{user.publicUserId || user.id}</span>
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Workspace</span>
@@ -5498,7 +5527,7 @@ function AdminUserProfilePanel({
               </Button>
             </>
           ) : null}
-          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(user.id)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(user.publicUserId || user.id)}>
             Copy user ID
           </Button>
         </div>
@@ -5888,6 +5917,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           data?: {
             users?: Array<{
               id: string
+              public_user_id?: string | null
               email: string | null
               full_name: string | null
               avatar_url: string | null
@@ -5924,6 +5954,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
 
               return {
                 id: user.id,
+                publicUserId: user.public_user_id ?? "",
                 name,
                 initials: deriveInitialsFromName(name),
                 avatarUrl: user.avatar_url ?? null,
@@ -7619,6 +7650,7 @@ function UsageLimitsConsoleContent() {
           summary?: typeof summary
           users?: Array<{
             id: string
+            public_user_id?: string | null
             email: string | null
             full_name: string | null
             avatar_url: string | null
@@ -7661,6 +7693,7 @@ function UsageLimitsConsoleContent() {
                   : "Active"
             return {
               id: user.id,
+              publicUserId: user.public_user_id ?? "",
               name,
               initials: deriveInitialsFromName(name),
               avatarUrl: user.avatar_url ?? null,
@@ -8567,9 +8600,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const setSelectedWorkspaceId = React.useCallback(
     (workspaceId: string) => {
       if (workspaceId === PLATFORM_ADMIN_WORKSPACE_ID) return
+      if (workspaceId === selectedWorkspaceId) return
       setActiveWorkspace(workspaceId)
+      setStoredChats([])
+      setVisibleChatsCount(INITIAL_VISIBLE_CHATS)
+      setEditingChatId(null)
+      setEditingChatTitle("")
+      setMembersQuickSearchQuery("")
+      setMembersQuickSelectedId(null)
+      if (pathname.startsWith("/ai-core") && searchParams.get("chat")) {
+        router.push("/ai-core")
+      }
     },
-    [setActiveWorkspace]
+    [pathname, router, searchParams, selectedWorkspaceId, setActiveWorkspace]
   )
   const [membersQuickSearchQuery, setMembersQuickSearchQuery] =
     React.useState("")
@@ -8580,6 +8623,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     React.useState(0)
   const [membersQuickInviteToken, setMembersQuickInviteToken] =
     React.useState(0)
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = React.useState(false)
+  const [newWorkspaceName, setNewWorkspaceName] = React.useState("")
+  const [newWorkspaceAvatarUrl, setNewWorkspaceAvatarUrl] = React.useState<string | null>(null)
+  const [newWorkspaceCountry, setNewWorkspaceCountry] = React.useState("")
+  const [createWorkspaceError, setCreateWorkspaceError] = React.useState("")
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = React.useState(false)
+  const [isUploadingWorkspaceImage, setIsUploadingWorkspaceImage] = React.useState(false)
+  const createWorkspaceImageInputRef = React.useRef<HTMLInputElement>(null)
   const [storedChats, setStoredChats] = React.useState<StoredChatItem[]>([])
   const [isChatsExpanded, setIsChatsExpanded] = React.useState(true)
   const [visibleChatsCount, setVisibleChatsCount] = React.useState(
@@ -8770,6 +8821,105 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     [apiFetch, refreshWorkspaces]
   )
 
+  const resetCreateWorkspaceForm = React.useCallback(() => {
+    setNewWorkspaceName("")
+    setNewWorkspaceAvatarUrl(null)
+    setNewWorkspaceCountry("")
+    setCreateWorkspaceError("")
+    setIsCreatingWorkspace(false)
+    setIsUploadingWorkspaceImage(false)
+  }, [])
+
+  const handleCreateWorkspaceImageUpload = React.useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.currentTarget.value = ""
+      if (!file) return
+
+      setIsUploadingWorkspaceImage(true)
+      setCreateWorkspaceError("")
+      try {
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("scope", "workspace")
+
+        const response = await fetch("/api/avatars", {
+          method: "POST",
+          body: formData,
+        })
+        const payload = (await response.json().catch(() => null)) as {
+          data?: { url?: string }
+          error?: { message?: string }
+        } | null
+
+        if (!response.ok || !payload?.data?.url) {
+          setCreateWorkspaceError(payload?.error?.message ?? "Unable to upload image.")
+          return
+        }
+
+        setNewWorkspaceAvatarUrl(payload.data.url)
+      } catch {
+        setCreateWorkspaceError("Unable to upload image.")
+      } finally {
+        setIsUploadingWorkspaceImage(false)
+      }
+    },
+    []
+  )
+
+  const submitCreateWorkspace = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const name = newWorkspaceName.trim()
+      if (!name) {
+        setCreateWorkspaceError("Workspace name is required.")
+        return
+      }
+
+      setIsCreatingWorkspace(true)
+      setCreateWorkspaceError("")
+      try {
+        const response = await fetch("/api/workspaces", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            avatar_url: newWorkspaceAvatarUrl,
+            country: newWorkspaceCountry || null,
+          }),
+        })
+        const payload = (await response.json().catch(() => null)) as {
+          data?: { workspace?: { id: string } }
+          error?: { message?: string }
+        } | null
+
+        if (!response.ok || !payload?.data?.workspace?.id) {
+          setCreateWorkspaceError(payload?.error?.message ?? "Unable to create workspace.")
+          return
+        }
+
+        await refreshWorkspaces()
+        setActiveWorkspace(payload.data.workspace.id)
+        setCreateWorkspaceOpen(false)
+        resetCreateWorkspaceForm()
+        setActiveSettingsSection("Workspace")
+        setSettingsOpen(true)
+      } catch {
+        setCreateWorkspaceError("Unable to create workspace.")
+      } finally {
+        setIsCreatingWorkspace(false)
+      }
+    },
+    [
+      newWorkspaceAvatarUrl,
+      newWorkspaceCountry,
+      newWorkspaceName,
+      refreshWorkspaces,
+      resetCreateWorkspaceForm,
+      setActiveWorkspace,
+    ]
+  )
+
   React.useEffect(() => {
     if (!selectedWorkspaceId) {
       setStoredChats([])
@@ -8945,28 +9095,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             }
             onSelectedWorkspaceIdChange={setSelectedWorkspaceId}
             showWorkspaceActions={selectedWorkspaceId !== PLATFORM_ADMIN_WORKSPACE_ID}
-            onCreateWorkspace={async () => {
-              const name = window.prompt("Workspace name")
-              if (!name?.trim()) return
-              const response = await fetch("/api/workspaces", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: name.trim() }),
-              }).catch(() => null)
-              if (!response?.ok) return
-              const payload = (await response.json()) as {
-                data?: { workspace?: { id: string } }
-              }
-              await refreshWorkspaces()
-              if (payload.data?.workspace?.id) {
-                setActiveWorkspace(payload.data.workspace.id)
-              }
-              setActiveSettingsSection("Workspace")
-              setSettingsOpen(true)
+            onCreateWorkspace={() => {
+              resetCreateWorkspaceForm()
+              setCreateWorkspaceOpen(true)
             }}
             onAddUsersToWorkspace={() => {
               setActiveSettingsSection("Members")
-              setMembersQuickInviteToken((previous) => previous + 1)
               setSettingsOpen(true)
             }}
             onOpenWorkspaceProfile={() => {
@@ -9662,6 +9796,124 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      <Dialog
+        open={createWorkspaceOpen}
+        onOpenChange={(nextOpen) => {
+          setCreateWorkspaceOpen(nextOpen)
+          if (!nextOpen) resetCreateWorkspaceForm()
+        }}
+      >
+        <DialogContent className="max-w-md" showCloseButton>
+          <form onSubmit={submitCreateWorkspace} className="space-y-5">
+            <DialogHeader>
+              <DialogTitle>Create your workspace</DialogTitle>
+              <DialogDescription>
+                Give your workspace a name to get started.
+              </DialogDescription>
+            </DialogHeader>
+
+            <input
+              ref={createWorkspaceImageInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleCreateWorkspaceImageUpload}
+            />
+
+            <div className="flex items-center gap-3">
+              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-sidebar-accent text-sm font-semibold text-muted-foreground">
+                {newWorkspaceAvatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={newWorkspaceAvatarUrl}
+                    alt="Workspace image"
+                    className="size-full object-cover"
+                  />
+                ) : isUploadingWorkspaceImage ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  deriveInitialsFromName(newWorkspaceName || "Workspace")
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <Label className="text-muted-foreground">
+                  Workspace image
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Optional image
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                disabled={isUploadingWorkspaceImage || isCreatingWorkspace}
+                onClick={() => createWorkspaceImageInputRef.current?.click()}
+                aria-label="Upload workspace image"
+              >
+                {isUploadingWorkspaceImage ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-workspace-name">Workspace name</Label>
+              <Input
+                id="new-workspace-name"
+                value={newWorkspaceName}
+                onChange={(event) => {
+                  setNewWorkspaceName(event.target.value)
+                  if (createWorkspaceError) setCreateWorkspaceError("")
+                }}
+                placeholder="e.g. Acme Corp"
+                disabled={isCreatingWorkspace}
+                autoFocus
+              />
+            </div>
+
+            <AdminSelect
+              label="Country"
+              value={newWorkspaceCountry || "Select country"}
+              options={workspaceCountries}
+              onChange={(value) => {
+                setNewWorkspaceCountry(value)
+                if (createWorkspaceError) setCreateWorkspaceError("")
+              }}
+            />
+
+            {createWorkspaceError && (
+              <p className="text-xs text-destructive">{createWorkspaceError}</p>
+            )}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isCreatingWorkspace}
+                onClick={() => setCreateWorkspaceOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isCreatingWorkspace || isUploadingWorkspaceImage}
+              >
+                {isCreatingWorkspace ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" />
+                )}
+                {isCreatingWorkspace ? "Creating" : "Create workspace"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Sidebar>
   )
 }

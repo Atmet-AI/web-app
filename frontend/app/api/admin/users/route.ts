@@ -34,7 +34,7 @@ export async function GET() {
   const [usersRes, membershipsRes, ownedWorkspacesRes] = await Promise.all([
     supabaseAdmin
       .from("users")
-      .select("id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, created_at, updated_at")
+      .select("id, public_user_id, email, full_name, avatar_url, phone_country, phone_country_code, phone_number, status, platform_role, created_at, updated_at")
       .order("created_at", { ascending: false }),
     supabaseAdmin
       .from("workspace_member")

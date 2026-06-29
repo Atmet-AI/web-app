@@ -278,7 +278,7 @@ export default function OnboardingPage() {
   const totalSteps = 2
 
   return (
-    <div className="mx-auto w-full max-w-sm">
+    <div className="mx-auto w-full max-w-xl">
       {step !== "done" && (
         <div className="mb-8 flex items-center gap-2">
           {Array.from({ length: totalSteps }).map((_, i) => (

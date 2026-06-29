@@ -92,7 +92,7 @@ export async function GET() {
       .select("id, name, slug, plan, status, owner_id, avatar_url, country, monthly_token_cap, seat_limit, features, created_at, updated_at")
       .order("created_at", { ascending: false }),
     supabaseAdmin.from("workspace_member").select("workspace_id, user_id, role, status"),
-    supabaseAdmin.from("users").select("id, email, full_name, avatar_url, status"),
+    supabaseAdmin.from("users").select("id, public_user_id, email, full_name, avatar_url, status"),
     supabaseAdmin.from("api_key").select("workspace_id, id"),
   ])
 
