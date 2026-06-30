@@ -10,8 +10,22 @@ export const updateChatSchema = z.object({
 })
 
 export const sendMessageSchema = z.object({
-  content: z.string().min(1, "Message content is required"),
-})
+  content: z.string().max(20000).default(""),
+  attachments: z
+    .array(
+      z.object({
+        id: z.string(),
+        fileId: z.string().uuid().optional(),
+        name: z.string().min(1).max(255),
+        kind: z.enum(["image", "excel", "pdf", "document", "archive", "text", "other"]),
+      })
+    )
+    .optional()
+    .default([]),
+}).refine(
+  (value) => value.content.trim().length > 0 || value.attachments.length > 0,
+  "Message content or an attachment is required."
+)
 
 export const addChatUserSchema = z.object({
   user_id: z.string().uuid("Invalid user ID"),

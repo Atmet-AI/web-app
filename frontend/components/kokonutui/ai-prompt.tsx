@@ -111,6 +111,7 @@ type AttachmentKind =
 
 type MessageAttachment = {
   id: string;
+  fileId?: string;
   name: string;
   kind: AttachmentKind;
   previewUrl?: string;
@@ -129,6 +130,22 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   attachments?: MessageAttachment[];
+};
+
+type ApiMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  metadata?: {
+    attachments?: MessageAttachment[];
+  } | null;
+};
+
+type UploadedFilePayload = {
+  id: string;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
 };
 
 type CommandMenuState = {
@@ -615,7 +632,7 @@ export default function AI_Prompt({
     let isCancelled = false;
     void apiFetch(`/api/chats/${chatId}/messages`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { messages?: Array<{ id: string; role: "user" | "assistant"; content: string }> } } | null) => {
+      .then((payload: { data?: { messages?: ApiMessage[] } } | null) => {
         if (isCancelled) return;
         setMessages(
           (payload?.data?.messages ?? [])
@@ -624,6 +641,7 @@ export default function AI_Prompt({
               id: index + 1,
               role: message.role,
               content: message.content,
+              attachments: message.metadata?.attachments ?? undefined,
             }))
         );
       })
@@ -1112,7 +1130,11 @@ export default function AI_Prompt({
     }
   };
 
-  const streamReply = useCallback(async (chatId: string, userContent: string) => {
+  const streamReply = useCallback(async (
+    chatId: string,
+    userContent: string,
+    attachments: MessageAttachment[] = []
+  ) => {
     const assistantMsgId = createClientMessageId();
     setMessages((prev) => [
       ...prev,
@@ -1123,7 +1145,7 @@ export default function AI_Prompt({
       const resp = await apiFetch(`/api/chats/${chatId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userContent }),
+        body: JSON.stringify({ content: userContent, attachments }),
       });
 
       if (!resp.ok || !resp.body) {
@@ -1179,6 +1201,45 @@ export default function AI_Prompt({
       setIsResponding(false);
     }
   }, [apiFetch, createClientMessageId]);
+
+  const uploadMessageAttachments = useCallback(
+    async (attachments: AttachmentDraft[]) => {
+      const uploaded: MessageAttachment[] = [];
+
+      for (const attachment of attachments) {
+        if (!attachment.file) {
+          uploaded.push(attachment);
+          continue;
+        }
+
+        const formData = new FormData();
+        formData.append("file", attachment.file);
+
+        const response = await apiFetch("/api/files", {
+          method: "POST",
+          body: formData,
+        });
+        const payload = (await response.json().catch(() => null)) as
+          | { data?: { file?: UploadedFilePayload }; error?: { message?: string } }
+          | null;
+
+        if (!response.ok || !payload?.data?.file) {
+          throw new Error(payload?.error?.message ?? `Failed to upload ${attachment.name}.`);
+        }
+
+        uploaded.push({
+          id: attachment.id,
+          fileId: payload.data.file.id,
+          name: payload.data.file.name,
+          kind: attachment.kind,
+          previewUrl: attachment.previewUrl,
+        });
+      }
+
+      return uploaded;
+    },
+    [apiFetch]
+  );
 
   const createAgentFromChat = useCallback(async (sourceMessageId: number) => {
     const chatId = activeChatIdRef.current ?? resolvedChatId;
@@ -1236,11 +1297,13 @@ export default function AI_Prompt({
 
   const sendMessage = useCallback(async () => {
     const content = value.trim();
+    const submittedContent = content || (attachedFiles.length > 0 ? "Attached file(s)" : "");
     const hasUserTextBeyondLockedPrefix = lockedComposerPrefix
       ? value.slice(lockedComposerPrefix.length).trim().length > 0
       : content.length > 0;
     if (!hasUserTextBeyondLockedPrefix && attachedFiles.length === 0) return;
-    const attachmentData = attachedFiles.map(({ id, name, kind, previewUrl }) => ({
+    const attachmentsToUpload = attachedFiles;
+    const attachmentData: MessageAttachment[] = attachedFiles.map(({ id, name, kind, previewUrl }) => ({
       id,
       name,
       kind,
@@ -1249,7 +1312,7 @@ export default function AI_Prompt({
 
     onConversationStart?.();
     if (persistChatListEntry) {
-      persistActiveChat(content);
+      persistActiveChat(submittedContent);
     }
     if (activeTab === "automation") {
       onAutomationConversationStart?.();
@@ -1267,12 +1330,12 @@ export default function AI_Prompt({
         if (editIndex === -1) {
           return [
             ...prev,
-            { id: createClientMessageId(), role: "user", content, attachments: attachmentData },
+            { id: createClientMessageId(), role: "user", content: submittedContent, attachments: attachmentData },
           ];
         }
 
         const updated = [...prev];
-        updated[editIndex] = { ...updated[editIndex], content, attachments: attachmentData };
+        updated[editIndex] = { ...updated[editIndex], content: submittedContent, attachments: attachmentData };
         return updated.slice(0, editIndex + 1);
       });
 
@@ -1282,13 +1345,14 @@ export default function AI_Prompt({
       adjustHeight(true);
       setEditingMessageId(null);
       setIsResponding(true);
-      await streamReply(activeChatIdRef.current ?? `local-${createClientMessageId()}`, content);
+      await streamReply(activeChatIdRef.current ?? `local-${createClientMessageId()}`, submittedContent, attachmentData);
       return;
     }
 
+    const userMessageId = createClientMessageId();
     setMessages((prev) => [
       ...prev,
-      { id: createClientMessageId(), role: "user", content, attachments: attachmentData },
+      { id: userMessageId, role: "user", content: submittedContent, attachments: attachmentData },
     ]);
     setValue(lockedComposerPrefix);
     setComposerScrollTop(0);
@@ -1300,7 +1364,7 @@ export default function AI_Prompt({
     let chatId = activeChatIdRef.current;
     if (!chatId) {
       try {
-        const chatTitle = toChatTitle(content);
+        const chatTitle = toChatTitle(submittedContent);
         const r = await apiFetch("/api/chats", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1313,6 +1377,9 @@ export default function AI_Prompt({
             activeChatIdRef.current = chatId;
             setResolvedChatId(chatId);
             activeChatTitleRef.current = chatTitle;
+            if (typeof window !== "undefined" && window.location.pathname === "/ai-core") {
+              window.history.replaceState(null, "", `/ai-core?chat=${chatId}`);
+            }
             window.dispatchEvent(new CustomEvent(AI_CORE_CHATS_UPDATED_EVENT));
           }
         } else {
@@ -1341,11 +1408,33 @@ export default function AI_Prompt({
       return;
     }
 
-    await streamReply(chatId, content);
+    let savedAttachments = attachmentData;
+    if (attachmentsToUpload.length > 0) {
+      try {
+        savedAttachments = await uploadMessageAttachments(attachmentsToUpload);
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === userMessageId
+              ? { ...message, attachments: savedAttachments }
+              : message
+          )
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to upload file.";
+        setMessages((prev) => [
+          ...prev,
+          { id: createClientMessageId(), role: "assistant", content: message },
+        ]);
+        setIsResponding(false);
+        return;
+      }
+    }
+
+    await streamReply(chatId, submittedContent, savedAttachments);
   }, [
     value, lockedComposerPrefix, attachedFiles, onConversationStart, persistChatListEntry,
     persistActiveChat, activeTab, onAutomationConversationStart, editingMessageId,
-    adjustHeight, streamReply, apiFetch, toChatTitle, createClientMessageId,
+    adjustHeight, streamReply, apiFetch, toChatTitle, createClientMessageId, uploadMessageAttachments,
   ]);
 
   const copyToClipboard = async (text: string) => {

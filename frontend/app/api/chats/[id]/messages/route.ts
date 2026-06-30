@@ -3,6 +3,32 @@ import { getUser } from "@/lib/api/auth"
 import { ok, Errors } from "@/lib/api/response"
 import { sendMessageSchema } from "@/lib/validations/chat"
 import { getOpenAIClient } from "@/lib/openai"
+import { supabaseAdmin } from "@/lib/supabase/admin"
+
+const FILE_BUCKET = "workspace-files"
+
+type StoredAttachment = {
+  id: string
+  fileId?: string
+  name: string
+  kind: "image" | "excel" | "pdf" | "document" | "archive" | "text" | "other"
+  previewUrl?: string
+}
+
+function attachmentRecord(value: unknown): StoredAttachment[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return []
+  const raw = (value as Record<string, unknown>).attachments
+  if (!Array.isArray(raw)) return []
+  return raw.filter((item): item is StoredAttachment => {
+    return Boolean(
+      item &&
+        typeof item === "object" &&
+        typeof (item as Record<string, unknown>).id === "string" &&
+        typeof (item as Record<string, unknown>).name === "string" &&
+        typeof (item as Record<string, unknown>).kind === "string"
+    )
+  })
+}
 
 export async function GET(
   request: NextRequest,
@@ -33,7 +59,45 @@ export async function GET(
 
   if (error) return Errors.internal()
 
-  return ok({ messages: data, hasMore: data.length === limit })
+  const messages = data ?? []
+  const messageIds = messages.map((message) => message.id)
+  const { data: files } = messageIds.length > 0
+    ? await supabaseAdmin
+        .from("file")
+        .select("id, message_id, storage_path")
+        .in("message_id", messageIds)
+    : { data: [] as Array<{ id: string; message_id: string; storage_path: string }> }
+
+  const signedUrlsByFileId = new Map<string, string>()
+  await Promise.all(
+    (files ?? []).map(async (file) => {
+      const { data: signed } = await supabaseAdmin.storage
+        .from(FILE_BUCKET)
+        .createSignedUrl(file.storage_path, 60 * 60)
+      if (signed?.signedUrl) signedUrlsByFileId.set(file.id, signed.signedUrl)
+    })
+  )
+
+  const hydratedMessages = messages.map((message) => {
+    const attachments = attachmentRecord(message.metadata).map((attachment) => ({
+      ...attachment,
+      previewUrl: attachment.fileId
+        ? signedUrlsByFileId.get(attachment.fileId) ?? attachment.previewUrl
+        : attachment.previewUrl,
+    }))
+
+    return {
+      ...message,
+      metadata: {
+        ...(message.metadata && typeof message.metadata === "object" && !Array.isArray(message.metadata)
+          ? message.metadata
+          : {}),
+        attachments,
+      },
+    }
+  })
+
+  return ok({ messages: hydratedMessages, hasMore: messages.length === limit })
 }
 
 export async function POST(
@@ -70,11 +134,29 @@ export async function POST(
   // Save user message
   const { data: userMessage, error: insertError } = await supabase
     .from("message")
-    .insert({ chat_id: chatId, role: "user", content: parsed.data.content })
+    .insert({
+      chat_id: chatId,
+      role: "user",
+      content: parsed.data.content.trim() || "Attached file(s)",
+      metadata: { attachments: parsed.data.attachments },
+    })
     .select()
     .single()
 
   if (insertError || !userMessage) return Errors.internal()
+
+  const fileIds = parsed.data.attachments
+    .map((attachment) => attachment.fileId)
+    .filter((fileId): fileId is string => Boolean(fileId))
+
+  if (fileIds.length > 0) {
+    await supabaseAdmin
+      .from("file")
+      .update({ message_id: userMessage.id })
+      .eq("workspace_id", chat.workspace_id)
+      .eq("uploaded_by", auth.user.id)
+      .in("id", fileIds)
+  }
 
   // Fetch message history for context (last 50)
   const { data: history } = await supabase

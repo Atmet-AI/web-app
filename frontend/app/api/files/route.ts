@@ -1,7 +1,7 @@
 import { type NextRequest } from "next/server"
 import { randomUUID } from "crypto"
 import { getUser } from "@/lib/api/auth"
-import { getWorkspaceId } from "@/lib/api/workspace"
+import { assertWorkspaceMember, getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
@@ -39,6 +39,18 @@ async function getWorkspaceFileLimits(workspaceId: string) {
   }
 }
 
+async function ensureWorkspaceFilesBucket() {
+  const { data: existingBuckets } = await supabaseAdmin.storage.listBuckets()
+  if (existingBuckets?.some((bucket) => bucket.name === BUCKET)) return null
+
+  const { error } = await supabaseAdmin.storage.createBucket(BUCKET, {
+    public: false,
+    fileSizeLimit: 250 * 1024 * 1024,
+  })
+
+  return error
+}
+
 export async function POST(request: NextRequest) {
   const auth = await getUser()
   if (!auth.ok) return auth.response
@@ -46,7 +58,10 @@ export async function POST(request: NextRequest) {
   const ws = getWorkspaceId(request)
   if (!ws.ok) return ws.response
 
-  const { supabase, user } = auth
+  const { user } = auth
+
+  const isMember = await assertWorkspaceMember(supabaseAdmin, ws.workspaceId, user.id)
+  if (!isMember) return Errors.forbidden()
 
   let formData: FormData
   try {
@@ -76,7 +91,10 @@ export async function POST(request: NextRequest) {
 
   const arrayBuffer = await file.arrayBuffer()
 
-  const { error: uploadError } = await supabase.storage
+  const bucketError = await ensureWorkspaceFilesBucket()
+  if (bucketError) return Errors.internal()
+
+  const { error: uploadError } = await supabaseAdmin.storage
     .from(BUCKET)
     .upload(storagePath, arrayBuffer, {
       contentType: file.type || "application/octet-stream",
@@ -85,7 +103,7 @@ export async function POST(request: NextRequest) {
 
   if (uploadError) return Errors.internal()
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("file")
     .insert({
       workspace_id: ws.workspaceId,
