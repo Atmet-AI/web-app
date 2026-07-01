@@ -1,8 +1,9 @@
 import { type NextRequest } from "next/server"
 import { getUser } from "@/lib/api/auth"
-import { getWorkspaceId } from "@/lib/api/workspace"
+import { assertWorkspaceMember, getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { createSkillSchema } from "@/lib/validations/skill"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export async function GET(request: NextRequest) {
   const auth = await getUser()
@@ -11,13 +12,16 @@ export async function GET(request: NextRequest) {
   const ws = getWorkspaceId(request)
   if (!ws.ok) return ws.response
 
-  const { supabase } = auth
+  const { user } = auth
   const { searchParams } = request.nextUrl
 
-  let query = supabase
+  const isMember = await assertWorkspaceMember(supabaseAdmin, ws.workspaceId, user.id)
+  if (!isMember) return Errors.forbidden()
+
+  let query = supabaseAdmin
     .from("skill")
-    .select("id, name, description, type, status, created_by, created_at, updated_at")
-    .eq("workspace_id", ws.workspaceId)
+    .select("id, workspace_id, name, description, definition, type, scope, image_url, status, created_by, created_at, updated_at")
+    .or(`workspace_id.eq.${ws.workspaceId},scope.eq.system`)
     .order("created_at", { ascending: false })
 
   const type = searchParams.get("type")
@@ -59,6 +63,7 @@ export async function POST(request: NextRequest) {
     .insert({
       workspace_id: ws.workspaceId,
       created_by: user.id,
+      scope: "workspace",
       ...parsed.data,
     })
     .select()

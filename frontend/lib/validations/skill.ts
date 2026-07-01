@@ -5,6 +5,7 @@ export const createSkillSchema = z.object({
   description: z.string().max(500).optional(),
   definition: z.record(z.string(), z.unknown()).optional(),
   type: z.enum(["action", "trigger", "tool", "agent"]),
+  image_url: z.string().url().optional().nullable(),
   status: z.enum(["active", "inactive"]).optional().default("active"),
 })
 
@@ -13,5 +14,6 @@ export const updateSkillSchema = z.object({
   description: z.string().max(500).optional(),
   definition: z.record(z.string(), z.unknown()).optional(),
   type: z.enum(["action", "trigger", "tool", "agent"]).optional(),
+  image_url: z.string().url().optional().nullable(),
   status: z.enum(["active", "inactive"]).optional(),
 })
