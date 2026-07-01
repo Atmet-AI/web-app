@@ -9,14 +9,17 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { OPEN_NEW_SKILL_DIALOG_EVENT } from "@/lib/skills-events"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import { IconPhoto } from "@tabler/icons-react"
-import { Search, X } from "lucide-react"
+import { FolderUp, Search, Upload, X } from "lucide-react"
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 
 type SkillCategory = "Reasoning" | "Data" | "Automation" | "Support"
@@ -40,6 +43,8 @@ type SkillItem = {
   updatedAt: string
   owner: string
   isUserCreated: boolean
+  scope?: "system" | "workspace" | "user"
+  imageUrl?: string | null
   connectedApps?: string[]
 }
 
@@ -186,16 +191,89 @@ const statusStyles: Record<SkillStatus, BadgeVariant> = {
   Draft: "amber",
 }
 
+type SkillApiRecord = {
+  id: string
+  name: string
+  description: string | null
+  definition?: Record<string, unknown> | null
+  type: string
+  scope?: "system" | "workspace" | "user"
+  image_url?: string | null
+  status: string
+  created_by: string
+  created_at: string
+}
+
+function readDefinitionText(definition: Record<string, unknown> | null | undefined, key: string) {
+  const value = definition?.[key]
+  return typeof value === "string" ? value : ""
+}
+
+function toSkillItem(skill: SkillApiRecord): SkillItem {
+  const scope = skill.scope ?? "workspace"
+  const category = readDefinitionText(skill.definition, "category")
+  const section = readDefinitionText(skill.definition, "section")
+
+  return {
+    id: skill.id,
+    name: skill.name,
+    description: skill.description ?? "",
+    category: (category || (skill.type === "tool" ? "Automation" : skill.type === "agent" ? "Reasoning" : "Data")) as SkillCategory,
+    section: (section || "Operations") as SkillSection,
+    status: (skill.status === "active" ? "Active" : "Draft") as SkillStatus,
+    updatedAt: skill.created_at.slice(0, 10),
+    owner: scope === "system" ? "Atmet" : "You",
+    isUserCreated: scope !== "system",
+    scope,
+    imageUrl: skill.image_url,
+  }
+}
+
+function SkillCover({ skill }: { skill: SkillItem }) {
+  if (skill.imageUrl) {
+    return (
+      <div className="aspect-[40/19] shrink-0 overflow-hidden border-b border-border bg-muted/40">
+        <img
+          src={skill.imageUrl}
+          alt=""
+          className="h-full w-full object-cover"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex aspect-[40/19] shrink-0 items-center justify-center border-b border-border bg-muted/40 text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-xs">
+        <IconPhoto className="h-4 w-4" strokeWidth={1.7} />
+        Cover image
+      </span>
+    </div>
+  )
+}
+
 function SkillsPageContent() {
   const searchParams = useSearchParams()
   const { apiFetch } = useWorkspace()
   const [skills, setSkills] = useState<SkillItem[]>([])
   const [isLoadingSkills, setIsLoadingSkills] = useState(true)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [nameFilter, setNameFilter] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [createSkillOpen, setCreateSkillOpen] = useState(false)
+  const [uploadSkillOpen, setUploadSkillOpen] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null)
+  const [uploadName, setUploadName] = useState("")
+  const [uploadDescription, setUploadDescription] = useState("")
+  const [uploadType, setUploadType] = useState("tool")
+  const [uploadCategory, setUploadCategory] = useState<SkillCategory>("Automation")
+  const [uploadSection, setUploadSection] = useState<SkillSection>("Operations")
+  const [uploadStatus, setUploadStatus] = useState("active")
+  const [uploadImage, setUploadImage] = useState<File | null>(null)
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
+  const [uploadError, setUploadError] = useState("")
+  const [isUploadingSkill, setIsUploadingSkill] = useState(false)
   const sectionFilterParam = searchParams.get("section")
   const sectionFilter = useMemo<SkillSection | null>(() => {
     if (!sectionFilterParam) return null
@@ -217,35 +295,108 @@ function SkillsPageContent() {
     }
   }, [])
 
-  useEffect(() => {
+  const loadSkills = useCallback(() => {
     setIsLoadingSkills(true)
     apiFetch("/api/skills")
       .then((r) => r.json())
-      .then((res: { data?: { skills: Array<{
-        id: string; name: string; description: string | null;
-        type: string; status: string; created_by: string; created_at: string;
-      }> } }) => {
+      .then((res: { data?: { skills: SkillApiRecord[] } }) => {
         const raw = res.data?.skills ?? []
-        // Map DB records to the UI shape the page expects
-        setSkills(raw.map((s) => ({
-          id: s.id,
-          name: s.name,
-          description: s.description ?? "",
-          category: (s.type === "tool" ? "Automation" : s.type === "agent" ? "Reasoning" : "Data") as SkillCategory,
-          section: "Operations" as SkillSection,
-          status: (s.status === "active" ? "Active" : "Draft") as SkillStatus,
-          updatedAt: s.created_at.slice(0, 10),
-          owner: "You",
-          isUserCreated: true,
-        })))
+        setSkills(raw.map(toSkillItem))
       })
       .catch(() => {})
       .finally(() => setIsLoadingSkills(false))
   }, [apiFetch])
 
+  useEffect(() => {
+    loadSkills()
+  }, [loadSkills])
+
+  useEffect(() => {
+    fetch("/api/users/me")
+      .then((r) => r.json())
+      .then((res: { data?: { user?: { platform_role?: string } } }) => {
+        setIsSuperAdmin(res.data?.user?.platform_role === "super_admin")
+      })
+      .catch(() => {})
+  }, [])
+
   const closeCreateSkillDialog = useCallback(() => {
     setCreateSkillOpen(false)
   }, [])
+
+  const resetUploadDialog = useCallback(() => {
+    setUploadName("")
+    setUploadDescription("")
+    setUploadType("tool")
+    setUploadCategory("Automation")
+    setUploadSection("Operations")
+    setUploadStatus("active")
+    setUploadImage(null)
+    setUploadFiles([])
+    setUploadError("")
+  }, [])
+
+  const submitDefaultSkill = useCallback(async () => {
+    setUploadError("")
+
+    if (!uploadName.trim()) {
+      setUploadError("Skill name is required.")
+      return
+    }
+
+    if (uploadFiles.length === 0) {
+      setUploadError("Upload a skill folder.")
+      return
+    }
+
+    const formData = new FormData()
+    formData.set("name", uploadName.trim())
+    formData.set("description", uploadDescription.trim())
+    formData.set("type", uploadType)
+    formData.set("category", uploadCategory)
+    formData.set("section", uploadSection)
+    formData.set("status", uploadStatus)
+    if (uploadImage) formData.set("image", uploadImage)
+
+    const paths = uploadFiles.map((file) => {
+      const withPath = file as File & { webkitRelativePath?: string }
+      return withPath.webkitRelativePath || file.name
+    })
+    formData.set("paths", JSON.stringify(paths))
+    uploadFiles.forEach((file) => formData.append("files", file))
+
+    setIsUploadingSkill(true)
+    try {
+      const response = await fetch("/api/admin/skills/upload", {
+        method: "POST",
+        body: formData,
+      })
+      const payload = await response.json()
+      if (!response.ok) {
+        setUploadError(payload?.error?.message ?? "Default skill could not be uploaded.")
+        return
+      }
+
+      resetUploadDialog()
+      setUploadSkillOpen(false)
+      loadSkills()
+    } catch {
+      setUploadError("Default skill could not be uploaded.")
+    } finally {
+      setIsUploadingSkill(false)
+    }
+  }, [
+    loadSkills,
+    resetUploadDialog,
+    uploadCategory,
+    uploadDescription,
+    uploadFiles,
+    uploadImage,
+    uploadName,
+    uploadSection,
+    uploadStatus,
+    uploadType,
+  ])
 
   const categoryOptions = useMemo(
     () => Array.from(new Set(skills.map((skill) => skill.category))),
@@ -290,13 +441,26 @@ function SkillsPageContent() {
       <div className="flex min-h-0 flex-1">
         <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div className="space-y-5">
-          <header className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Skills
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Browse and manage reusable skills available for your workspace.
-            </p>
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                Skills
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Browse and manage reusable skills available for your workspace.
+              </p>
+            </div>
+            {isSuperAdmin && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setUploadSkillOpen(true)}
+                className="h-8 self-start"
+              >
+                <FolderUp className="h-4 w-4" />
+                Upload default skill
+              </Button>
+            )}
           </header>
 
           <section data-filter-bar-scope="true" className="flex flex-col gap-3">
@@ -374,12 +538,7 @@ function SkillsPageContent() {
                   key={skill.id}
                   className="flex aspect-[4/5] flex-col overflow-hidden rounded-2xl border border-border bg-card"
                 >
-                  <div className="flex aspect-[40/19] shrink-0 items-center justify-center border-b border-border bg-muted/40 text-muted-foreground">
-                    <span className="inline-flex items-center gap-1 text-xs">
-                      <IconPhoto className="h-4 w-4" strokeWidth={1.7} />
-                      Cover image
-                    </span>
-                  </div>
+                  <SkillCover skill={skill} />
 
                   <div className="flex flex-1 flex-col p-3">
                     <div className="flex items-center justify-between gap-2">
@@ -446,12 +605,7 @@ function SkillsPageContent() {
                     key={skill.id}
                     className="flex aspect-[4/5] flex-col overflow-hidden rounded-2xl border border-border bg-card"
                   >
-                    <div className="flex aspect-[40/19] shrink-0 items-center justify-center border-b border-border bg-muted/40 text-muted-foreground">
-                      <span className="inline-flex items-center gap-1 text-xs">
-                        <IconPhoto className="h-4 w-4" strokeWidth={1.7} />
-                        Cover image
-                      </span>
-                    </div>
+                    <SkillCover skill={skill} />
 
                     <div className="flex flex-1 flex-col p-3">
                       <div className="flex items-center justify-between gap-2">
@@ -552,6 +706,171 @@ function SkillsPageContent() {
       </div>
 
       <Dialog
+        open={uploadSkillOpen}
+        onOpenChange={(open) => {
+          setUploadSkillOpen(open)
+          if (!open) resetUploadDialog()
+        }}
+      >
+        <DialogContent className="max-h-[88vh] overflow-y-auto p-0 sm:max-w-2xl">
+          <DialogHeader className="border-b border-border px-5 py-4">
+            <DialogTitle>Upload default skill</DialogTitle>
+            <DialogDescription>
+              Create a system skill from a folder. It will be available to every workspace.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 px-5 py-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="default-skill-name">Skill name</Label>
+                <Input
+                  id="default-skill-name"
+                  value={uploadName}
+                  onChange={(event) => setUploadName(event.target.value)}
+                  placeholder="e.g. Contract Review"
+                />
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="default-skill-description">Description</Label>
+                <Textarea
+                  id="default-skill-description"
+                  value={uploadDescription}
+                  onChange={(event) => setUploadDescription(event.target.value)}
+                  placeholder="What this skill helps users do..."
+                  className="min-h-20 resize-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="default-skill-category">Category</Label>
+                <select
+                  id="default-skill-category"
+                  value={uploadCategory}
+                  onChange={(event) => setUploadCategory(event.target.value as SkillCategory)}
+                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring"
+                >
+                  {(["Reasoning", "Data", "Automation", "Support"] as SkillCategory[]).map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="default-skill-section">Section</Label>
+                <select
+                  id="default-skill-section"
+                  value={uploadSection}
+                  onChange={(event) => setUploadSection(event.target.value as SkillSection)}
+                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring"
+                >
+                  {SECTION_ORDER.map((section) => (
+                    <option key={section} value={section}>
+                      {section}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="default-skill-type">Type</Label>
+                <select
+                  id="default-skill-type"
+                  value={uploadType}
+                  onChange={(event) => setUploadType(event.target.value)}
+                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring"
+                >
+                  <option value="tool">Tool</option>
+                  <option value="agent">Agent</option>
+                  <option value="action">Action</option>
+                  <option value="trigger">Trigger</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="default-skill-status">Status</Label>
+                <select
+                  id="default-skill-status"
+                  value={uploadStatus}
+                  onChange={(event) => setUploadStatus(event.target.value)}
+                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex min-h-28 cursor-pointer flex-col justify-between rounded-xl border border-dashed border-border bg-muted/20 p-4 transition-colors hover:bg-muted/40">
+                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Upload className="h-4 w-4" />
+                  Cover image
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {uploadImage ? uploadImage.name : "Optional PNG, JPG, WebP, GIF, or AVIF"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                  className="sr-only"
+                  onChange={(event) => setUploadImage(event.target.files?.[0] ?? null)}
+                />
+              </label>
+
+              <label className="flex min-h-28 cursor-pointer flex-col justify-between rounded-xl border border-dashed border-border bg-muted/20 p-4 transition-colors hover:bg-muted/40">
+                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <FolderUp className="h-4 w-4" />
+                  Skill folder
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {uploadFiles.length > 0
+                    ? `${uploadFiles.length} files selected`
+                    : "Upload the folder that contains the skill files"}
+                </span>
+                <input
+                  type="file"
+                  multiple
+                  className="sr-only"
+                  ref={(node) => {
+                    node?.setAttribute("webkitdirectory", "")
+                    node?.setAttribute("directory", "")
+                  }}
+                  onChange={(event) => setUploadFiles(Array.from(event.target.files ?? []))}
+                />
+              </label>
+            </div>
+
+            {uploadError && (
+              <p className="text-sm text-destructive">{uploadError}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setUploadSkillOpen(false)}
+              disabled={isUploadingSkill}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void submitDefaultSkill()}
+              disabled={isUploadingSkill}
+            >
+              <FolderUp className="h-4 w-4" />
+              {isUploadingSkill ? "Uploading..." : "Create default skill"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={selectedSkill !== null}
         onOpenChange={(open) => {
           if (!open) setSelectedSkill(null)
@@ -560,12 +879,7 @@ function SkillsPageContent() {
         <DialogContent className="max-h-[85vh] overflow-y-auto p-0 sm:max-w-2xl">
           {selectedSkill && (
             <>
-              <div className="flex aspect-[40/19] shrink-0 items-center justify-center border-b border-border bg-muted/40 text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5 text-sm">
-                  <IconPhoto className="h-4 w-4" strokeWidth={1.7} />
-                  Cover image
-                </span>
-              </div>
+              <SkillCover skill={selectedSkill} />
 
               <div className="space-y-6 p-6">
                 <DialogHeader>
