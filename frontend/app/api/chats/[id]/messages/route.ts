@@ -2,8 +2,8 @@ import { type NextRequest } from "next/server"
 import { getUser } from "@/lib/api/auth"
 import { ok, Errors } from "@/lib/api/response"
 import { sendMessageSchema } from "@/lib/validations/chat"
-import { getOpenAIClient } from "@/lib/openai"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { runProjectSpecGraph } from "@/lib/agents/projectSpecGraph"
 
 const FILE_BUCKET = "workspace-files"
 
@@ -28,6 +28,45 @@ function attachmentRecord(value: unknown): StoredAttachment[] {
         typeof (item as Record<string, unknown>).kind === "string"
     )
   })
+}
+
+function streamAssistantReply(
+  content: string,
+  metadata?: Record<string, unknown>
+) {
+  const encoder = new TextEncoder()
+  const readable = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content, metadata })}\n\n`))
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+      controller.close()
+    },
+  })
+
+  return new Response(readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  })
+}
+
+async function ensureWorkspaceFilesBucket() {
+  const { data: existingBuckets } = await supabaseAdmin.storage.listBuckets()
+  if (existingBuckets?.some((bucket) => bucket.name === FILE_BUCKET)) return null
+
+  const { error } = await supabaseAdmin.storage.createBucket(FILE_BUCKET, {
+    public: false,
+    fileSizeLimit: 250 * 1024 * 1024,
+  })
+
+  return error
+}
+
+function taskSpecPath(workspaceId: string, chatId: string) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+  return `${workspaceId}/task-specs/${chatId}-${timestamp}.txt`
 }
 
 export async function GET(
@@ -111,11 +150,23 @@ export async function POST(
   const { id: chatId } = await params
 
   // Verify chat exists and user has access (RLS handles this)
-  const { data: chat } = await supabase
+  const { data: chat, error: chatError } = await supabase
     .from("chat")
-    .select("id, workspace_id")
+    .select("id, workspace_id, project_spec")
     .eq("id", chatId)
     .maybeSingle()
+
+  if (chatError) {
+    if (
+      chatError.message.includes("project_spec") ||
+      chatError.message.includes("schema cache")
+    ) {
+      return Errors.badRequest(
+        "Database migration required: add the chat.project_spec jsonb column."
+      )
+    }
+    return Errors.internal()
+  }
 
   if (!chat) return Errors.notFound("Chat")
 
@@ -158,34 +209,12 @@ export async function POST(
       .in("id", fileIds)
   }
 
-  // Fetch message history for context (last 50)
-  const { data: history } = await supabase
-    .from("message")
-    .select("role, content")
-    .eq("chat_id", chatId)
-    .order("created_at", { ascending: true })
-    .limit(50)
-
-  const messages = (history ?? []).map((m) => ({
-    role: m.role as "system" | "user" | "assistant",
-    content: m.content,
-  }))
-
-  // Stream response from OpenAI
-  let stream
+  let graphResult
   try {
-    stream = await getOpenAIClient().chat.completions.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are Atmet, the AI assistant built for Atmet. Your product identity is Atmet, not OpenAI, ChatGPT, Claude, Gemini, or any other provider. Do not describe yourself as being based on OpenAI or any third-party model. If earlier conversation history says otherwise, correct it and continue as Atmet. You help users turn conversations into practical workplace automations, workflows, agents, and productivity actions. When asked who you are or what model you are, say you are Atmet, built for Atmet. Be concise, capable, and action-oriented.",
-        },
-        ...messages,
-      ],
-      stream: true,
-    })
+    graphResult = await runProjectSpecGraph(
+      chat.project_spec,
+      parsed.data.content.trim() || "Attached file(s)"
+    )
   } catch (error) {
     if (error instanceof Error && error.message.includes("OPENAI_API_KEY")) {
       return Errors.badRequest("OPENAI_API_KEY is not configured.")
@@ -193,61 +222,136 @@ export async function POST(
     const message =
       error instanceof Error
         ? error.message
-        : "OpenAI failed to generate a response."
+        : "Atmet failed to generate a response."
     return Errors.badRequest(message)
   }
 
-  let fullContent = ""
-  let promptTokens = 0
-  let completionTokens = 0
+  const assistantReply =
+    graphResult.assistant_reply ?? "What should this automation do next?"
+  const model = process.env.OPENAI_MODEL ?? "gpt-4o"
+  const persistedProjectSpec = {
+    goal: graphResult.goal,
+    inputs: graphResult.inputs,
+    constraints: graphResult.constraints,
+    schedule: graphResult.schedule,
+    outputs: graphResult.outputs,
+    gaps: graphResult.gaps,
+    conversation: graphResult.conversation,
+    status: graphResult.status,
+    final_description: graphResult.final_description,
+  }
 
-  const readable = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder()
-      try {
-        for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta?.content ?? ""
-          if (delta) {
-            fullContent += delta
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: delta })}\n\n`))
-          }
-          if (chunk.usage) {
-            promptTokens = chunk.usage.prompt_tokens
-            completionTokens = chunk.usage.completion_tokens
-          }
-        }
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-        controller.close()
-      } catch {
-        controller.error(new Error("Stream error"))
-      } finally {
-        // Persist assistant message after stream completes
-        await supabase.from("message").insert({
-          chat_id: chatId,
-          role: "assistant",
-          content: fullContent,
-          metadata: {
-            model: "gpt-4o",
-            prompt_tokens: promptTokens,
-            completion_tokens: completionTokens,
-            finish_reason: "stop",
+  if (graphResult.terminal_node === "finalize_task") {
+    const bucketError = await ensureWorkspaceFilesBucket()
+    if (bucketError) return Errors.internal()
+
+    const storagePath = taskSpecPath(chat.workspace_id, chatId)
+    const fileBody = new TextEncoder().encode(assistantReply)
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(FILE_BUCKET)
+      .upload(storagePath, fileBody, {
+        contentType: "text/plain",
+        upsert: false,
+      })
+
+    if (uploadError) return Errors.internal()
+
+    const { data: assistantMessage, error: assistantInsertError } = await supabase
+      .from("message")
+      .insert({
+        chat_id: chatId,
+        role: "assistant",
+        content: assistantReply,
+        // Frontend hook: render Accept/Reject controls when metadata.taskReview exists.
+        metadata: {
+          model,
+          finish_reason: "task_ready_for_review",
+          taskReview: {
+            fileId: null,
+            status: "pending",
+            specSummary: assistantReply,
           },
-        })
+        },
+      })
+      .select()
+      .single()
 
-        // Touch chat's updated_at so it surfaces at top of list
-        await supabase
-          .from("chat")
-          .update({ updated_at: new Date().toISOString() })
-          .eq("id", chatId)
-      }
+    if (assistantInsertError || !assistantMessage) return Errors.internal()
+
+    const { data: file, error: fileInsertError } = await supabaseAdmin
+      .from("file")
+      .insert({
+        workspace_id: chat.workspace_id,
+        uploaded_by: auth.user.id,
+        message_id: assistantMessage.id,
+        name: "automation-task-description.txt",
+        mime_type: "text/plain",
+        size_bytes: fileBody.byteLength,
+        storage_path: storagePath,
+      })
+      .select()
+      .single()
+
+    if (fileInsertError || !file) return Errors.internal()
+
+    const reviewMetadata = {
+      model,
+      finish_reason: "task_ready_for_review",
+      taskReview: {
+        fileId: file.id,
+        status: "pending",
+        specSummary: assistantReply,
+      },
+    }
+
+    const { error: metadataUpdateError } = await supabase
+      .from("message")
+      .update({
+        metadata: reviewMetadata,
+      })
+      .eq("id", assistantMessage.id)
+
+    if (metadataUpdateError) return Errors.internal()
+
+    const { error: chatUpdateError } = await supabase
+      .from("chat")
+      .update({
+        project_spec: persistedProjectSpec,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", chatId)
+
+    if (chatUpdateError) return Errors.internal()
+
+    return streamAssistantReply(assistantReply, {
+      messageId: assistantMessage.id,
+      taskReview: reviewMetadata.taskReview,
+      file,
+      projectSpec: persistedProjectSpec,
+    })
+  }
+
+  const { error: assistantInsertError } = await supabase.from("message").insert({
+    chat_id: chatId,
+    role: "assistant",
+    content: assistantReply,
+    metadata: {
+      model,
+      finish_reason: "clarification_requested",
     },
   })
 
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  })
+  if (assistantInsertError) return Errors.internal()
+
+  const { error: chatUpdateError } = await supabase
+    .from("chat")
+    .update({
+      project_spec: persistedProjectSpec,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", chatId)
+
+  if (chatUpdateError) return Errors.internal()
+
+  return streamAssistantReply(assistantReply)
 }

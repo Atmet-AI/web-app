@@ -216,6 +216,7 @@ CREATE TABLE chat (
   created_by   uuid                     NOT NULL REFERENCES users(id),
   title        text                     NOT NULL,
   status       chat_status              NOT NULL DEFAULT 'active',
+  project_spec jsonb,                             -- LangGraph task-definition state for this chat
   created_at   timestamp with time zone NOT NULL DEFAULT now(),
   updated_at   timestamp with time zone NOT NULL DEFAULT now()
 );

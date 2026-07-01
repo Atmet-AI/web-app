@@ -1,9 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 
 import AIPrompt from "@/components/kokonutui/ai-prompt"
+import { cn } from "@/lib/utils"
 
 const OPEN_MANAGE_CHAT_USERS_EVENT = "open-manage-chat-users"
 const AUTOMATION_CHAT_STARTED_EVENT = "automation-chat-started"
@@ -13,11 +14,7 @@ type AiCorePageContentProps = {
 }
 
 function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const promptRef = useRef<HTMLDivElement>(null)
-  const [hasStartedConversation, setHasStartedConversation] = useState(false)
   const [hasConversationActivity, setHasConversationActivity] = useState(false)
-  const [bottomShift, setBottomShift] = useState(0)
   const [currentUserFullName, setCurrentUserFullName] = useState("there")
 
   const openUserPicker = useCallback(() => {
@@ -28,29 +25,7 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
     window.dispatchEvent(new CustomEvent(AUTOMATION_CHAT_STARTED_EVENT))
   }, [])
 
-  const recalculateBottomShift = useCallback(() => {
-    if (!containerRef.current || !promptRef.current) return
-
-    const containerHeight = containerRef.current.clientHeight
-    const promptHeight = promptRef.current.clientHeight
-    const bottomPadding = 16
-    const centerToBottom =
-      containerHeight / 2 - promptHeight / 2 - bottomPadding
-
-    setBottomShift(Math.min(320, Math.max(0, centerToBottom)))
-  }, [])
-
   const shouldDockToBottom = hasConversationActivity
-
-  useEffect(() => {
-    recalculateBottomShift()
-
-    const observer = new ResizeObserver(recalculateBottomShift)
-    if (containerRef.current) observer.observe(containerRef.current)
-    if (promptRef.current) observer.observe(promptRef.current)
-
-    return () => observer.disconnect()
-  }, [recalculateBottomShift])
 
   useEffect(() => {
     let isMounted = true
@@ -77,22 +52,23 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
 
   return (
     <div
-      ref={containerRef}
-      className="relative flex min-h-[calc(100svh-2.5rem)] flex-1 items-center justify-center px-3 py-4"
+      className={cn(
+        "relative flex h-[calc(100svh-2.5rem)] min-h-0 flex-1 px-3 py-4",
+        shouldDockToBottom
+          ? "items-stretch justify-center overflow-hidden"
+          : "items-center justify-center"
+      )}
     >
       <div
-        ref={promptRef}
-        className="flex w-full justify-center transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
-        style={{
-          transform: `translateY(${
-            shouldDockToBottom && Number.isFinite(bottomShift) ? bottomShift : 0
-          }px)`,
-        }}
+        className={cn(
+          "flex w-full justify-center transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          shouldDockToBottom && "h-full min-h-0"
+        )}
       >
         <AIPrompt
           key={activeChatId ?? "chat-default"}
           chatId={activeChatId}
-          onConversationStart={() => setHasStartedConversation(true)}
+          onConversationStart={() => undefined}
           onAutomationConversationStart={notifyAutomationStarted}
           onConversationActivityChange={setHasConversationActivity}
           onAddUserToChat={openUserPicker}
