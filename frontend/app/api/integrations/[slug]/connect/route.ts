@@ -3,6 +3,9 @@ import { getUser } from "@/lib/api/auth"
 import { getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
+import { upsertIntegrationSecret, upsertWorkspaceIntegration } from "@/lib/integrations/connections"
+import { ensureIntegrationProvider } from "@/lib/integrations/providers"
+import { formatTelegramBotAccount, getTelegramBotInfo } from "@/lib/integrations/telegram"
 import { connectApiKeySchema } from "@/lib/validations/integration"
 
 export async function POST(
@@ -15,7 +18,7 @@ export async function POST(
   const ws = getWorkspaceId(request)
   if (!ws.ok) return ws.response
 
-  const { supabase, user } = auth
+  const { user } = auth
   const { slug } = await params
 
   const catalog = getCatalogIntegration(slug)
@@ -36,21 +39,38 @@ export async function POST(
 
   const { apiKey, keyName } = parsed.data
 
-  const { error } = await supabase.from("integration").upsert(
-    {
-      workspace_id: ws.workspaceId,
-      created_by: user.id,
-      slug,
-      auth_type: "apikey",
-      credentials: { api_key: apiKey, key_name: keyName ?? null },
-      // TODO: encrypt credentials using Supabase Vault before storing
-      status: "active",
-      connected_at: new Date().toISOString(),
-    },
-    { onConflict: "workspace_id,slug" }
-  )
+  try {
+    const provider = await ensureIntegrationProvider(catalog)
+    let connectedAccount = keyName ?? null
+    let settings: Record<string, unknown> = { key_name: keyName ?? null }
 
-  if (error) return Errors.internal()
+    if (slug === "telegram") {
+      const bot = await getTelegramBotInfo(apiKey)
+      connectedAccount = formatTelegramBotAccount(bot)
+      settings = {
+        ...settings,
+        bot_id: bot.id,
+        bot_username: bot.username ?? null,
+        bot_first_name: bot.first_name,
+      }
+    }
+
+    const connection = await upsertWorkspaceIntegration({
+      workspaceId: ws.workspaceId,
+      providerId: provider.id,
+      userId: user.id,
+      connectedAccount,
+      settings,
+    })
+
+    await upsertIntegrationSecret({
+      workspaceIntegrationId: connection.id,
+      secretType: "api_key",
+      payload: { api_key: apiKey, key_name: keyName ?? null },
+    })
+  } catch {
+    return Errors.internal()
+  }
 
   return ok({ success: true })
 }

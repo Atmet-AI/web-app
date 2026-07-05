@@ -59,11 +59,7 @@ const INITIAL_INTEGRATIONS: Integration[] = [
     scopes: [
       {
         name: "gmail.modify",
-        description: "Read, label, and update message metadata when workflows run.",
-      },
-      {
-        name: "gmail.send",
-        description: "Send outbound emails from workflow actions you approve.",
+        description: "Read, send, label, archive, and move Gmail messages to trash when workflows run.",
       },
       {
         name: "userinfo.email",
@@ -155,6 +151,57 @@ const INITIAL_INTEGRATIONS: Integration[] = [
     connected: true,
     connectedAt: "2026-04-18T12:10:00.000Z",
     status: "expired",
+  },
+  {
+    slug: "telegram",
+    name: "Telegram",
+    logo: "https://cdn.simpleicons.org/telegram",
+    description: "Send alerts, workflow updates, and agent replies through a Telegram bot.",
+    category: "communication",
+    authType: "apikey",
+    apiKeyUrl: "https://t.me/BotFather",
+    setupInstructions: [
+      "Open BotFather in Telegram and create a bot.",
+      "Copy the bot token BotFather gives you.",
+      "Paste the token into Atmet, test the connection, and save it.",
+    ],
+    scopes: [
+      {
+        name: "bot token",
+        description: "Send messages and receive updates for chats that interact with the bot.",
+      },
+      {
+        name: "chat access",
+        description: "Telegram only sends updates after a user starts the bot or the bot is added to a chat.",
+      },
+    ],
+    triggers: [
+      {
+        id: "telegram-new-message",
+        name: "New bot message",
+        description: "Starts when the connected bot receives a message.",
+      },
+      {
+        id: "telegram-command",
+        name: "Command received",
+        description: "Starts when someone sends a slash command to the bot.",
+      },
+    ],
+    actions: [
+      {
+        id: "telegram-send-message",
+        name: "Send message",
+        description: "Send a text message to a Telegram chat.",
+        inputFields: ["chatId", "text"],
+      },
+      {
+        id: "telegram-send-image",
+        name: "Send image",
+        description: "Send a generated image to a Telegram chat.",
+        inputFields: ["chatId", "imageUrl", "caption"],
+      },
+    ],
+    connected: false,
   },
   {
     slug: "notion",

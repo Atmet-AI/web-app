@@ -17,9 +17,15 @@ export default function OAuthCallbackPage() {
     if (!slug) return
 
     const code = searchParams.get("code")
+    const state = searchParams.get("state")
 
     if (!code) {
       setErrorMessage("Authorization code is missing. Please reconnect the integration.")
+      return
+    }
+
+    if (!state) {
+      setErrorMessage("Authorization state is missing. Please reconnect the integration.")
       return
     }
 
@@ -30,13 +36,17 @@ export default function OAuthCallbackPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({ code, state }),
         })
 
-        const data = (await response.json()) as { success: boolean; message?: string }
+        const result = (await response.json()) as {
+          data?: { success: boolean; message?: string }
+          error?: { message?: string }
+        }
+        const data = result.data
 
-        if (!response.ok || !data.success) {
-          throw new Error(data.message ?? "OAuth callback failed.")
+        if (!response.ok || !data?.success) {
+          throw new Error(result.error?.message ?? data?.message ?? "OAuth callback failed.")
         }
 
         setMessage("Connection complete. Redirecting...")

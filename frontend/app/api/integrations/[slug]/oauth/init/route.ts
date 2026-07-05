@@ -3,6 +3,8 @@ import { getUser } from "@/lib/api/auth"
 import { getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
+import { createOAuthState, ensureIntegrationProvider, getOAuthProvider } from "@/lib/integrations/providers"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export async function POST(
   request: NextRequest,
@@ -22,11 +24,37 @@ export async function POST(
     return Errors.badRequest("OAuth initialization is not available for this integration.")
   }
 
-  // TODO: replace with real OAuth authorize URL construction per integration
-  // e.g. for Gmail: https://accounts.google.com/o/oauth2/v2/auth?client_id=...
-  const baseUrl = new URL(request.url)
-  const callbackUrl = new URL(`/apps/${slug}/callback`, baseUrl.origin)
-  callbackUrl.searchParams.set("code", `mock-${slug}-code`)
+  const oauthProvider = getOAuthProvider(slug)
+  if (!oauthProvider) {
+    return Errors.badRequest("OAuth is not configured for this integration yet.")
+  }
 
-  return ok({ redirectUrl: callbackUrl.toString() })
+  try {
+    const provider = await ensureIntegrationProvider(catalog)
+    const state = createOAuthState()
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+
+    const { error } = await supabaseAdmin.from("oauth_state").insert({
+      state,
+      workspace_id: ws.workspaceId,
+      provider_id: provider.id,
+      user_id: auth.user.id,
+      redirect_after: `/apps/${slug}`,
+      expires_at: expiresAt,
+    })
+
+    if (error) return Errors.internal()
+
+    return ok({
+      redirectUrl: oauthProvider.buildAuthorizeUrl({
+        requestUrl: request.url,
+        slug,
+        state,
+        catalog,
+      }),
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to start OAuth connection."
+    return Errors.badRequest(message)
+  }
 }

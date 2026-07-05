@@ -45,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/ui/kbd";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
@@ -185,6 +186,20 @@ const AI_MODELS = [
   "GPT-5-1",
 ] as const;
 
+const DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS =
+  "Reply to customers clearly and briefly. Ask one focused question when information is missing. If the customer needs a human, tell them the team will follow up.";
+
+function summarizeAgentInstructionsFromPlan(plan: string) {
+  const normalized = plan
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[#>*_`-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS;
+  return normalized.length > 1200 ? `${normalized.slice(0, 1197)}...` : normalized;
+}
+
 
 export default function AI_Prompt({
   chatId = null,
@@ -211,6 +226,14 @@ export default function AI_Prompt({
   const [resolvedChatId, setResolvedChatId] = useState<string | null>(chatId ?? null);
   const [creatingAgentMessageId, setCreatingAgentMessageId] = useState<number | null>(null);
   const [createAgentError, setCreateAgentError] = useState<string | null>(null);
+  const [agentSetupMessageId, setAgentSetupMessageId] = useState<number | null>(null);
+  const [telegramAgentName, setTelegramAgentName] = useState("Telegram support agent");
+  const [telegramAgentInstructions, setTelegramAgentInstructions] = useState(DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS);
+  const [telegramAgentMode, setTelegramAgentMode] = useState<"atmet" | "agent_api">("atmet");
+  const [telegramAgentApiUrl, setTelegramAgentApiUrl] = useState("");
+  const [isCreatingTelegramAgent, setIsCreatingTelegramAgent] = useState(false);
+  const [telegramAgentError, setTelegramAgentError] = useState<string | null>(null);
+  const [telegramAgentSuccess, setTelegramAgentSuccess] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachmentDraft[]>([]);
   const [assistantFeedback, setAssistantFeedback] = useState<
@@ -280,6 +303,18 @@ export default function AI_Prompt({
     () => new Map(availableIntegrations.map((i) => [i.name.toLowerCase(), i])),
     [availableIntegrations]
   );
+  const telegramIntegration = useMemo(
+    () => availableIntegrations.find((integration) => integration.slug === "telegram") ?? null,
+    [availableIntegrations]
+  );
+  const isTelegramMentioned = useMemo(() => {
+    const telegramMentionPattern = /(^|\s)@?telegram(?=\s|$|[.,!?;:])/i;
+    return (
+      connectedApps.some((app) => app.toLowerCase() === "telegram") ||
+      telegramMentionPattern.test(value) ||
+      messages.some((message) => telegramMentionPattern.test(message.content))
+    );
+  }, [connectedApps, value, messages]);
   const mentionableSkills = useMemo(() => {
     const baseSkills = availableSkillNames;
     if (!fixedSkillName) return baseSkills;
@@ -614,6 +649,9 @@ export default function AI_Prompt({
   useEffect(() => {
     activeChatIdRef.current = chatId ?? null;
     setResolvedChatId(chatId ?? null);
+    setAgentSetupMessageId(null);
+    setTelegramAgentError(null);
+    setTelegramAgentSuccess(null);
 
     if (!chatId) {
       activeChatTitleRef.current = null;
@@ -1294,6 +1332,104 @@ export default function AI_Prompt({
       setCreatingAgentMessageId(null);
     }
   }, [apiFetch, resolvedChatId, router]);
+
+  const openAgentSetupFromPlan = useCallback(
+    (message: ChatMessage) => {
+      if (!isTelegramMentioned) {
+        void createAgentFromChat(message.id);
+        return;
+      }
+
+      setCreateAgentError(null);
+      setTelegramAgentError(null);
+      setTelegramAgentSuccess(null);
+      setAgentSetupMessageId(message.id);
+      setTelegramAgentInstructions(summarizeAgentInstructionsFromPlan(message.content));
+
+      if (activeChatTitleRef.current && activeChatTitleRef.current !== "New chat") {
+        setTelegramAgentName(activeChatTitleRef.current);
+      }
+
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      });
+    },
+    [createAgentFromChat, isTelegramMentioned]
+  );
+
+  const createTelegramAgentFromChat = useCallback(async () => {
+    const currentChatId = activeChatIdRef.current ?? resolvedChatId;
+    if (
+      !currentChatId ||
+      currentChatId.startsWith("local-") ||
+      currentChatId.startsWith("workflow-node-chat-")
+    ) {
+      setTelegramAgentError("Start a saved chat before creating a Telegram agent.");
+      return;
+    }
+
+    if (!telegramIntegration?.connected) {
+      setTelegramAgentError("Connect Telegram first, then create the agent.");
+      return;
+    }
+
+    if (telegramAgentMode === "agent_api" && !telegramAgentApiUrl.trim()) {
+      setTelegramAgentError("Add the Agent API URL or choose Atmet model.");
+      return;
+    }
+
+    setTelegramAgentError(null);
+    setTelegramAgentSuccess(null);
+    setIsCreatingTelegramAgent(true);
+
+    try {
+      const response = await apiFetch(`/api/chats/${currentChatId}/telegram-agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: telegramAgentName.trim() || "Telegram support agent",
+          instructions: telegramAgentInstructions,
+          modelMode: telegramAgentMode,
+          agentApiUrl: telegramAgentMode === "agent_api" ? telegramAgentApiUrl.trim() : "",
+          autoReply: true,
+        }),
+      });
+      const payload = (await response.json()) as {
+        data?: {
+          automation?: { id: string };
+          webhookConfigured?: boolean;
+          webhookUrl?: string;
+        };
+        error?: { message?: string };
+      };
+
+      if (!response.ok || !payload.data?.automation?.id) {
+        throw new Error(payload.error?.message ?? "Failed to create Telegram agent.");
+      }
+
+      setTelegramAgentSuccess(
+        payload.data.webhookConfigured
+          ? "Telegram agent is live."
+          : `Telegram agent created. Webhook: ${payload.data.webhookUrl ?? "open the agent to finish setup."}`
+      );
+      router.push(`/workflow/${payload.data.automation.id}`);
+    } catch (error) {
+      setTelegramAgentError(
+        error instanceof Error ? error.message : "Failed to create Telegram agent."
+      );
+    } finally {
+      setIsCreatingTelegramAgent(false);
+    }
+  }, [
+    apiFetch,
+    resolvedChatId,
+    router,
+    telegramAgentApiUrl,
+    telegramAgentInstructions,
+    telegramAgentMode,
+    telegramAgentName,
+    telegramIntegration?.connected,
+  ]);
 
   const sendMessage = useCallback(async () => {
     const content = value.trim();
@@ -2129,6 +2265,8 @@ export default function AI_Prompt({
   };
 
   const hasConversation = messages.length > 0 || isResponding;
+  const showTelegramAgentSetup =
+    enableCreateAgent && isTelegramMentioned && agentSetupMessageId !== null;
   const showGreeting = !hideGreeting && messages.length === 0 && !isResponding;
   const lastAssistantMessageId = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -2459,7 +2597,7 @@ export default function AI_Prompt({
                       !isResponding ? (
                         <button
                           type="button"
-                          onClick={() => void createAgentFromChat(message.id)}
+                          onClick={() => openAgentSetupFromPlan(message)}
                           disabled={creatingAgentMessageId !== null}
                           className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-[min(var(--radius-md),12px)] bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-60"
                         >
@@ -2468,7 +2606,7 @@ export default function AI_Prompt({
                           ) : (
                             <Bot className="h-3.5 w-3.5" />
                           )}
-                          Create Agent
+                          Build Agent
                         </button>
                       ) : null}
                     </>
@@ -2494,6 +2632,118 @@ export default function AI_Prompt({
           dockComposerToBottom && <div className="flex-1" />
         )}
       </div>
+
+      {showTelegramAgentSetup ? (
+        <div className="mb-3 rounded-xl border border-sidebar-border bg-sidebar p-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {renderAppLogo("Telegram", "md")}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    Telegram agent
+                  </p>
+                  <Badge
+                    variant={telegramIntegration?.connected ? "green" : "neutral"}
+                    size="sm"
+                  >
+                    {telegramIntegration?.connected ? "Connected" : "Not connected"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Customer messages go to this chat agent and replies return through your bot.
+                </p>
+              </div>
+            </div>
+            {!telegramIntegration?.connected ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => router.push("/apps/telegram")}
+              >
+                Connect Telegram
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Input
+              value={telegramAgentName}
+              onChange={(event) => setTelegramAgentName(event.target.value)}
+              placeholder="Agent name"
+              className="h-8 bg-background/60"
+            />
+            <div className="grid grid-cols-2 rounded-lg border border-sidebar-border bg-background/60 p-0.5">
+              <button
+                type="button"
+                onClick={() => setTelegramAgentMode("atmet")}
+                className={cn(
+                  "h-7 rounded-md px-2 text-xs font-medium transition-colors",
+                  telegramAgentMode === "atmet"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Atmet model
+              </button>
+              <button
+                type="button"
+                onClick={() => setTelegramAgentMode("agent_api")}
+                className={cn(
+                  "h-7 rounded-md px-2 text-xs font-medium transition-colors",
+                  telegramAgentMode === "agent_api"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Agent API
+              </button>
+            </div>
+          </div>
+
+          {telegramAgentMode === "agent_api" ? (
+            <Input
+              value={telegramAgentApiUrl}
+              onChange={(event) => setTelegramAgentApiUrl(event.target.value)}
+              placeholder="https://your-agent-api.com/reply"
+              className="mt-2 h-8 bg-background/60"
+            />
+          ) : null}
+
+          <Textarea
+            value={telegramAgentInstructions}
+            onChange={(event) => setTelegramAgentInstructions(event.target.value)}
+            className="mt-2 min-h-24 resize-none bg-background/60 text-sm"
+            placeholder="Agent instructions"
+          />
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="min-h-5 text-xs">
+              {telegramAgentError ? (
+                <span className="text-destructive">{telegramAgentError}</span>
+              ) : telegramAgentSuccess ? (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {telegramAgentSuccess}
+                </span>
+              ) : null}
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={isCreatingTelegramAgent || !telegramIntegration?.connected}
+              onClick={() => void createTelegramAgentFromChat()}
+            >
+              {isCreatingTelegramAgent ? (
+                <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Bot className="h-3.5 w-3.5" />
+              )}
+              Create Telegram agent
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div
         className={cn(

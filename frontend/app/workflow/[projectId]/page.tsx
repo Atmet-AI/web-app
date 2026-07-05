@@ -44,9 +44,11 @@ import {
 } from "@/lib/workflow-events"
 import {
   Check,
+  ExternalLink,
   Files,
   PlayCircle,
   Plus,
+  RefreshCcw,
   Trash2,
   X,
   Zap,
@@ -95,6 +97,35 @@ type WorkflowSnapshot = {
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
   selectedNodeId: string
+}
+
+type TelegramAgentBlueprint = {
+  kind?: string
+  agentName?: string
+  channel?: {
+    bot?: string | null
+    webhookUrl?: string
+    webhookPath?: string
+  }
+  brain?: {
+    mode?: "atmet" | "agent_api"
+    agentApiUrl?: string | null
+  }
+  behavior?: {
+    instructions?: string
+    autoReply?: boolean
+    handoffMessage?: string | null
+  }
+}
+
+type TelegramWebhookStatus = {
+  bot: string | null
+  botLink: string | null
+  expectedWebhookUrl: string
+  currentWebhookUrl: string | null
+  webhookConfigured: boolean
+  pendingUpdateCount: number
+  lastErrorMessage: string | null
 }
 
 type AnchorSide = "top" | "right" | "bottom" | "left"
@@ -346,8 +377,40 @@ function getRunScheduleIntervalMs(runSchedule: WorkflowRunSchedule) {
   return null
 }
 
+function getTelegramAgentBlueprint(scriptKey: string | null | undefined) {
+  if (!scriptKey) return null
+
+  try {
+    const parsed = JSON.parse(scriptKey) as TelegramAgentBlueprint
+    return parsed.kind === "telegram-agent" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 function getStepsFromAutomationBlueprint(scriptKey: string | null | undefined) {
   if (!scriptKey) return null
+
+  const telegramBlueprint = getTelegramAgentBlueprint(scriptKey)
+  if (telegramBlueprint) {
+    const brainLabel =
+      telegramBlueprint.brain?.mode === "agent_api" ? "Agent API" : "Atmet model"
+    return [
+      {
+        name: telegramBlueprint.agentName ?? "Telegram agent",
+        status: "Done" as const,
+        nodeType: "Action" as const,
+        owner: "Atmet",
+        provider: brainLabel,
+        model: brainLabel,
+        prompt:
+          telegramBlueprint.behavior?.instructions ??
+          "Generate a helpful reply and send it back through Telegram.",
+        usedApps: ["Telegram"],
+        usedSkills: ["Customer agent"],
+      },
+    ]
+  }
 
   try {
     const parsed = JSON.parse(scriptKey) as {
@@ -387,6 +450,13 @@ export default function WorkflowProjectPage() {
     [projectId]
   )
   const [databaseProject, setDatabaseProject] = useState<WorkflowProject | null>(null)
+  const [telegramAgentBlueprint, setTelegramAgentBlueprint] =
+    useState<TelegramAgentBlueprint | null>(null)
+  const [telegramWebhookStatus, setTelegramWebhookStatus] =
+    useState<TelegramWebhookStatus | null>(null)
+  const [telegramWebhookError, setTelegramWebhookError] = useState<string | null>(null)
+  const [isTelegramWebhookLoading, setIsTelegramWebhookLoading] = useState(false)
+  const [isActivatingTelegramWebhook, setIsActivatingTelegramWebhook] = useState(false)
   const [isLoadingProject, setIsLoadingProject] = useState(false)
   const project = fixtureProject ?? databaseProject
 
@@ -452,6 +522,9 @@ export default function WorkflowProjectPage() {
   useEffect(() => {
     if (!projectId || fixtureProject) {
       setDatabaseProject(null)
+      setTelegramAgentBlueprint(null)
+      setTelegramWebhookStatus(null)
+      setTelegramWebhookError(null)
       setIsLoadingProject(false)
       return
     }
@@ -475,10 +548,14 @@ export default function WorkflowProjectPage() {
           const automation = payload?.data?.automation
           if (!automation) {
             setDatabaseProject(null)
+            setTelegramAgentBlueprint(null)
+            setTelegramWebhookStatus(null)
             return
           }
 
+          const telegramBlueprint = getTelegramAgentBlueprint(automation.script_key)
           const blueprintSteps = getStepsFromAutomationBlueprint(automation.script_key)
+          setTelegramAgentBlueprint(telegramBlueprint)
 
           setDatabaseProject({
             id: automation.id,
@@ -508,7 +585,11 @@ export default function WorkflowProjectPage() {
           })
         }
       )
-      .catch(() => setDatabaseProject(null))
+      .catch(() => {
+        setDatabaseProject(null)
+        setTelegramAgentBlueprint(null)
+        setTelegramWebhookStatus(null)
+      })
       .finally(() => setIsLoadingProject(false))
   }, [apiFetch, fixtureProject, projectId])
 
@@ -593,6 +674,72 @@ export default function WorkflowProjectPage() {
   const canPaste = Boolean(copiedNode)
   const canUndo = historyPast.length > 0
   const canRedo = historyFuture.length > 0
+  const showTelegramAgentPanel = Boolean(telegramAgentBlueprint && selectedNode)
+  const telegramBotLink = useMemo(() => {
+    const bot = telegramWebhookStatus?.bot ?? telegramAgentBlueprint?.channel?.bot
+    if (!bot) return null
+    const username = bot.replace(/^@/, "").trim()
+    return username ? `https://t.me/${username}` : null
+  }, [telegramAgentBlueprint, telegramWebhookStatus])
+
+  const refreshTelegramWebhookStatus = useCallback(async () => {
+    if (!projectId || !telegramAgentBlueprint) return
+
+    setIsTelegramWebhookLoading(true)
+    setTelegramWebhookError(null)
+    try {
+      const response = await apiFetch(`/api/automations/${projectId}/telegram/webhook`)
+      const payload = (await response.json()) as {
+        data?: TelegramWebhookStatus
+        error?: { message?: string }
+      }
+
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error?.message ?? "Unable to load Telegram webhook status.")
+      }
+
+      setTelegramWebhookStatus(payload.data)
+    } catch (error) {
+      setTelegramWebhookError(
+        error instanceof Error ? error.message : "Unable to load Telegram webhook status."
+      )
+    } finally {
+      setIsTelegramWebhookLoading(false)
+    }
+  }, [apiFetch, projectId, telegramAgentBlueprint])
+
+  const activateTelegramWebhook = useCallback(async () => {
+    if (!projectId || !telegramAgentBlueprint) return
+
+    setIsActivatingTelegramWebhook(true)
+    setTelegramWebhookError(null)
+    try {
+      const response = await apiFetch(`/api/automations/${projectId}/telegram/webhook`, {
+        method: "POST",
+      })
+      const payload = (await response.json()) as {
+        data?: TelegramWebhookStatus
+        error?: { message?: string }
+      }
+
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error?.message ?? "Unable to activate Telegram webhook.")
+      }
+
+      setTelegramWebhookStatus(payload.data)
+    } catch (error) {
+      setTelegramWebhookError(
+        error instanceof Error ? error.message : "Unable to activate Telegram webhook."
+      )
+    } finally {
+      setIsActivatingTelegramWebhook(false)
+    }
+  }, [apiFetch, projectId, telegramAgentBlueprint])
+
+  useEffect(() => {
+    if (!telegramAgentBlueprint) return
+    void refreshTelegramWebhookStatus()
+  }, [refreshTelegramWebhookStatus, telegramAgentBlueprint])
 
   useEffect(() => {
     if (!isChatOpen) return
@@ -2343,6 +2490,165 @@ export default function WorkflowProjectPage() {
             </div>
           </ContextMenu5Wrapper>
         </section>
+        {showTelegramAgentPanel && (
+          <aside className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    Telegram agent
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {telegramWebhookStatus?.bot ??
+                      telegramAgentBlueprint?.channel?.bot ??
+                      "Connected bot"}
+                  </p>
+                </div>
+                <Badge
+                  variant={
+                    telegramWebhookStatus?.webhookConfigured ? "green" : "amber"
+                  }
+                >
+                  {telegramWebhookStatus?.webhookConfigured ? "Live" : "Setup"}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Bot</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">
+                      {telegramWebhookStatus?.bot ??
+                        telegramAgentBlueprint?.channel?.bot ??
+                        "Telegram"}
+                    </p>
+                  </div>
+                  {telegramBotLink ? (
+                    <a
+                      href={telegramBotLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                    >
+                      Open bot
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Webhook
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-foreground">
+                      {telegramWebhookStatus?.webhookConfigured
+                        ? "Telegram points to this agent"
+                        : "Activation needed"}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    disabled={isTelegramWebhookLoading}
+                    onClick={() => void refreshTelegramWebhookStatus()}
+                    aria-label="Refresh Telegram webhook status"
+                  >
+                    <RefreshCcw
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        isTelegramWebhookLoading && "animate-spin"
+                      )}
+                    />
+                  </Button>
+                </div>
+
+                <Input
+                  readOnly
+                  value={
+                    telegramWebhookStatus?.expectedWebhookUrl ??
+                    telegramAgentBlueprint?.channel?.webhookUrl ??
+                    ""
+                  }
+                  className="mt-3 h-8 bg-card text-xs"
+                />
+
+                {telegramWebhookStatus?.lastErrorMessage ? (
+                  <p className="mt-2 text-xs text-destructive">
+                    {telegramWebhookStatus.lastErrorMessage}
+                  </p>
+                ) : null}
+
+                {telegramWebhookError ? (
+                  <p className="mt-2 text-xs text-destructive">
+                    {telegramWebhookError}
+                  </p>
+                ) : null}
+
+                <Button
+                  type="button"
+                  className="mt-3 w-full"
+                  disabled={isActivatingTelegramWebhook}
+                  onClick={() => void activateTelegramWebhook()}
+                >
+                  {isActivatingTelegramWebhook ? (
+                    <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                  Activate Telegram webhook
+                </Button>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <p className="text-xs font-medium text-muted-foreground">Brain</p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {telegramAgentBlueprint?.brain?.mode === "agent_api"
+                      ? "Agent API"
+                      : "Atmet model"}
+                  </p>
+                  <Badge variant="blue">
+                    {telegramAgentBlueprint?.behavior?.autoReply === false
+                      ? "Manual"
+                      : "Auto reply"}
+                  </Badge>
+                </div>
+                {telegramAgentBlueprint?.brain?.mode === "agent_api" &&
+                telegramAgentBlueprint.brain.agentApiUrl ? (
+                  <p className="mt-2 break-all text-xs text-muted-foreground">
+                    {telegramAgentBlueprint.brain.agentApiUrl}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Instructions
+                </p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
+                  {telegramAgentBlueprint?.behavior?.instructions ??
+                    selectedNode?.prompt}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Test
+                </p>
+                <p className="mt-1 text-sm leading-6 text-foreground">
+                  Open the bot, press Start, then send a message. The reply should
+                  come from this automation while the webhook badge is Live.
+                </p>
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
       {isChatOpen && activeChatNode && (
         <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">

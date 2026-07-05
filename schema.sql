@@ -29,6 +29,34 @@ ON CONFLICT (id) DO UPDATE SET
   file_size_limit = EXCLUDED.file_size_limit,
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
+-- Private workspace files uploaded in chat.
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'workspace-files',
+  'workspace-files',
+  false,
+  262144000,
+  NULL
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- Public assets for default skills, including cover images and uploaded package files.
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'skill-assets',
+  'skill-assets',
+  true,
+  52428800,
+  NULL
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
 
 -- ============================================================
 -- 1. DROP EXISTING TABLES (reverse dependency order)
@@ -45,6 +73,12 @@ DROP TABLE IF EXISTS chat             CASCADE;
 DROP TABLE IF EXISTS schedule         CASCADE;
 DROP TABLE IF EXISTS automation       CASCADE;
 DROP TABLE IF EXISTS skill            CASCADE;
+DROP TABLE IF EXISTS integration_secret             CASCADE;
+DROP TABLE IF EXISTS oauth_state                   CASCADE;
+DROP TABLE IF EXISTS integration_action_definition CASCADE;
+DROP TABLE IF EXISTS integration_trigger_definition CASCADE;
+DROP TABLE IF EXISTS workspace_integration         CASCADE;
+DROP TABLE IF EXISTS integration_provider          CASCADE;
 DROP TABLE IF EXISTS integration      CASCADE;
 DROP TABLE IF EXISTS invitation       CASCADE;
 DROP TABLE IF EXISTS waitlist         CASCADE;
@@ -115,6 +149,7 @@ CREATE TABLE workspace (
 -- Supabase Auth owns all auth logic; this table holds display data only
 CREATE TABLE users (
   id                   uuid                     PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  public_user_id       text                     UNIQUE CHECK (public_user_id ~ '^[0-9]{8}$'),
   email                text                     NOT NULL,
   full_name            text,
   avatar_url           text,
@@ -128,6 +163,33 @@ CREATE TABLE users (
   created_at           timestamp with time zone NOT NULL DEFAULT now(),
   updated_at           timestamp with time zone NOT NULL DEFAULT now()
 );
+
+CREATE OR REPLACE FUNCTION generate_public_user_id()
+RETURNS trigger AS $$
+DECLARE
+  year_prefix text;
+  next_number integer;
+BEGIN
+  IF NEW.public_user_id IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
+
+  year_prefix := to_char(COALESCE(NEW.created_at, now()), 'YY');
+
+  SELECT COALESCE(MAX(substring(public_user_id from 3)::integer), 0) + 1
+  INTO next_number
+  FROM users
+  WHERE left(public_user_id, 2) = year_prefix;
+
+  NEW.public_user_id := year_prefix || lpad(next_number::text, 6, '0');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER users_public_user_id_before_insert
+  BEFORE INSERT ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION generate_public_user_id();
 
 -- waitlist: public sign-up requests reviewed by super admins before access is granted
 CREATE TABLE waitlist (
@@ -189,20 +251,97 @@ CREATE TABLE invitation (
   created_at   timestamp with time zone NOT NULL DEFAULT now()
 );
 
--- integration: persistent record of connected third-party services
--- credentials stored as jsonb — encrypt sensitive fields at app layer
-CREATE TABLE integration (
+-- integration_provider: global catalog of apps Atmet knows how to connect.
+-- Runtime code may upsert from the TypeScript catalog so every provider keeps
+-- one stable DB identity even when each app has unique setup metadata.
+CREATE TABLE integration_provider (
+  id          uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug        text                     UNIQUE NOT NULL, -- e.g. 'gmail', 'slack'
+  name        text                     NOT NULL,
+  auth_type   integration_auth_type    NOT NULL,
+  category    text                     NOT NULL DEFAULT 'generic',
+  logo_url    text,
+  description text,
+  status      text                     NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'beta', 'disabled')),
+  config      jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  created_at  timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at  timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- workspace_integration: a provider connected/configured inside one workspace.
+-- Non-secret provider-specific settings live in settings; credentials do not.
+CREATE TABLE workspace_integration (
+  id                uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id      uuid                     NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+  provider_id       uuid                     NOT NULL REFERENCES integration_provider(id) ON DELETE RESTRICT,
+  created_by        uuid                     NOT NULL REFERENCES users(id),
+  status            integration_status       NOT NULL DEFAULT 'active',
+  connected_account text,
+  settings          jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  connected_at      timestamp with time zone,
+  created_at        timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at        timestamp with time zone NOT NULL DEFAULT now(),
+  UNIQUE (workspace_id, provider_id)
+);
+
+-- integration_secret: encrypted OAuth tokens, API keys, webhook signing secrets,
+-- and other credential payloads. Only trusted server-side code should read this.
+CREATE TABLE integration_secret (
+  id                       uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_integration_id uuid                     NOT NULL REFERENCES workspace_integration(id) ON DELETE CASCADE,
+  secret_type              text                     NOT NULL CHECK (secret_type IN ('oauth_token', 'api_key', 'webhook_secret')),
+  encrypted_value          jsonb                    NOT NULL,
+  expires_at               timestamp with time zone,
+  last_refreshed_at        timestamp with time zone,
+  created_at               timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at               timestamp with time zone NOT NULL DEFAULT now(),
+  UNIQUE (workspace_integration_id, secret_type)
+);
+
+-- oauth_state: short-lived handshake records used to validate OAuth callbacks.
+CREATE TABLE oauth_state (
+  id             uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  state          text                     UNIQUE NOT NULL,
+  workspace_id   uuid                     NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+  provider_id    uuid                     NOT NULL REFERENCES integration_provider(id) ON DELETE CASCADE,
+  user_id        uuid                     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  redirect_after text,
+  expires_at     timestamp with time zone NOT NULL,
+  consumed_at    timestamp with time zone,
+  created_at     timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at     timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- integration_trigger_definition/action_definition: provider-specific workflow
+-- capabilities. The JSON schemas allow Gmail, Slack, Notion, etc. to each define
+-- unique setup fields without needing one table per app.
+CREATE TABLE integration_trigger_definition (
   id           uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
-  workspace_id uuid                     NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
-  created_by   uuid                     NOT NULL REFERENCES users(id),
-  slug         text                     NOT NULL,  -- e.g. 'gmail', 'slack'
-  auth_type    integration_auth_type    NOT NULL,
-  credentials  jsonb,                             -- store encrypted token/key data
-  status       integration_status       NOT NULL DEFAULT 'active',
-  connected_at timestamp with time zone,
+  provider_id  uuid                     NOT NULL REFERENCES integration_provider(id) ON DELETE CASCADE,
+  key          text                     NOT NULL,
+  name         text                     NOT NULL,
+  description  text,
+  input_schema jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  config       jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  status       text                     NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at   timestamp with time zone NOT NULL DEFAULT now(),
   updated_at   timestamp with time zone NOT NULL DEFAULT now(),
-  UNIQUE (workspace_id, slug)
+  UNIQUE (provider_id, key)
+);
+
+CREATE TABLE integration_action_definition (
+  id            uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider_id   uuid                     NOT NULL REFERENCES integration_provider(id) ON DELETE CASCADE,
+  key           text                     NOT NULL,
+  name          text                     NOT NULL,
+  description   text,
+  input_schema  jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  output_schema jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  config        jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  status        text                     NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+  created_at    timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at    timestamp with time zone NOT NULL DEFAULT now(),
+  UNIQUE (provider_id, key)
 );
 
 
@@ -239,15 +378,22 @@ CREATE TABLE message (
 -- skill: definition column renamed from 'skill' to avoid name clash with table
 CREATE TABLE skill (
   id           uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
-  workspace_id uuid                     NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+  workspace_id uuid                              REFERENCES workspace(id) ON DELETE CASCADE,
   created_by   uuid                     NOT NULL REFERENCES users(id),
   name         text                     NOT NULL,
   description  text,
   definition   jsonb,                             -- was 'skill jsonb' — renamed to avoid conflict
   type         skill_type               NOT NULL,
+  scope        text                     NOT NULL DEFAULT 'workspace' CHECK (scope IN ('system', 'workspace', 'user')),
+  image_url    text,
   status       skill_status             NOT NULL DEFAULT 'active',
   created_at   timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at   timestamp with time zone NOT NULL DEFAULT now()
+  updated_at   timestamp with time zone NOT NULL DEFAULT now(),
+  CHECK (
+    (scope = 'system' AND workspace_id IS NULL)
+    OR
+    (scope <> 'system' AND workspace_id IS NOT NULL)
+  )
 );
 
 -- automation: no direct chat_id — use chats_automation junction table
@@ -362,8 +508,17 @@ CREATE INDEX ON schedule (workspace_id);
 CREATE INDEX ON schedule (automation_id);
 
 CREATE INDEX ON skill (workspace_id);
+CREATE INDEX ON skill (scope);
 
-CREATE INDEX ON integration (workspace_id);
+CREATE INDEX ON integration_provider (slug);
+CREATE INDEX ON workspace_integration (workspace_id);
+CREATE INDEX ON workspace_integration (provider_id);
+CREATE INDEX ON workspace_integration (status);
+CREATE INDEX ON integration_secret (workspace_integration_id);
+CREATE INDEX ON oauth_state (state);
+CREATE INDEX ON oauth_state (expires_at);
+CREATE INDEX ON integration_trigger_definition (provider_id);
+CREATE INDEX ON integration_action_definition (provider_id);
 
 CREATE INDEX ON api_key (workspace_id);
 
@@ -388,7 +543,12 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_workspace_updated_at  BEFORE UPDATE ON workspace  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 CREATE TRIGGER trg_users_updated_at      BEFORE UPDATE ON users      FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
-CREATE TRIGGER trg_integration_updated_at BEFORE UPDATE ON integration FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_integration_provider_updated_at BEFORE UPDATE ON integration_provider FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_workspace_integration_updated_at BEFORE UPDATE ON workspace_integration FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_integration_secret_updated_at BEFORE UPDATE ON integration_secret FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_oauth_state_updated_at BEFORE UPDATE ON oauth_state FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_integration_trigger_definition_updated_at BEFORE UPDATE ON integration_trigger_definition FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_integration_action_definition_updated_at BEFORE UPDATE ON integration_action_definition FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 CREATE TRIGGER trg_chat_updated_at       BEFORE UPDATE ON chat       FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 CREATE TRIGGER trg_message_updated_at    BEFORE UPDATE ON message    FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 CREATE TRIGGER trg_skill_updated_at      BEFORE UPDATE ON skill      FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
@@ -485,7 +645,12 @@ ALTER TABLE users           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workspace_member ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_presence   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invitation      ENABLE ROW LEVEL SECURITY;
-ALTER TABLE integration     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE integration_provider ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workspace_integration ENABLE ROW LEVEL SECURITY;
+ALTER TABLE integration_secret ENABLE ROW LEVEL SECURITY;
+ALTER TABLE oauth_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE integration_trigger_definition ENABLE ROW LEVEL SECURITY;
+ALTER TABLE integration_action_definition ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE skill           ENABLE ROW LEVEL SECURITY;
@@ -584,22 +749,37 @@ CREATE POLICY "invitation: admins can update/revoke"
   ON invitation FOR UPDATE
   USING (is_workspace_admin(workspace_id));
 
--- ── integration ────────────────────────────────────────────
-CREATE POLICY "integration: members can view"
-  ON integration FOR SELECT
+-- ── integrations ───────────────────────────────────────────
+CREATE POLICY "integration_provider: everyone can view active providers"
+  ON integration_provider FOR SELECT
+  USING (status <> 'disabled');
+
+CREATE POLICY "integration_trigger_definition: everyone can view active triggers"
+  ON integration_trigger_definition FOR SELECT
+  USING (status = 'active');
+
+CREATE POLICY "integration_action_definition: everyone can view active actions"
+  ON integration_action_definition FOR SELECT
+  USING (status = 'active');
+
+CREATE POLICY "workspace_integration: members can view"
+  ON workspace_integration FOR SELECT
   USING (is_workspace_member(workspace_id));
 
-CREATE POLICY "integration: admins can connect"
-  ON integration FOR INSERT
+CREATE POLICY "workspace_integration: admins can connect"
+  ON workspace_integration FOR INSERT
   WITH CHECK (is_workspace_admin(workspace_id) AND created_by = auth.uid());
 
-CREATE POLICY "integration: admins can update"
-  ON integration FOR UPDATE
+CREATE POLICY "workspace_integration: admins can update"
+  ON workspace_integration FOR UPDATE
   USING (is_workspace_admin(workspace_id));
 
-CREATE POLICY "integration: admins can disconnect"
-  ON integration FOR DELETE
+CREATE POLICY "workspace_integration: admins can disconnect"
+  ON workspace_integration FOR DELETE
   USING (is_workspace_admin(workspace_id));
+
+-- integration_secret and oauth_state intentionally have no user-facing
+-- policies. They are managed only by trusted server-side service-role code.
 
 -- ── chat ───────────────────────────────────────────────────
 CREATE POLICY "chat: members can view workspace chats"
@@ -642,19 +822,19 @@ CREATE POLICY "message: workspace members can insert"
 -- ── skill ──────────────────────────────────────────────────
 CREATE POLICY "skill: members can view"
   ON skill FOR SELECT
-  USING (is_workspace_member(workspace_id));
+  USING (scope = 'system' OR is_workspace_member(workspace_id));
 
 CREATE POLICY "skill: members can create"
   ON skill FOR INSERT
-  WITH CHECK (is_workspace_member(workspace_id) AND created_by = auth.uid());
+  WITH CHECK (scope <> 'system' AND is_workspace_member(workspace_id) AND created_by = auth.uid());
 
 CREATE POLICY "skill: creator or admin can update"
   ON skill FOR UPDATE
-  USING (created_by = auth.uid() OR is_workspace_admin(workspace_id));
+  USING (scope <> 'system' AND (created_by = auth.uid() OR is_workspace_admin(workspace_id)));
 
 CREATE POLICY "skill: creator or admin can delete"
   ON skill FOR DELETE
-  USING (created_by = auth.uid() OR is_workspace_admin(workspace_id));
+  USING (scope <> 'system' AND (created_by = auth.uid() OR is_workspace_admin(workspace_id)));
 
 -- ── automation ─────────────────────────────────────────────
 CREATE POLICY "automation: members can view"

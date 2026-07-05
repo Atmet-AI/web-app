@@ -26,4 +26,5 @@ export const oauthCallbackSchema = z.object({
     .refine((c) => !c.trim().startsWith("fail"), {
       message: "OAuth authorization failed. Please try again.",
     }),
+  state: z.string().min(16, "OAuth state is required"),
 })

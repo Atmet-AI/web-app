@@ -3,6 +3,7 @@ import { getUser } from "@/lib/api/auth"
 import { getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
+import { ensureIntegrationProvider } from "@/lib/integrations/providers"
 
 export async function GET(
   request: NextRequest,
@@ -27,12 +28,13 @@ export async function GET(
   }
 
   const { supabase } = auth
+  const provider = await ensureIntegrationProvider(catalog)
 
   const { data: db } = await supabase
-    .from("integration")
-    .select("status, connected_at")
+    .from("workspace_integration")
+    .select("status, connected_at, connected_account, settings")
     .eq("workspace_id", ws.workspaceId)
-    .eq("slug", slug)
+    .eq("provider_id", provider.id)
     .maybeSingle()
 
   return ok({
@@ -41,6 +43,8 @@ export async function GET(
       connected: !!db,
       status: db?.status ?? undefined,
       connected_at: db?.connected_at ?? undefined,
+      connected_account: db?.connected_account ?? undefined,
+      settings: db?.settings ?? undefined,
     },
   })
 }
@@ -55,14 +59,19 @@ export async function DELETE(
   const ws = getWorkspaceId(request)
   if (!ws.ok) return ws.response
 
-  const { supabase } = auth
   const { slug } = await params
 
+  const catalog = getCatalogIntegration(slug)
+  if (!catalog) return Errors.notFound("Integration")
+
+  const { supabase } = auth
+  const provider = await ensureIntegrationProvider(catalog)
+
   const { error } = await supabase
-    .from("integration")
+    .from("workspace_integration")
     .delete()
     .eq("workspace_id", ws.workspaceId)
-    .eq("slug", slug)
+    .eq("provider_id", provider.id)
 
   if (error) return Errors.internal()
 

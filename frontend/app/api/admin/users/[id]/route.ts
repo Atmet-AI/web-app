@@ -171,7 +171,7 @@ export async function DELETE(
 
   await Promise.all([
     supabaseAdmin.from("invitation").update({ invited_by: auth.user.id }).eq("invited_by", targetUserId),
-    supabaseAdmin.from("integration").update({ created_by: auth.user.id }).eq("created_by", targetUserId),
+    supabaseAdmin.from("workspace_integration").update({ created_by: auth.user.id }).eq("created_by", targetUserId),
     supabaseAdmin.from("chat").update({ created_by: auth.user.id }).eq("created_by", targetUserId),
     supabaseAdmin.from("skill").update({ created_by: auth.user.id }).eq("created_by", targetUserId),
     supabaseAdmin.from("automation").update({ created_by: auth.user.id }).eq("created_by", targetUserId),
