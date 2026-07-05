@@ -36,10 +36,18 @@ export function VersionSwitcher({
   workspaces,
   selectedWorkspaceId,
   onSelectedWorkspaceIdChange,
+  onCreateWorkspace,
+  onAddUsersToWorkspace,
+  onOpenWorkspaceProfile,
+  showWorkspaceActions = true,
 }: {
   workspaces: WorkspaceSwitcherItem[]
   selectedWorkspaceId: string
   onSelectedWorkspaceIdChange: (workspaceId: string) => void
+  onCreateWorkspace?: () => void
+  onAddUsersToWorkspace?: () => void
+  onOpenWorkspaceProfile?: () => void
+  showWorkspaceActions?: boolean
 }) {
   const { state, toggleSidebar } = useSidebar()
   const selectedWorkspace =
@@ -65,14 +73,14 @@ export function VersionSwitcher({
       <SidebarMenu>
         <SidebarMenuItem>
           <div className="flex w-full justify-center py-1">
-            <Avatar className="size-7 !rounded-md ring-1 ring-border/60 after:!rounded-md">
+            <Avatar className="size-6 !rounded-md ring-1 ring-border/60 after:!rounded-md">
               <AvatarImage
                 src={selectedWorkspace.avatarUrl ?? undefined}
                 alt={`${selectedWorkspace.name} avatar`}
                 className="!rounded-md object-cover"
               />
               <AvatarFallback
-                className={`!rounded-md text-xs font-semibold ${collapsedClasses.bgClass} ${collapsedClasses.textClass}`}
+                className={`!rounded-md text-[11px] font-semibold ${collapsedClasses.bgClass} ${collapsedClasses.textClass}`}
               >
                 {getWorkspaceFallback(selectedWorkspace)}
               </AvatarFallback>
@@ -97,14 +105,14 @@ export function VersionSwitcher({
                 />
               }
             >
-              <Avatar className="size-7 shrink-0 !rounded-md ring-1 ring-border/60 after:!rounded-md">
+              <Avatar className="size-6 shrink-0 !rounded-md ring-1 ring-border/60 after:!rounded-md">
                 <AvatarImage
                   src={selectedWorkspace.avatarUrl ?? undefined}
                   alt={`${selectedWorkspace.name} avatar`}
                   className="!rounded-md object-cover"
                 />
                 <AvatarFallback
-                  className={`!rounded-md text-xs font-semibold ${triggerClasses.bgClass} ${triggerClasses.textClass}`}
+                  className={`!rounded-md text-[11px] font-semibold ${triggerClasses.bgClass} ${triggerClasses.textClass}`}
                 >
                   {getWorkspaceFallback(selectedWorkspace)}
                 </AvatarFallback>
@@ -118,7 +126,7 @@ export function VersionSwitcher({
               {workspaces.map((workspace) => (
                 <DropdownMenuItem
                   key={workspace.id}
-                  onSelect={() => onSelectedWorkspaceIdChange(workspace.id)}
+                  onClick={() => onSelectedWorkspaceIdChange(workspace.id)}
                   className="flex items-center justify-between"
                 >
                   <span className="flex items-center gap-2">
@@ -143,15 +151,23 @@ export function VersionSwitcher({
                   )}
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Plus className="h-4 w-4 opacity-80" />
-                Create workspace
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Users className="h-4 w-4 opacity-80" />
-                Add users to workspace
-              </DropdownMenuItem>
+              {showWorkspaceActions ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onCreateWorkspace}>
+                    <Plus className="h-4 w-4 opacity-80" />
+                    Create workspace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onAddUsersToWorkspace}>
+                    <Users className="h-4 w-4 opacity-80" />
+                    Add users to workspace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onOpenWorkspaceProfile}>
+                    <Crown className="h-4 w-4 opacity-80" />
+                    Workspace profile
+                  </DropdownMenuItem>
+                </>
+              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="justify-between gap-3"

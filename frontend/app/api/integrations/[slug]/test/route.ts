@@ -1,26 +1,52 @@
-import { NextResponse } from "next/server"
+import { type NextRequest } from "next/server"
+import { getUser } from "@/lib/api/auth"
+import { getWorkspaceId } from "@/lib/api/workspace"
+import { ok, Errors } from "@/lib/api/response"
+import { getCatalogIntegration } from "@/lib/integrations-catalog"
+import { formatTelegramBotAccount, getTelegramBotInfo } from "@/lib/integrations/telegram"
+import { testApiKeySchema } from "@/lib/validations/integration"
 
-import { testApiKeyConnection } from "@/lib/integrations-store"
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const auth = await getUser()
+  if (!auth.ok) return auth.response
 
-export async function POST(request: Request, context: { params: Promise<{ slug: string }> }) {
-  const { slug } = await context.params
+  const ws = getWorkspaceId(request)
+  if (!ws.ok) return ws.response
 
-  let payload: { apiKey?: string }
+  const { slug } = await params
 
+  const catalog = getCatalogIntegration(slug)
+  if (!catalog) return Errors.notFound("Integration")
+  if (catalog.authType !== "apikey") {
+    return Errors.badRequest("This integration does not support API key authentication.")
+  }
+
+  let body: unknown
   try {
-    payload = (await request.json()) as { apiKey?: string }
+    body = await request.json()
   } catch {
-    return NextResponse.json(
-      { success: false, message: "Invalid request body." },
-      { status: 400 }
-    )
+    return Errors.badRequest("Invalid JSON body.")
   }
 
-  const result = testApiKeyConnection(slug, payload.apiKey ?? "")
+  const parsed = testApiKeySchema.safeParse(body)
+  if (!parsed.success) return Errors.validationError(parsed.error.issues[0].message)
 
-  if (!result.success) {
-    return NextResponse.json(result, { status: 400 })
+  if (slug === "telegram") {
+    try {
+      const bot = await getTelegramBotInfo(parsed.data.apiKey)
+
+      return ok({
+        success: true,
+        message: `Connected to ${formatTelegramBotAccount(bot)}.`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Telegram connection failed."
+      return Errors.badRequest(message)
+    }
   }
 
-  return NextResponse.json(result)
+  return ok({ success: true, message: "Connection successful." })
 }

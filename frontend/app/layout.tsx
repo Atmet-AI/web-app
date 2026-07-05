@@ -8,6 +8,7 @@ import { PlatformNavbar } from "@/components/platform-navbar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { WorkspaceProvider } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 
 const fontSans = Geist({
@@ -21,10 +22,51 @@ const fontMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://atmetai.com"),
+  title: {
+    default: "Atmet",
+    template: "%s | Atmet",
+  },
+  description: "Atmet helps teams build, automate, and operate AI-powered workflows.",
+  alternates: {
+    canonical: "/",
+  },
   icons: {
-    icon: "/Logos/Favicon%20Atmet.png",
-    shortcut: "/Logos/Favicon%20Atmet.png",
-    apple: "/Logos/Favicon%20Atmet.png",
+    icon: [
+      {
+        url: "/faciconatmet.png",
+        type: "image/png",
+      },
+    ],
+    shortcut: "/faciconatmet.png",
+    apple: [
+      {
+        url: "/faciconatmet.png",
+        type: "image/png",
+      },
+    ],
+  },
+  openGraph: {
+    type: "website",
+    url: "https://atmetai.com",
+    siteName: "Atmet",
+    title: "Atmet",
+    description: "Build, automate, and operate AI-powered workflows with Atmet.",
+    images: [
+      {
+        url: "/Atmet%20Preview%20Link.png",
+        width: 1200,
+        height: 630,
+        alt: "Atmet preview",
+        type: "image/png",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Atmet",
+    description: "Build, automate, and operate AI-powered workflows with Atmet.",
+    images: ["/Atmet%20Preview%20Link.png"],
   },
 }
 
@@ -41,6 +83,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
+          <WorkspaceProvider>
           <TooltipProvider>
             <SidebarProvider>
               <Suspense fallback={null}>
@@ -54,6 +97,7 @@ export default function RootLayout({
               </SidebarInset>
             </SidebarProvider>
           </TooltipProvider>
+          </WorkspaceProvider>
         </ThemeProvider>
       </body>
     </html>

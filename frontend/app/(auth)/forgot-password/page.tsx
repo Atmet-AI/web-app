@@ -3,22 +3,49 @@
 import Link from "next/link"
 import { AnimatePresence, motion } from "motion/react"
 import { ArrowLeft, Check, CornerDownLeft, Loader2 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { Label } from "@/components/ui/label"
+import { createClient } from "@/lib/supabase/client"
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+function isLocalUrl(value: string) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?/i.test(value)
+}
+
+function getResetRedirectUrl() {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  const currentOrigin = window.location.origin
+  const allowLocalRedirect = process.env.NEXT_PUBLIC_ALLOW_LOCAL_AUTH_REDIRECT === "true"
+
+  if (configuredUrl && (!isLocalUrl(configuredUrl) || allowLocalRedirect)) {
+    return `${configuredUrl.replace(/\/$/, "")}/reset-password`
+  }
+
+  if (!isLocalUrl(currentOrigin)) {
+    return `${currentOrigin.replace(/\/$/, "")}/reset-password`
+  }
+
+  return "https://atmetai.com/reset-password"
+}
+
 export default function ForgotPasswordPage() {
+  const supabase = useMemo(() => createClient(), [])
   const [email, setEmail] = useState("")
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+
+  useEffect(() => {
+    const emailParam = new URLSearchParams(window.location.search).get("email")
+    if (emailParam) setEmail(emailParam)
+  }, [])
 
   const handleSubmit = async () => {
     if (!email.trim()) {
@@ -32,9 +59,17 @@ export default function ForgotPasswordPage() {
     if (isSubmitting) return
 
     setIsSubmitting(true)
-    await new Promise((resolve) => window.setTimeout(resolve, 500))
-    setIsSubmitting(false)
-    setIsSubmitted(true)
+    try {
+      await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: getResetRedirectUrl(),
+      })
+      // Always show success — don't leak whether the email exists
+      setIsSubmitted(true)
+    } catch {
+      setError("Something went wrong. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (

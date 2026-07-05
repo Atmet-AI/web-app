@@ -16,7 +16,14 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { Integration, IntegrationCategory } from "@/lib/integrations-store"
+import type { CatalogIntegration, IntegrationCategory } from "@/lib/integrations-catalog"
+import { useWorkspace } from "@/lib/workspace-context"
+
+type Integration = CatalogIntegration & {
+  connected?: boolean
+  status?: string
+  connected_at?: string
+}
 
 const categoryLabels: Record<IntegrationCategory, string> = {
   communication: "Communication",
@@ -32,6 +39,7 @@ function getAuthTypeLabel(authType: Integration["authType"]) {
 }
 
 export default function AppsPage() {
+  const { apiFetch } = useWorkspace()
   const [integrations, setIntegrations] = React.useState<Integration[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
@@ -44,21 +52,21 @@ export default function AppsPage() {
     setErrorMessage(null)
 
     try {
-      const response = await fetch("/api/integrations", { cache: "no-store" })
+      const response = await apiFetch("/api/integrations")
 
       if (!response.ok) {
         throw new Error("Failed to fetch integrations.")
       }
 
-      const data = (await response.json()) as Integration[]
-      setIntegrations(data)
+      const res = (await response.json()) as { data?: { integrations: Integration[] } }
+      setIntegrations(res.data?.integrations ?? [])
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong."
       setErrorMessage(message)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [apiFetch])
 
   React.useEffect(() => {
     void loadIntegrations()

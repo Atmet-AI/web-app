@@ -83,8 +83,18 @@ export default function SettingsIntegrationsPage() {
         throw new Error("Failed to load integrations.")
       }
 
-      const data = (await response.json()) as Integration[]
-      setIntegrations(data)
+      const data = (await response.json()) as {
+        data?: {
+          integrations?: Array<Integration & { connected_at?: string }>
+        }
+      }
+
+      setIntegrations(
+        (data.data?.integrations ?? []).map((integration) => ({
+          ...integration,
+          connectedAt: integration.connected_at ?? integration.connectedAt,
+        }))
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load integrations."
       setErrorMessage(message)

@@ -5,6 +5,9 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import packageJson from "@/package.json"
+import { useWorkspace } from "@/lib/workspace-context"
+import { countries } from "@/lib/countries"
+import { buildInternationalPhone, buildWhatsappUrl, getPhoneCountry } from "@/lib/phone-countries"
 
 import { SearchForm } from "@/components/search-form"
 import {
@@ -77,7 +80,6 @@ import {
   IconChevronUp,
   IconCopy,
   IconCreditCard,
-  IconDatabase,
   IconDownload,
   IconDots,
   IconFileText,
@@ -113,8 +115,8 @@ import {
   Hash,
   KeyRound,
   Languages,
+  Loader2,
   Mail,
-  MessageSquare,
   Monitor,
   MoreHorizontal,
   Palette,
@@ -128,6 +130,7 @@ import {
   Share2,
   SlidersHorizontal,
   Trash2,
+  Upload,
   User,
   UserPlus,
 } from "lucide-react"
@@ -185,12 +188,11 @@ const baseSettingsSections = [
   "Help Docs",
   "Contact Support",
 ] as const
-const settingsSections = baseSettingsSections
-type SettingsSection = (typeof settingsSections)[number]
+type SettingsSection = (typeof baseSettingsSections)[number]
 const adminConsoleGroups = [
   {
     label: "Overview",
-    sections: ["Admin overview", "Workspace provisioning"],
+    sections: ["Admin overview", "Workspace provisioning", "Requests"],
   },
   {
     label: "Users & workspaces",
@@ -203,21 +205,6 @@ const adminConsoleGroups = [
 ] as const
 type AdminConsoleGroup = (typeof adminConsoleGroups)[number]
 type AdminConsoleSection = AdminConsoleGroup["sections"][number]
-const currentUser = {
-  name: "Amir Haddad",
-  role: "Operations Manager",
-  initials: "AH",
-}
-const accountProfile = {
-  firstName: "Amir",
-  lastName: "Haddad",
-  email: "amir.haddad@atmet.ai",
-  phoneNumber: "+962 7 9000 1234",
-  role: "Operations Manager",
-  userId: "usr_8f29ab01c7",
-  avatarUrl:
-    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80",
-}
 type WorkspaceProfile = WorkspaceSwitcherItem & {
   primaryEmail: string
   description: string
@@ -236,58 +223,6 @@ const workspaceCountries = [
   "Australia",
   "Singapore",
 ] as const
-
-const initialWorkspaces: WorkspaceProfile[] = [
-  {
-    id: "documentation",
-    name: "Documentation",
-    primaryEmail: "workspace@atmet.ai",
-    description:
-      "Main workspace for collaboration, automations, and shared project operations.",
-    country: "Jordan",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1556155092-490a1ba16284?auto=format&fit=crop&w=256&q=80",
-    initials: "D",
-    bgClass: "bg-sky-500/20",
-    textClass: "text-sky-700 dark:text-sky-300",
-  },
-  {
-    id: "product",
-    name: "Product",
-    primaryEmail: "product@atmet.ai",
-    description:
-      "Plans releases, collects product feedback, and prioritizes roadmap delivery.",
-    country: "United Arab Emirates",
-    avatarUrl: null,
-    initials: "P",
-    bgClass: "bg-indigo-500/20",
-    textClass: "text-indigo-700 dark:text-indigo-300",
-  },
-  {
-    id: "operations",
-    name: "Operations",
-    primaryEmail: "operations@atmet.ai",
-    description:
-      "Runs operations playbooks, support workflows, and internal service quality.",
-    country: "Jordan",
-    avatarUrl: null,
-    initials: "O",
-    bgClass: "bg-emerald-500/20",
-    textClass: "text-emerald-700 dark:text-emerald-300",
-  },
-  {
-    id: "marketing",
-    name: "Marketing",
-    primaryEmail: "marketing@atmet.ai",
-    description:
-      "Owns campaign planning, brand assets, and performance reporting pipelines.",
-    country: "United States",
-    avatarUrl: null,
-    initials: "M",
-    bgClass: "bg-amber-500/20",
-    textClass: "text-amber-700 dark:text-amber-300",
-  },
-]
 
 function deriveInitialsFromName(name: string) {
   const tokens = name
@@ -311,14 +246,14 @@ type WorkspaceMemberApp = {
 type PlatformRole =
   | "Super Admin"
   | "Admin"
-  | "Workspace Admin"
-  | "Workspace Member"
+  | "Owner"
+  | "Member"
 
 const platformRoles: readonly PlatformRole[] = [
   "Super Admin",
   "Admin",
-  "Workspace Admin",
-  "Workspace Member",
+  "Owner",
+  "Member",
 ]
 
 type WorkspaceMember = {
@@ -382,7 +317,7 @@ const workspaceMembers: WorkspaceMember[] = [
     id: "mem_002",
     name: "Lina Saad",
     email: "lina.saad@atmet.ai",
-    role: "Admin",
+    role: "Admin" as PlatformRole,
     profileRole: "Product Lead",
     lastLogin: "Today, 09:15 AM",
     initials: "LS",
@@ -414,7 +349,7 @@ const workspaceMembers: WorkspaceMember[] = [
     id: "mem_003",
     name: "Omar Khaled",
     email: "omar.khaled@atmet.ai",
-    role: "Workspace Admin",
+    role: "Owner" as PlatformRole,
     profileRole: "Operations Specialist",
     lastLogin: "Yesterday, 07:40 PM",
     initials: "OK",
@@ -446,7 +381,7 @@ const workspaceMembers: WorkspaceMember[] = [
     id: "mem_004",
     name: "Yara Nasser",
     email: "yara.nasser@atmet.ai",
-    role: "Workspace Member",
+    role: "Member" as PlatformRole,
     profileRole: "Marketing Specialist",
     lastLogin: "Yesterday, 11:05 AM",
     initials: "YN",
@@ -478,7 +413,7 @@ const workspaceMembers: WorkspaceMember[] = [
     id: "mem_005",
     name: "Fadi Mourad",
     email: "fadi.mourad@atmet.ai",
-    role: "Workspace Admin",
+    role: "Owner" as PlatformRole,
     profileRole: "Engineering Manager",
     lastLogin: "Mar 24, 2026",
     initials: "FM",
@@ -558,6 +493,7 @@ const adminConsoleSectionIcons: Record<
 > = {
   "Admin overview": IconLayoutDashboard,
   "Workspace provisioning": IconBuilding,
+  "Requests": IconListDetails,
   "Users & workspaces": IconUsers,
   "Roles & permissions": IconShield,
   "Access policies": IconLock,
@@ -569,6 +505,8 @@ const adminConsoleDescriptions: Record<AdminConsoleSection, string> = {
     "Monitor workspace health, recent activity, and common admin actions.",
   "Workspace provisioning":
     "Create workspaces, assign initial users, and configure access, API, and usage defaults.",
+  "Requests":
+    "Review waitlist submissions and approve or reject access requests.",
   "Users & workspaces":
     "Manage users, workspace assignments, invitations, roles, and account status.",
   "Roles & permissions":
@@ -578,51 +516,19 @@ const adminConsoleDescriptions: Record<AdminConsoleSection, string> = {
   "Usage & limits":
     "Track usage by resource and member, then adjust workspace limits.",
 }
-const usageRangeStats = {
-  "This week": {
-    creditsUsed: 1820,
-    creditsLimit: 5000,
-    apiRequests: 124000,
-    apiLimit: 300000,
-    storageUsedGb: 38,
-    storageLimitGb: 120,
-    automationsActive: 29,
-    automationsLimit: 60,
-  },
-  "This month": {
-    creditsUsed: 7420,
-    creditsLimit: 20000,
-    apiRequests: 486000,
-    apiLimit: 1200000,
-    storageUsedGb: 42,
-    storageLimitGb: 120,
-    automationsActive: 31,
-    automationsLimit: 60,
-  },
-  "All time": {
-    creditsUsed: 52840,
-    creditsLimit: 120000,
-    apiRequests: 2860000,
-    apiLimit: 5000000,
-    storageUsedGb: 57,
-    storageLimitGb: 120,
-    automationsActive: 33,
-    automationsLimit: 60,
-  },
-} as const
 const usageLimitsRows = [
   {
     key: "credits",
-    label: "Credits",
+    label: "Tokens",
     limitKey: "creditsLimit" as const,
     usedKey: "creditsUsed" as const,
     unit: "",
   },
   {
-    key: "requests",
-    label: "API requests",
-    limitKey: "apiLimit" as const,
-    usedKey: "apiRequests" as const,
+    key: "files",
+    label: "Files",
+    limitKey: "filesLimit" as const,
+    usedKey: "filesUsed" as const,
     unit: "",
   },
   {
@@ -631,13 +537,6 @@ const usageLimitsRows = [
     limitKey: "storageLimitGb" as const,
     usedKey: "storageUsedGb" as const,
     unit: "GB",
-  },
-  {
-    key: "automations",
-    label: "Active automations",
-    limitKey: "automationsLimit" as const,
-    usedKey: "automationsActive" as const,
-    unit: "",
   },
 ] as const
 
@@ -649,9 +548,9 @@ type StoredChatItem = {
   path?: string
 }
 
-const AI_CORE_CHATS_STORAGE_KEY = "ai-core-chats"
 const AI_CORE_CHATS_UPDATED_EVENT = "ai-core-chats-updated"
 const OPEN_SETTINGS_PANEL_EVENT = "open-settings-panel"
+const PLATFORM_ADMIN_WORKSPACE_ID = "__platform_admin__"
 
 type OpenSettingsPanelDetail = {
   section?: SettingsSection
@@ -800,6 +699,7 @@ function applyGlobalFontScale(fontScale: FontScale) {
 }
 
 function AccountSettingsContent() {
+  const imageInputRef = React.useRef<HTMLInputElement>(null)
   const roleOptions = [
     "Operations Manager",
     "Product Manager",
@@ -808,24 +708,69 @@ function AccountSettingsContent() {
     "Marketing Manager",
     "Other",
   ] as const
+  const [userId, setUserId] = React.useState("")
+  const [publicUserId, setPublicUserId] = React.useState("")
+  const [userInitials, setUserInitials] = React.useState("U")
   const [savedProfile, setSavedProfile] = React.useState({
-    firstName: accountProfile.firstName,
-    lastName: accountProfile.lastName,
-    email: accountProfile.email,
-    phoneNumber: accountProfile.phoneNumber,
-    selectedRole: accountProfile.role as (typeof roleOptions)[number] | string,
+    firstName: "",
+    lastName: "",
+    email: "",
+    phoneNumber: "",
+    selectedRole: "" as (typeof roleOptions)[number] | string,
     customRole: "",
+    avatarUrl: null as string | null,
   })
-  const [firstName, setFirstName] = React.useState(accountProfile.firstName)
-  const [lastName, setLastName] = React.useState(accountProfile.lastName)
-  const [email, setEmail] = React.useState(accountProfile.email)
-  const [phoneNumber, setPhoneNumber] = React.useState(
-    accountProfile.phoneNumber
-  )
+  const [firstName, setFirstName] = React.useState("")
+  const [lastName, setLastName] = React.useState("")
+  const [email, setEmail] = React.useState("")
+  const [phoneNumber, setPhoneNumber] = React.useState("")
   const [selectedRole, setSelectedRole] = React.useState<
     (typeof roleOptions)[number] | string
-  >(accountProfile.role)
+  >("")
   const [customRole, setCustomRole] = React.useState("")
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null)
+  const [isSaving, setIsSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    fetch("/api/users/me")
+      .then((r) => r.json())
+      .then((res: { data?: { user: { id: string; public_user_id?: string | null; full_name: string | null; email: string | null; avatar_url: string | null; job_role?: string | null; phone_number?: string | null } } }) => {
+        const u = res.data?.user
+        if (!u) return
+        const parts = (u.full_name ?? "").trim().split(/\s+/).filter(Boolean)
+        const fn = parts[0] ?? ""
+        const ln = parts.slice(1).join(" ")
+        const initials = parts.slice(0, 2).map(p => p[0]?.toUpperCase() ?? "").join("") || "U"
+        const roleValue = u.job_role ?? ""
+        const selectedRoleValue = roleOptions.includes(roleValue as (typeof roleOptions)[number])
+          ? roleValue
+          : roleValue
+            ? "Other"
+            : ""
+        const profile = {
+          firstName: fn,
+          lastName: ln,
+          email: u.email ?? "",
+          phoneNumber: u.phone_number ?? "",
+          selectedRole: selectedRoleValue as (typeof roleOptions)[number] | string,
+          customRole: selectedRoleValue === "Other" ? roleValue : "",
+          avatarUrl: u.avatar_url ?? null,
+        }
+        setUserId(u.id)
+        setPublicUserId(u.public_user_id ?? "")
+        setUserInitials(initials)
+        setSavedProfile(profile)
+        setFirstName(fn)
+        setLastName(ln)
+        setEmail(u.email ?? "")
+        setPhoneNumber(u.phone_number ?? "")
+        setSelectedRole(profile.selectedRole)
+        setCustomRole(profile.customRole)
+        setAvatarUrl(u.avatar_url ?? null)
+      })
+      .catch(() => {})
+  }, [])
+
   const displayedRole =
     selectedRole === "Other" ? customRole || "Other" : selectedRole
   const hasUnsavedChanges =
@@ -834,22 +779,84 @@ function AccountSettingsContent() {
     email !== savedProfile.email ||
     phoneNumber !== savedProfile.phoneNumber ||
     selectedRole !== savedProfile.selectedRole ||
-    customRole !== savedProfile.customRole
+    customRole !== savedProfile.customRole ||
+    avatarUrl !== savedProfile.avatarUrl
+
+  const handleProfileImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    event.currentTarget.value = ""
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("scope", "user")
+    formData.append("owner_id", userId)
+
+    const response = await fetch("/api/avatars", {
+      method: "POST",
+      body: formData,
+    }).catch(() => null)
+    if (!response?.ok) return
+
+    const payload = (await response.json()) as { data?: { url?: string } }
+    if (payload.data?.url) setAvatarUrl(payload.data.url)
+  }
+
+  const saveProfile = async () => {
+    setIsSaving(true)
+    try {
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim()
+      const jobRole =
+        selectedRole === "Other" ? customRole.trim() : selectedRole.trim()
+      const response = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: fullName,
+          avatar_url: avatarUrl,
+          job_role: jobRole ? jobRole : null,
+          phone_number: phoneNumber.trim() ? phoneNumber.trim() : null,
+        }),
+      })
+      if (!response.ok) return
+      setSavedProfile({
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        selectedRole,
+        customRole,
+        avatarUrl,
+      })
+      window.dispatchEvent(new CustomEvent("atmet-user-updated"))
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
     <div className="flex min-h-full flex-col">
       <div className="space-y-6">
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={handleProfileImageUpload}
+        />
         <div className="flex items-center gap-2.5">
           <DropdownMenu>
             <div className="group/avatar-edit relative">
               <Avatar className="size-14 !rounded-lg ring-1 ring-border after:!rounded-lg">
                 <AvatarImage
-                  src={accountProfile.avatarUrl}
-                  alt={`${accountProfile.firstName} avatar`}
-                  className="!rounded-lg"
+                  src={avatarUrl ?? undefined}
+                  alt={`${firstName} ${lastName} avatar`}
+                  className="!rounded-lg object-cover"
                 />
                 <AvatarFallback className="!rounded-lg text-sm font-semibold">
-                  {currentUser.initials}
+                  {userInitials}
                 </AvatarFallback>
               </Avatar>
               <span className="pointer-events-none absolute inset-0 rounded-lg bg-background/20 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-focus-within/avatar-edit:opacity-100 group-hover/avatar-edit:opacity-100" />
@@ -871,11 +878,14 @@ function AccountSettingsContent() {
               align="start"
               className="min-w-44 rounded-lg p-1"
             >
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
                 <Camera className="h-3.5 w-3.5" />
                 Upload image
               </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive">
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setAvatarUrl(null)}
+              >
                 <Trash2 className="h-3.5 w-3.5" />
                 Delete image
               </DropdownMenuItem>
@@ -931,9 +941,10 @@ function AccountSettingsContent() {
               id="settings-email"
               type="email"
               value={email}
+              disabled
               onChange={(event) => setEmail(event.target.value)}
               placeholder="name@company.com"
-              className="h-7"
+              className="h-7 cursor-not-allowed bg-muted/55 text-muted-foreground disabled:opacity-100"
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
@@ -1007,7 +1018,7 @@ function AccountSettingsContent() {
                 id="settings-user-id"
                 className="font-mono text-sm text-foreground"
               >
-                {accountProfile.userId}
+                {publicUserId || userId}
               </p>
               <Button
                 type="button"
@@ -1015,7 +1026,7 @@ function AccountSettingsContent() {
                 size="icon-xs"
                 aria-label="Copy user ID"
                 onClick={() =>
-                  void navigator.clipboard.writeText(accountProfile.userId)
+                  void navigator.clipboard.writeText(publicUserId || userId)
                 }
               >
                 <Copy className="h-3.5 w-3.5" />
@@ -1063,19 +1074,14 @@ function AccountSettingsContent() {
           type="button"
           size="sm"
           disabled={!hasUnsavedChanges}
-          onClick={() =>
-            setSavedProfile({
-              firstName,
-              lastName,
-              email,
-              phoneNumber,
-              selectedRole,
-              customRole,
-            })
-          }
+          onClick={() => void saveProfile()}
         >
-          <Check className="h-3.5 w-3.5" />
-          Save
+          {isSaving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Check className="h-3.5 w-3.5" />
+          )}
+          {isSaving ? "Saving" : "Save"}
         </Button>
       </div>
     </div>
@@ -1887,7 +1893,7 @@ function WorkspaceSettingsContent({
   onGoToMembers,
 }: {
   workspace: WorkspaceProfile
-  onSaveWorkspace: (workspace: WorkspaceProfile) => void
+  onSaveWorkspace: (workspace: WorkspaceProfile) => Promise<void>
   onGoToMembers: () => void
 }) {
   const imageInputRef = React.useRef<HTMLInputElement>(null)
@@ -1903,6 +1909,7 @@ function WorkspaceSettingsContent({
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(
     workspace.avatarUrl ?? null
   )
+  const [isSaving, setIsSaving] = React.useState(false)
 
   React.useEffect(() => {
     setWorkspaceName(workspace.name)
@@ -1929,20 +1936,26 @@ function WorkspaceSettingsContent({
     avatarUrl !== savedWorkspace.avatarUrl ||
     country !== savedWorkspace.country
 
-  const handleWorkspaceImageUpload = (
+  const handleWorkspaceImageUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0]
+    event.currentTarget.value = ""
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setAvatarUrl(reader.result)
-      }
-    }
-    reader.readAsDataURL(file)
-    event.currentTarget.value = ""
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("scope", "workspace")
+    formData.append("owner_id", workspace.id)
+
+    const response = await fetch("/api/avatars", {
+      method: "POST",
+      body: formData,
+    }).catch(() => null)
+    if (!response?.ok) return
+
+    const payload = (await response.json()) as { data?: { url?: string } }
+    if (payload.data?.url) setAvatarUrl(payload.data.url)
   }
   const openWorkspaceImagePicker = React.useCallback(() => {
     window.setTimeout(() => {
@@ -2065,8 +2078,8 @@ function WorkspaceSettingsContent({
           <div className="relative">
             <Input
               id="settings-workspace-email"
-              type="email"
-              value={workspace.primaryEmail}
+              type="text"
+              value={workspace.primaryEmail || "Owner email unavailable"}
               disabled
               className="h-7 cursor-not-allowed bg-muted/55 pr-20 text-muted-foreground disabled:opacity-100"
             />
@@ -2082,10 +2095,14 @@ function WorkspaceSettingsContent({
             Country
           </Label>
           <AdminSelect
-            value={country}
+            value={country || "Owner geo unavailable"}
             options={workspaceCountries}
             onChange={setCountry}
+            disabled
           />
+          <p className="text-xs text-muted-foreground">
+            Based on the workspace owner profile.
+          </p>
         </div>
 
         <div className="space-y-1.5">
@@ -2149,7 +2166,8 @@ function WorkspaceSettingsContent({
           type="button"
           size="sm"
           disabled={!hasUnsavedChanges}
-          onClick={() => {
+          onClick={async () => {
+            setIsSaving(true)
             const nextWorkspace: WorkspaceProfile = {
               ...workspace,
               name: displayName,
@@ -2158,17 +2176,25 @@ function WorkspaceSettingsContent({
               country,
               initials: deriveInitialsFromName(displayName),
             }
-            setSavedWorkspace({
-              name: displayName,
-              description,
-              avatarUrl,
-              country,
-            })
-            onSaveWorkspace(nextWorkspace)
+            try {
+              await onSaveWorkspace(nextWorkspace)
+              setSavedWorkspace({
+                name: displayName,
+                description,
+                avatarUrl,
+                country,
+              })
+            } finally {
+              setIsSaving(false)
+            }
           }}
         >
-          <Check className="h-3.5 w-3.5" />
-          Save
+          {isSaving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Check className="h-3.5 w-3.5" />
+          )}
+          {isSaving ? "Saving" : "Save"}
         </Button>
       </div>
     </div>
@@ -2190,10 +2216,10 @@ function MembersSettingsContent({
   profileBackLabel?: string
   onProfileBack?: () => void
 }) {
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const roleFilters = ["All users", ...platformRoles] as const
-  const inviteRoleOptions = platformRoles
+  const inviteRoleOptions = ["Member"] as const
   const creditsRanges = ["All time", "This month", "This week"] as const
-  const seatsLimit = 10
   const [searchQuery, setSearchQuery] = React.useState("")
   const [roleFilter, setRoleFilter] =
     React.useState<(typeof roleFilters)[number]>("All users")
@@ -2204,20 +2230,103 @@ function MembersSettingsContent({
     React.useState<(typeof creditsRanges)[number]>("All time")
   const [isInviteOpen, setIsInviteOpen] = React.useState(false)
   const [inviteRole, setInviteRole] =
-    React.useState<(typeof inviteRoleOptions)[number]>("Workspace Member")
+    React.useState<(typeof inviteRoleOptions)[number]>("Member")
   const [inviteInput, setInviteInput] = React.useState("")
   const [inviteEmails, setInviteEmails] = React.useState<string[]>([])
   const [inviteError, setInviteError] = React.useState("")
+  const [isInviteSending, setIsInviteSending] = React.useState(false)
+  const [members, setMembers] = React.useState<WorkspaceMember[]>([])
+  const [isMembersLoading, setIsMembersLoading] = React.useState(false)
+  const [currentMemberRole, setCurrentMemberRole] = React.useState<
+    "owner" | "admin" | "member" | null
+  >(null)
+  const [seatsLimit, setSeatsLimit] = React.useState(10)
+  const workspaceMembers = members
+  const canInviteMembers =
+    currentMemberRole === "owner" || currentMemberRole === "admin"
   const roleBadgeClasses: Record<WorkspaceMember["role"], BadgeVariant> = {
     "Super Admin": "violet",
     Admin: "blue",
-    "Workspace Admin": "blue",
-    "Workspace Member": "neutral",
+    Owner: "blue",
+    Member: "neutral",
   }
   const appStatusClasses: Record<WorkspaceMemberApp["status"], BadgeVariant> = {
     Connected: "green",
     Disconnected: "neutral",
   }
+
+  const loadMembers = React.useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setMembers([])
+      setCurrentMemberRole(null)
+      return
+    }
+    setIsMembersLoading(true)
+    try {
+      const response = await apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
+      if (!response.ok) {
+        setMembers([])
+        setCurrentMemberRole(null)
+        return
+      }
+      const payload = (await response.json()) as {
+        data?: {
+          currentMemberRole?: "owner" | "admin" | "member"
+          seatLimit?: number
+          members?: Array<{
+            role: "owner" | "admin" | "member"
+            joined_at: string
+            user: {
+              id: string
+              email: string | null
+              full_name: string | null
+              avatar_url?: string | null
+              status: string
+            } | null
+          }>
+        }
+      }
+      setCurrentMemberRole(payload.data?.currentMemberRole ?? null)
+      setSeatsLimit(payload.data?.seatLimit ?? 10)
+      setMembers(
+        (payload.data?.members ?? []).map((row) => {
+          const user = Array.isArray(row.user) ? row.user[0] : row.user
+          const name = user?.full_name || user?.email || "Unknown user"
+          const initials = deriveInitialsFromName(name)
+          const role: PlatformRole =
+            row.role === "owner"
+              ? "Owner"
+              : row.role === "admin"
+                ? "Admin"
+              : "Member"
+          return {
+            id: user?.id ?? `${row.role}-${row.joined_at}`,
+            name,
+            email: user?.email ?? "",
+            role,
+            profileRole: user?.status ?? "active",
+            lastLogin: row.joined_at
+              ? new Date(row.joined_at).toLocaleDateString()
+              : "Unknown",
+            initials,
+            avatarUrl: user?.avatar_url ?? "",
+            creditsUsage: {
+              allTime: 0,
+              thisMonth: 0,
+              thisWeek: 0,
+            },
+            integratedApps: [],
+          }
+        })
+      )
+    } finally {
+      setIsMembersLoading(false)
+    }
+  }, [activeWorkspaceId, apiFetch])
+
+  React.useEffect(() => {
+    void loadMembers()
+  }, [loadMembers])
 
   const filteredMembers = React.useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -2231,13 +2340,13 @@ function MembersSettingsContent({
         member.email.toLowerCase().includes(query)
       )
     })
-  }, [searchQuery, roleFilter])
+  }, [searchQuery, roleFilter, workspaceMembers])
   const seatsUsed = workspaceMembers.length
-  const seatsProgress = Math.min(100, (seatsUsed / seatsLimit) * 100)
+  const seatsProgress = Math.min(100, (seatsUsed / Math.max(seatsLimit, 1)) * 100)
   const selectedMember = React.useMemo(
     () =>
       workspaceMembers.find((member) => member.id === selectedMemberId) ?? null,
-    [selectedMemberId]
+    [selectedMemberId, workspaceMembers]
   )
   const selectedCreditsUsage = React.useMemo(() => {
     if (!selectedMember) return 0
@@ -2327,8 +2436,9 @@ function MembersSettingsContent({
     setIsInviteOpen(false)
     setInviteInput("")
     setInviteEmails([])
-    setInviteRole("Workspace Member")
+    setInviteRole("Member")
     setInviteError("")
+    setIsInviteSending(false)
   }, [])
 
   React.useEffect(() => {
@@ -2360,17 +2470,23 @@ function MembersSettingsContent({
 
   React.useEffect(() => {
     if (quickInviteToken === 0) return
+    if (!canInviteMembers) return
     setSelectedMemberId(null)
     setSearchQuery("")
     setRoleFilter("All users")
     setInviteInput("")
     setInviteEmails([])
     setInviteError("")
-    setInviteRole("Workspace Member")
+    setInviteRole("Member")
     setIsInviteOpen(true)
-  }, [quickInviteToken])
+  }, [canInviteMembers, quickInviteToken])
 
-  const submitInvite = () => {
+  const submitInvite = async () => {
+    if (isInviteSending) return
+    if (!canInviteMembers) {
+      setInviteError("Only workspace owners or admins can invite members.")
+      return
+    }
     const tokens = inviteInput
       .split(/[\s,;]+/)
       .map((value) => value.trim().toLowerCase())
@@ -2389,7 +2505,52 @@ function MembersSettingsContent({
       return
     }
 
+    if (!activeWorkspaceId) {
+      setInviteError("Select a workspace before inviting members.")
+      return
+    }
+
+    const role = "member"
+    setIsInviteSending(true)
+    const results = await Promise.all(
+      merged.map(async (email) => {
+        const response = await apiFetch(`/api/workspaces/${activeWorkspaceId}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, role }),
+        })
+        const payload = (await response.json().catch(() => null)) as {
+          data?: {
+            invitationEmailSent?: boolean
+            invitationEmailWarning?: string | null
+          }
+          error?: { message?: string }
+        } | null
+        return { response, payload }
+      })
+    )
+    setIsInviteSending(false)
+
+    const failedResults = results.filter((result) => !result.response.ok)
+    const failed = failedResults.length
+    if (failed > 0) {
+      const firstError = failedResults.find((result) => result.payload?.error?.message)
+        ?.payload?.error?.message
+      setInviteError(firstError ?? `${failed} invite${failed === 1 ? "" : "s"} could not be sent.`)
+      return
+    }
+
+    const emailFailed = results.filter(
+      (result) => result.payload?.data?.invitationEmailSent === false
+    ).length
+    if (emailFailed > 0) {
+      setInviteError(`${emailFailed} invite email${emailFailed === 1 ? "" : "s"} could not be sent. Check Resend settings.`)
+      void loadMembers()
+      return
+    }
+
     closeInviteModal()
+    void loadMembers()
   }
 
   return (
@@ -2613,14 +2774,16 @@ function MembersSettingsContent({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setIsInviteOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Invite
-            </Button>
+            {canInviteMembers && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setIsInviteOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Invite
+              </Button>
+            )}
           </div>
 
           <section className="mt-3 space-y-2 px-1 py-1">
@@ -2707,37 +2870,56 @@ function MembersSettingsContent({
                         {member.lastLogin}
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button
-                                type="button"
-                                size="icon-xs"
-                                variant="ghost"
-                                className="border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
-                                aria-label={`Actions for ${member.name}`}
-                                onClick={(event) => event.stopPropagation()}
-                              />
-                            }
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="min-w-40 rounded-lg p-1"
-                          >
-                            <DropdownMenuItem
-                              onClick={() => setSelectedMemberId(member.id)}
+                        {canInviteMembers ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  size="icon-xs"
+                                  variant="ghost"
+                                  className="border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
+                                  aria-label={`Actions for ${member.name}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                />
+                              }
                             >
-                              <User className="h-3.5 w-3.5" />
-                              Go to profile
-                            </DropdownMenuItem>
-                            <DropdownMenuItem variant="destructive">
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Delete user
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="min-w-40 rounded-lg p-1"
+                            >
+                              <DropdownMenuItem
+                                onClick={() => setSelectedMemberId(member.id)}
+                              >
+                                <User className="h-3.5 w-3.5" />
+                                Go to profile
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={async (event) => {
+                                  event.stopPropagation()
+                                  if (!activeWorkspaceId) return
+                                  const confirmed = window.confirm(`Remove ${member.name} from this workspace?`)
+                                  if (!confirmed) return
+                                  const response = await apiFetch(
+                                    `/api/workspaces/${activeWorkspaceId}/members/${member.id}`,
+                                    { method: "DELETE" }
+                                  ).catch(() => null)
+                                  if (response?.ok) {
+                                    setMembers((previous) =>
+                                      previous.filter((item) => item.id !== member.id)
+                                    )
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete user
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -2745,7 +2927,9 @@ function MembersSettingsContent({
               </table>
               {filteredMembers.length === 0 && (
                 <div className="py-8 text-center text-sm text-muted-foreground">
-                  No members match your current search or filter.
+                  {isMembersLoading
+                    ? "Loading members..."
+                    : "No members match your current search or filter."}
                 </div>
               )}
             </div>
@@ -2753,7 +2937,7 @@ function MembersSettingsContent({
         </>
       )}
 
-      {isInviteOpen && (
+      {isInviteOpen && canInviteMembers && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 p-4 backdrop-blur-[1px]"
           onClick={(event) => {
@@ -2808,6 +2992,7 @@ function MembersSettingsContent({
                   ))}
                   <input
                     type="text"
+                    data-invite-email-input="true"
                     value={inviteInput}
                     onChange={(event) => {
                       setInviteInput(event.target.value)
@@ -2856,7 +3041,7 @@ function MembersSettingsContent({
                     placeholder={
                       inviteEmails.length === 0 ? "name@company.com" : ""
                     }
-                    className="h-6 min-w-[180px] flex-1 border-0 bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
+                    className="h-6 min-w-[180px] flex-1 border-0 bg-transparent text-[0.8rem] text-foreground shadow-none outline-none ring-0 placeholder:text-muted-foreground focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
                   />
                 </div>
               </div>
@@ -2907,9 +3092,13 @@ function MembersSettingsContent({
               >
                 Cancel
               </Button>
-              <Button type="button" size="sm" onClick={submitInvite}>
-                <Mail className="h-3.5 w-3.5" />
-                Send invites
+              <Button type="button" size="sm" disabled={isInviteSending} onClick={submitInvite}>
+                {isInviteSending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Mail className="h-3.5 w-3.5" />
+                )}
+                {isInviteSending ? "Sending" : "Send invites"}
               </Button>
             </div>
           </div>
@@ -2920,65 +3109,207 @@ function MembersSettingsContent({
 }
 
 function UsageLimitsSettingsContent() {
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const usageRanges = ["This week", "This month", "All time"] as const
-  const [usageRange, setUsageRange] =
-    React.useState<(typeof usageRanges)[number]>("This month")
-  const defaultUserLimits = React.useMemo<Record<string, number>>(
-    () =>
-      Object.fromEntries(
-        workspaceMembers.map((member) => [
-          member.id,
-          member.role === "Super Admin"
-            ? 6000
-            : member.role === "Admin"
-              ? 4000
-              : 2500,
-        ])
-      ),
-    []
-  )
-  const [userLimits, setUserLimits] =
-    React.useState<Record<string, number>>(defaultUserLimits)
-  const [savedUserLimits, setSavedUserLimits] =
-    React.useState<Record<string, number>>(defaultUserLimits)
+  type UsageRange = (typeof usageRanges)[number]
+  type UsageScope = "workspace" | "user"
+  type UsageBucket = {
+    tokens: number
+    runs: number
+    files: number
+    storageBytes: number
+    chats: number
+    apiKeys: number
+  }
+  type UsageLimitsPayload = {
+    role: "owner" | "member"
+    canManageLimits: boolean
+    scopeOptions: UsageScope[]
+    workspaceLimits: {
+      monthlyTokenCap: number
+      maxFileSizeMb: number
+      maxFilesPerWorkspace: number
+      seatLimit: number
+    }
+    currentUserLimit: number
+    workspaceUsage: UsageBucket
+    userUsage: UsageBucket
+    members: Array<{
+      id: string
+      email: string
+      fullName: string
+      avatarUrl: string
+      accountStatus: string
+      role: "owner" | "member"
+      monthlyTokenCap: number | null
+      usage: UsageBucket
+    }>
+  }
 
-  const stats = usageRangeStats[usageRange]
-  const creditsPercentage = Math.min(
-    100,
-    (stats.creditsUsed / stats.creditsLimit) * 100
+  const [usageRange, setUsageRange] = React.useState<UsageRange>("This month")
+  const [usageScope, setUsageScope] = React.useState<UsageScope>("user")
+  const [usageData, setUsageData] = React.useState<UsageLimitsPayload | null>(
+    null
   )
+  const [userLimits, setUserLimits] = React.useState<Record<string, string>>({})
+  const [savedUserLimits, setSavedUserLimits] = React.useState<
+    Record<string, string>
+  >({})
+  const [isLoadingUsage, setIsLoadingUsage] = React.useState(true)
+  const [isSavingLimits, setIsSavingLimits] = React.useState(false)
+  const [usageNotice, setUsageNotice] = React.useState("")
+
+  const rangeParam =
+    usageRange === "This week"
+      ? "week"
+      : usageRange === "All time"
+        ? "all"
+        : "month"
+
+  const loadUsage = React.useCallback(() => {
+    if (!activeWorkspaceId) {
+      setUsageData(null)
+      setIsLoadingUsage(false)
+      return
+    }
+
+    setIsLoadingUsage(true)
+    setUsageNotice("")
+    void apiFetch(
+      `/api/workspaces/${activeWorkspaceId}/usage-limits?range=${rangeParam}`
+    )
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          data?: UsageLimitsPayload
+          error?: { message?: string }
+        }
+        if (!response.ok || !payload.data) {
+          throw new Error(payload.error?.message ?? "Unable to load usage.")
+        }
+        setUsageData(payload.data)
+        setUsageScope((current) =>
+          payload.data?.scopeOptions.includes(current)
+            ? current
+            : payload.data?.scopeOptions[0] ?? "user"
+        )
+      })
+      .catch((error: Error) => {
+        setUsageData(null)
+        setUsageNotice(error.message || "Unable to load usage.")
+      })
+      .finally(() => setIsLoadingUsage(false))
+  }, [activeWorkspaceId, apiFetch, rangeParam])
+
+  React.useEffect(() => {
+    loadUsage()
+  }, [loadUsage])
+
+  React.useEffect(() => {
+    const nextLimits = Object.fromEntries(
+      (usageData?.members ?? []).map((member) => [
+        member.id,
+        member.monthlyTokenCap === null ? "" : String(member.monthlyTokenCap),
+      ])
+    )
+    setUserLimits(nextLimits)
+    setSavedUserLimits(nextLimits)
+  }, [usageData?.members])
+
+  const activeUsage =
+    usageScope === "workspace"
+      ? usageData?.workspaceUsage
+      : usageData?.userUsage
+  const activeTokenLimit =
+    usageScope === "workspace"
+      ? usageData?.workspaceLimits.monthlyTokenCap
+      : usageData?.currentUserLimit
+  const storageLimitGb = usageData
+    ? Number(
+        (
+          (usageData.workspaceLimits.maxFileSizeMb *
+            usageData.workspaceLimits.maxFilesPerWorkspace) /
+          1024
+        ).toFixed(1)
+      )
+    : 0
+  const storageUsedGb = activeUsage
+    ? Number((activeUsage.storageBytes / 1024 / 1024 / 1024).toFixed(2))
+    : 0
+  const stats = {
+    creditsUsed: activeUsage?.tokens ?? 0,
+    creditsLimit: activeTokenLimit ?? 0,
+    filesUsed: activeUsage?.files ?? 0,
+    filesLimit: usageData?.workspaceLimits.maxFilesPerWorkspace ?? 0,
+    storageUsedGb,
+    storageLimitGb,
+    automationsActive: activeUsage?.runs ?? 0,
+    chatsActive: activeUsage?.chats ?? 0,
+    apiKeysActive: activeUsage?.apiKeys ?? 0,
+  }
   const hasUserLimitsChanges =
     JSON.stringify(userLimits) !== JSON.stringify(savedUserLimits)
-  const chartData = React.useMemo(() => {
-    if (usageRange === "All time") {
-      return [
-        { label: "Oct", value: 5400 },
-        { label: "Nov", value: 6900 },
-        { label: "Dec", value: 6400 },
-        { label: "Jan", value: 7900 },
-        { label: "Feb", value: 8350 },
-        { label: "Mar", value: 9200 },
-        { label: "Apr", value: 8690 },
-      ]
+  const chartData = React.useMemo(
+    () => [
+      {
+        label: usageScope === "workspace" ? "Workspace" : "Your usage",
+        value: stats.creditsUsed,
+      },
+      { label: "Files", value: stats.filesUsed },
+      { label: "Automations", value: stats.automationsActive },
+      { label: "Chats", value: stats.chatsActive },
+    ],
+    [stats.automationsActive, stats.chatsActive, stats.creditsUsed, stats.filesUsed, usageScope]
+  )
+
+  const saveUserLimits = React.useCallback(async () => {
+    if (!activeWorkspaceId || !usageData?.canManageLimits) return
+    setIsSavingLimits(true)
+    setUsageNotice("")
+    const memberLimits = Object.entries(userLimits).map(([userId, value]) => {
+      const trimmed = value.trim()
+      return {
+        userId,
+        monthlyTokenCap: trimmed ? Number(trimmed) : null,
+      }
+    })
+
+    const invalidLimit = memberLimits.some(
+      (limit) =>
+        limit.monthlyTokenCap !== null &&
+        (!Number.isFinite(limit.monthlyTokenCap) || limit.monthlyTokenCap <= 0)
+    )
+    if (invalidLimit) {
+      setUsageNotice("Monthly limits must be empty or greater than 0.")
+      setIsSavingLimits(false)
+      return
     }
-    if (usageRange === "This week") {
-      return [
-        { label: "Mon", value: 210 },
-        { label: "Tue", value: 280 },
-        { label: "Wed", value: 260 },
-        { label: "Thu", value: 240 },
-        { label: "Fri", value: 310 },
-        { label: "Sat", value: 270 },
-        { label: "Sun", value: 250 },
-      ]
+
+    try {
+      const response = await apiFetch(
+        `/api/workspaces/${activeWorkspaceId}/usage-limits`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ memberLimits }),
+        }
+      )
+      const payload = (await response.json()) as {
+        error?: { message?: string }
+      }
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Unable to save limits.")
+      }
+      setSavedUserLimits(userLimits)
+      setUsageNotice("Per-user limits saved.")
+      loadUsage()
+    } catch (error) {
+      setUsageNotice(
+        error instanceof Error ? error.message : "Unable to save limits."
+      )
+    } finally {
+      setIsSavingLimits(false)
     }
-    return [
-      { label: "W1", value: 1520 },
-      { label: "W2", value: 1860 },
-      { label: "W3", value: 2010 },
-      { label: "W4", value: 2030 },
-    ]
-  }, [usageRange])
+  }, [activeWorkspaceId, apiFetch, loadUsage, usageData?.canManageLimits, userLimits])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -2988,310 +3319,446 @@ function UsageLimitsSettingsContent() {
             Usage overview
           </p>
           <p className="text-sm text-muted-foreground">
-            Monitor consumption, quotas, and workspace limits.
+            Monitor real workspace usage, personal usage, and member limits.
           </p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 justify-between rounded-lg border-input bg-transparent px-2.5 text-[0.8rem] font-normal sm:min-w-32"
-              />
-            }
-          >
-            <span>{usageRange}</span>
-            <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-32 rounded-lg p-1">
-            {usageRanges.map((range) => (
-              <DropdownMenuItem
-                key={range}
-                onClick={() => setUsageRange(range)}
+        <div className="flex flex-wrap items-center gap-2">
+          {usageData?.scopeOptions.includes("workspace") ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 justify-between rounded-lg border-input bg-transparent px-2.5 text-[0.8rem] font-normal sm:min-w-32"
+                  />
+                }
               >
-                {range}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <span>
+                  {usageScope === "workspace" ? "Workspace" : "My usage"}
+                </span>
+                <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-32 rounded-lg p-1">
+                <DropdownMenuItem onClick={() => setUsageScope("workspace")}>
+                  Workspace
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setUsageScope("user")}>
+                  My usage
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 justify-between rounded-lg border-input bg-transparent px-2.5 text-[0.8rem] font-normal sm:min-w-32"
+                />
+              }
+            >
+              <span>{usageRange}</span>
+              <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-32 rounded-lg p-1">
+              {usageRanges.map((range) => (
+                <DropdownMenuItem
+                  key={range}
+                  onClick={() => setUsageRange(range)}
+                >
+                  {range}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 rounded-lg"
+            disabled={isLoadingUsage}
+            onClick={loadUsage}
+          >
+            <RefreshCw
+              className={cn("h-3.5 w-3.5", isLoadingUsage && "animate-spin")}
+            />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
-        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-            <p className="text-[11px] text-muted-foreground">Credits used</p>
-            <p className="text-sm font-semibold text-foreground">
-              {stats.creditsUsed.toLocaleString()} /{" "}
-              {stats.creditsLimit.toLocaleString()}
-            </p>
+        {usageNotice ? (
+          <div className="rounded-xl bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {usageNotice}
           </div>
-          <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-            <p className="text-[11px] text-muted-foreground">API requests</p>
-            <p className="text-sm font-semibold text-foreground">
-              {stats.apiRequests.toLocaleString()} /{" "}
-              {stats.apiLimit.toLocaleString()}
-            </p>
-          </div>
-          <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-            <p className="text-[11px] text-muted-foreground">Storage</p>
-            <p className="text-sm font-semibold text-foreground">
-              {stats.storageUsedGb}GB / {stats.storageLimitGb}GB
-            </p>
-          </div>
-          <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-            <p className="text-[11px] text-muted-foreground">Automations</p>
-            <p className="text-sm font-semibold text-foreground">
-              {stats.automationsActive} / {stats.automationsLimit}
-            </p>
-          </div>
-        </div>
+        ) : null}
 
-        <section className="rounded-xl border border-border bg-background p-2.5">
-          <ChartBarPattern
-            title="Usage trend"
-            description={`Consumption across ${usageRange.toLowerCase()}.`}
-            badgeLabel={usageRange}
-            data={chartData.map((point) => ({
-              label: point.label,
-              usage: point.value,
-              baseline: Math.max(Math.round(point.value * 0.78), 1),
-            }))}
-          />
-        </section>
-
-        <section className="overflow-hidden rounded-xl border border-border bg-background">
-          <table className="w-full table-fixed border-collapse text-[0.8rem]">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground">
-                <th className="w-[30%] px-2.5 py-1.5 text-left font-medium">
-                  Resource
-                </th>
-                <th className="w-[35%] px-2.5 py-1.5 text-left font-medium">
-                  Usage
-                </th>
-                <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
-                  Limit
-                </th>
-                <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {usageLimitsRows.map((row) => {
-                const used = stats[row.usedKey]
-                const limit = stats[row.limitKey]
-                const progress = Math.min(
-                  100,
-                  (used / Math.max(limit, 1)) * 100
-                )
-                const nearLimit = progress >= 80
-                return (
-                  <tr
-                    key={row.key}
-                    className="border-b border-border/70 last:border-b-0"
-                  >
-                    <td className="px-2.5 py-1.5 font-medium text-foreground">
-                      {row.label}
-                    </td>
-                    <td className="px-2.5 py-1.5">
-                      <div className="space-y-1">
-                        <p className="text-[11px] text-muted-foreground">
-                          {used.toLocaleString()}
-                          {row.unit ? ` ${row.unit}` : ""}
-                        </p>
-                        <div className="h-1.5 rounded-full bg-muted">
-                          <div
-                            className={cn(
-                              "h-full rounded-full",
-                              nearLimit ? "bg-destructive/70" : "bg-primary/70"
-                            )}
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-2.5 py-1.5 text-muted-foreground">
-                      {limit.toLocaleString()}
-                      {row.unit ? ` ${row.unit}` : ""}
-                    </td>
-                    <td className="px-2.5 py-1.5">
-                      <Badge variant={nearLimit ? "red" : "green"}>
-                        {nearLimit ? "Near limit" : "Within limit"}
-                      </Badge>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </section>
-
-        <section className="overflow-hidden rounded-xl border border-border bg-background">
-          <div className="border-b border-border px-3 py-2.5">
-            <div className="space-y-0.5">
-              <p className="text-sm font-semibold text-foreground">
-                Per-user limits
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Set a monthly credits cap for each member.
-              </p>
+        {isLoadingUsage ? (
+          <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading usage
+          </div>
+        ) : usageData ? (
+          <>
+            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
+                <p className="text-[11px] text-muted-foreground">Tokens</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {stats.creditsUsed.toLocaleString()} /{" "}
+                  {stats.creditsLimit.toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
+                <p className="text-[11px] text-muted-foreground">Files</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {stats.filesUsed.toLocaleString()} /{" "}
+                  {stats.filesLimit.toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
+                <p className="text-[11px] text-muted-foreground">Storage</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {stats.storageUsedGb}GB / {stats.storageLimitGb}GB
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
+                <p className="text-[11px] text-muted-foreground">Automations</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {stats.automationsActive.toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
+                <p className="text-[11px] text-muted-foreground">Chats</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {stats.chatsActive.toLocaleString()}
+                </p>
+              </div>
             </div>
+
+            <section className="rounded-xl border border-border bg-background p-2.5">
+              <ChartBarPattern
+                title="Usage snapshot"
+                description={`Live counts for ${usageRange.toLowerCase()}.`}
+                badgeLabel={
+                  usageScope === "workspace" ? "Workspace" : "My usage"
+                }
+                data={chartData.map((point) => ({
+                  label: point.label,
+                  usage: point.value,
+                  baseline: Math.max(Math.round(point.value * 0.78), 1),
+                }))}
+              />
+            </section>
+
+            <section className="overflow-hidden rounded-xl border border-border bg-background">
+              <table className="w-full table-fixed border-collapse text-[0.8rem]">
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground">
+                    <th className="w-[30%] px-2.5 py-1.5 text-left font-medium">
+                      Resource
+                    </th>
+                    <th className="w-[35%] px-2.5 py-1.5 text-left font-medium">
+                      Usage
+                    </th>
+                    <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
+                      Limit
+                    </th>
+                    <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageLimitsRows.map((row) => {
+                    const used = stats[row.usedKey]
+                    const limit = stats[row.limitKey]
+                    const progress = Math.min(
+                      100,
+                      (used / Math.max(limit, 1)) * 100
+                    )
+                    const nearLimit = progress >= 80
+                    return (
+                      <tr
+                        key={row.key}
+                        className="border-b border-border/70 last:border-b-0"
+                      >
+                        <td className="px-2.5 py-1.5 font-medium text-foreground">
+                          {row.label}
+                        </td>
+                        <td className="px-2.5 py-1.5">
+                          <div className="space-y-1">
+                            <p className="text-[11px] text-muted-foreground">
+                              {used.toLocaleString()}
+                              {row.unit ? ` ${row.unit}` : ""}
+                            </p>
+                            <div className="h-1.5 rounded-full bg-muted">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full",
+                                  nearLimit
+                                    ? "bg-destructive/70"
+                                    : "bg-primary/70"
+                                )}
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-2.5 py-1.5 text-muted-foreground">
+                          {limit.toLocaleString()}
+                          {row.unit ? ` ${row.unit}` : ""}
+                        </td>
+                        <td className="px-2.5 py-1.5">
+                          <Badge variant={nearLimit ? "red" : "green"}>
+                            {nearLimit ? "Near limit" : "Within limit"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </section>
+
+            {usageData.canManageLimits ? (
+              <section className="overflow-hidden rounded-xl border border-border bg-background">
+                <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-semibold text-foreground">
+                      Per-user limits
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Empty values inherit the workspace token cap.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!hasUserLimitsChanges || isSavingLimits}
+                    onClick={() => void saveUserLimits()}
+                  >
+                    {isSavingLimits ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    Save limits
+                  </Button>
+                </div>
+                <table className="w-full table-fixed border-collapse text-[0.8rem]">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="w-[38%] px-2.5 py-1.5 text-left font-medium">
+                        User
+                      </th>
+                      <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">
+                        Role
+                      </th>
+                      <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">
+                        Tokens used
+                      </th>
+                      <th className="w-[28%] px-2.5 py-1.5 text-left font-medium">
+                        Monthly token cap
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usageData.members.map((member) => {
+                      const displayName = member.fullName || member.email
+                      const inheritedLimit =
+                        member.monthlyTokenCap === null
+                          ? usageData.workspaceLimits.monthlyTokenCap
+                          : member.monthlyTokenCap
+                      return (
+                        <tr
+                          key={member.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openUserProfile(displayName)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault()
+                              openUserProfile(displayName)
+                            }
+                          }}
+                          className="cursor-pointer border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                        >
+                          <td className="px-2.5 py-1.5">
+                            <div className="flex items-center gap-2.5">
+                              <Avatar className="size-7 !rounded-full">
+                                <AvatarImage
+                                  src={member.avatarUrl}
+                                  alt={displayName}
+                                  className="!rounded-full object-cover"
+                                />
+                                <AvatarFallback className="!rounded-full text-[10px] font-semibold">
+                                  {deriveInitialsFromName(displayName)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <p className="truncate text-[0.8rem] font-medium text-foreground">
+                                  {displayName}
+                                </p>
+                                <p className="truncate text-[11px] text-muted-foreground">
+                                  {member.email}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-2.5 py-1.5">
+                            <Badge
+                              variant={
+                                member.role === "owner" ? "violet" : "neutral"
+                              }
+                            >
+                              {member.role === "owner" ? "Owner" : "Member"}
+                            </Badge>
+                          </td>
+                          <td className="px-2.5 py-1.5 text-muted-foreground">
+                            {member.usage.tokens.toLocaleString()} /{" "}
+                            {inheritedLimit.toLocaleString()}
+                          </td>
+                          <td className="px-2.5 py-1.5">
+                            <Input
+                              type="number"
+                              min={1}
+                              step={100}
+                              placeholder={`${usageData.workspaceLimits.monthlyTokenCap}`}
+                              value={userLimits[member.id] ?? ""}
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => event.stopPropagation()}
+                              onChange={(event) =>
+                                setUserLimits((previous) => ({
+                                  ...previous,
+                                  [member.id]: event.target.value,
+                                }))
+                              }
+                              className="h-7"
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </section>
+            ) : null}
+          </>
+        ) : (
+          <div className="rounded-xl border border-border bg-background px-3 py-6 text-center text-sm text-muted-foreground">
+            Usage is unavailable for this workspace.
           </div>
-          <table className="w-full table-fixed border-collapse text-[0.8rem]">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground">
-                <th className="w-[46%] px-2.5 py-1.5 text-left font-medium">
-                  User
-                </th>
-                <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">
-                  User type
-                </th>
-                <th className="w-[24%] px-2.5 py-1.5 text-left font-medium">
-                  Monthly limit
-                </th>
-                <th className="w-[8%] px-2.5 py-1.5 text-left font-medium">
-                  Unit
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {workspaceMembers.map((member) => (
-                <tr
-                  key={member.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openUserProfile(member.name)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
-                      openUserProfile(member.name)
-                    }
-                  }}
-                  className="cursor-pointer border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                >
-                  <td className="px-2.5 py-1.5">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar className="size-7 !rounded-full">
-                        <AvatarImage
-                          src={member.avatarUrl}
-                          alt={member.name}
-                          className="!rounded-full object-cover"
-                        />
-                        <AvatarFallback className="!rounded-full text-[10px] font-semibold">
-                          {member.initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <p className="truncate text-[0.8rem] font-medium text-foreground">
-                          {member.name}
-                        </p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {member.email}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-2.5 py-1.5">
-                    <Badge
-                      variant={member.role === "Workspace Member" ? "neutral" : "violet"}
-                    >
-                      {member.role}
-                    </Badge>
-                  </td>
-                  <td className="px-2.5 py-1.5">
-                    <Input
-                      type="number"
-                      min={0}
-                      step={100}
-                      value={userLimits[member.id] ?? 0}
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value)
-                        setUserLimits((previous) => ({
-                          ...previous,
-                          [member.id]: Number.isFinite(parsed)
-                            ? Math.max(0, parsed)
-                            : 0,
-                        }))
-                      }}
-                      className="h-7"
-                    />
-                  </td>
-                  <td className="px-2.5 py-1.5 text-muted-foreground">
-                    credits
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="flex justify-end border-t border-border px-3 py-2.5">
-            <Button
-              type="button"
-              size="sm"
-              disabled={!hasUserLimitsChanges}
-              onClick={() => setSavedUserLimits(userLimits)}
-            >
-              <Check className="h-3.5 w-3.5" />
-              Save limits
-            </Button>
-          </div>
-        </section>
+        )}
       </div>
     </div>
   )
 }
 
 function IntegrationsSettingsContent() {
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const [nameFilter, setNameFilter] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [viewMode, setViewMode] = React.useState<"workspace" | "users">(
     "workspace"
   )
-  const [disconnectedAppsByName, setDisconnectedAppsByName] = React.useState<
-    Record<string, boolean>
-  >({})
+  const [memberCount, setMemberCount] = React.useState(0)
+  const [members, setMembers] = React.useState<
+    Array<{
+      id: string
+      name: string
+      email: string
+      role: string
+      initials: string
+      avatarUrl: string
+    }>
+  >([])
+  const [integrations, setIntegrations] = React.useState<
+    Array<{
+      slug: string
+      name: string
+      category: string
+      connected: boolean
+      status?: string
+      connected_at?: string
+    }>
+  >([])
   const [forcedAppsByName, setForcedAppsByName] = React.useState<
     Record<string, boolean>
-  >(() => ({
-    Slack: true,
-    Notion: true,
-  }))
+  >({})
 
-  const appRows = React.useMemo(() => {
-    const appMap = new Map<
-      string,
-      { name: string; category: string; connectedUsers: number }
-    >()
-
-    for (const member of workspaceMembers) {
-      for (const app of member.integratedApps) {
-        if (app.status !== "Connected") continue
-        if (disconnectedAppsByName[app.name]) continue
-        const existing = appMap.get(app.name)
-        if (existing) {
-          appMap.set(app.name, {
-            ...existing,
-            connectedUsers: existing.connectedUsers + 1,
-          })
-          continue
-        }
-
-        appMap.set(app.name, {
-          name: app.name,
-          category: app.category,
-          connectedUsers: 1,
-        })
-      }
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setIntegrations([])
+      setMemberCount(0)
+      return
     }
 
-    return Array.from(appMap.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    )
-  }, [disconnectedAppsByName])
+    void Promise.all([
+      apiFetch("/api/integrations").then((r) => r.json()),
+      apiFetch(`/api/workspaces/${activeWorkspaceId}/members`).then((r) => r.json()),
+    ])
+      .then(([integrationsRes, membersRes]: [
+        { data?: { integrations?: typeof integrations } },
+        {
+          data?: {
+            members?: Array<{
+              role: "owner" | "member"
+              user:
+                | {
+                    id: string
+                    email: string | null
+                    full_name: string | null
+                    avatar_url?: string | null
+                  }
+                | null
+            }>
+          }
+        },
+      ]) => {
+        setIntegrations(integrationsRes.data?.integrations ?? [])
+        const nextMembers = (membersRes.data?.members ?? []).map((row) => {
+          const user = Array.isArray(row.user) ? row.user[0] : row.user
+          const name = user?.full_name || user?.email || "Unknown user"
+          return {
+            id: user?.id ?? name,
+            name,
+            email: user?.email ?? "",
+            role:
+              row.role === "owner"
+                ? "Owner"
+                : "Member",
+            initials: deriveInitialsFromName(name),
+            avatarUrl: user?.avatar_url ?? "",
+          }
+        })
+        setMembers(nextMembers)
+        setMemberCount(nextMembers.length)
+      })
+      .catch(() => {
+        setIntegrations([])
+        setMembers([])
+        setMemberCount(0)
+      })
+  }, [activeWorkspaceId, apiFetch])
+
+  const appRows = React.useMemo(() => {
+    return integrations
+      .filter((integration) => integration.connected)
+      .map((integration) => ({
+        slug: integration.slug,
+        name: integration.name,
+        category: integration.category,
+        status: integration.status ?? "active",
+        connectedAt: integration.connected_at ?? null,
+        connectedUsers: memberCount,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [integrations, memberCount])
 
   const categoryOptions = React.useMemo(
     () => Array.from(new Set(appRows.map((app) => app.category))).sort(),
@@ -3322,16 +3789,26 @@ function IntegrationsSettingsContent() {
   const categoryFilterLabel =
     categoryFilter === "all" ? "All categories" : categoryFilter
   const hasAnyConnectedApps = appRows.length > 0
-  const handleDisconnectApp = React.useCallback((appName: string) => {
-    setDisconnectedAppsByName((previous) => ({
-      ...previous,
-      [appName]: true,
-    }))
-    setForcedAppsByName((previous) => ({
-      ...previous,
-      [appName]: false,
-    }))
-  }, [])
+  const handleDisconnectApp = React.useCallback(
+    async (appSlug: string, appName: string) => {
+      const response = await apiFetch(`/api/integrations/${appSlug}`, {
+        method: "DELETE",
+      }).catch(() => null)
+      if (!response?.ok) return
+      setIntegrations((previous) =>
+        previous.map((integration) =>
+          integration.slug === appSlug
+            ? { ...integration, connected: false, status: undefined, connected_at: undefined }
+            : integration
+        )
+      )
+      setForcedAppsByName((previous) => ({
+        ...previous,
+        [appName]: false,
+      }))
+    },
+    [apiFetch]
+  )
 
   return (
     <div className="space-y-3 pb-1">
@@ -3441,7 +3918,7 @@ function IntegrationsSettingsContent() {
                   {filteredAppRows.map((app) => {
                     const isForced = Boolean(forcedAppsByName[app.name])
                     const connectedUsersCount = isForced
-                      ? workspaceMembers.length
+                      ? memberCount
                       : app.connectedUsers
 
                     return (
@@ -3471,7 +3948,7 @@ function IntegrationsSettingsContent() {
                           {app.category}
                         </td>
                         <td className="px-2.5 py-1.5 text-foreground">
-                          {connectedUsersCount} / {workspaceMembers.length}
+                          {connectedUsersCount} / {memberCount}
                         </td>
                         <td className="px-2.5 py-1.5 text-right">
                           <div className="flex flex-nowrap justify-end gap-1.5">
@@ -3494,7 +3971,7 @@ function IntegrationsSettingsContent() {
                               size="xs"
                               variant="ghost"
                               className="shrink-0 rounded-[min(var(--radius-md),12px)] border border-transparent bg-sidebar text-foreground hover:bg-sidebar-accent"
-                              onClick={() => handleDisconnectApp(app.name)}
+                              onClick={() => void handleDisconnectApp(app.slug, app.name)}
                             >
                               Unconnect
                             </Button>
@@ -3531,16 +4008,9 @@ function IntegrationsSettingsContent() {
                 </tr>
               </thead>
               <tbody>
-                {workspaceMembers.map((member) => {
-                  const connectedNames = member.integratedApps
-                    .filter(
-                      (app) =>
-                        app.status === "Connected" &&
-                        !disconnectedAppsByName[app.name]
-                    )
-                    .map((app) => app.name)
+                {members.map((member) => {
                   const effectiveSet = new Set([
-                    ...connectedNames,
+                    ...appRows.map((app) => app.name),
                     ...forcedAppNames,
                   ])
 
@@ -3657,7 +4127,16 @@ function DataControlsSettingsContent() {
 function ReferAndEarnSettingsContent() {
   const referredUsers = 12
   const totalCredits = 310
-  const referralCode = accountProfile.userId.replace(/^usr_/, "").toUpperCase()
+  const [ownUserId, setOwnUserId] = React.useState("")
+  React.useEffect(() => {
+    fetch("/api/users/me")
+      .then((r) => r.json())
+      .then((res: { data?: { user: { id: string } } }) => {
+        if (res.data?.user.id) setOwnUserId(res.data.user.id)
+      })
+      .catch(() => {})
+  }, [])
+  const referralCode = ownUserId.replace(/-/g, "").slice(0, 12).toUpperCase()
   const referralLink = React.useMemo(() => {
     if (typeof window === "undefined") {
       return `https://app.atmet.ai/signup?ref=${referralCode}`
@@ -3950,89 +4429,6 @@ const adminBadgeVariants: Record<AdminBadgeTone, BadgeVariant> = {
   secondary: "neutral",
 }
 
-const adminActivityRows = [
-  {
-    timestamp: "Today, 10:42 AM",
-    actor: "Amir Haddad",
-    initials: "AH",
-    type: "Login",
-    tone: "info" as const,
-    description: "Signed in from Amman office network.",
-  },
-  {
-    timestamp: "Today, 10:18 AM",
-    actor: "Lina Saad",
-    initials: "LS",
-    type: "Workflow run",
-    tone: "success" as const,
-    description: "Ran customer renewal summary workflow.",
-  },
-  {
-    timestamp: "Today, 09:56 AM",
-    actor: "System",
-    initials: "SY",
-    type: "Error",
-    tone: "danger" as const,
-    description: "Slack delivery failed for workflow error alert.",
-  },
-  {
-    timestamp: "Today, 09:21 AM",
-    actor: "Fadi Mourad",
-    initials: "FM",
-    type: "Settings changed",
-    tone: "warning" as const,
-    description: "Updated workflow publishing permission for members.",
-  },
-  {
-    timestamp: "Yesterday, 06:44 PM",
-    actor: "Yara Nasser",
-    initials: "YN",
-    type: "File uploaded",
-    tone: "default" as const,
-    description: "Uploaded Q2 campaign budget spreadsheet.",
-  },
-  {
-    timestamp: "Yesterday, 05:12 PM",
-    actor: "Omar Khaled",
-    initials: "OK",
-    type: "Workflow run",
-    tone: "success" as const,
-    description: "Generated weekly support handoff report.",
-  },
-  {
-    timestamp: "Yesterday, 04:30 PM",
-    actor: "Amir Haddad",
-    initials: "AH",
-    type: "Member invited",
-    tone: "info" as const,
-    description: "Invited dina.saleh@atmet.ai as Workspace Member.",
-  },
-  {
-    timestamp: "Yesterday, 01:05 PM",
-    actor: "Lina Saad",
-    initials: "LS",
-    type: "File uploaded",
-    tone: "default" as const,
-    description: "Added product feedback import data.",
-  },
-  {
-    timestamp: "Mar 24, 2026",
-    actor: "System",
-    initials: "SY",
-    type: "Error",
-    tone: "danger" as const,
-    description: "API key request exceeded monthly workspace cap.",
-  },
-  {
-    timestamp: "Mar 24, 2026",
-    actor: "Amir Haddad",
-    initials: "AH",
-    type: "Settings changed",
-    tone: "warning" as const,
-    description: "Changed session timeout from 24 hours to 8 hours.",
-  },
-] as const
-
 const adminMembers = [
   {
     id: "adm_mem_001",
@@ -4043,7 +4439,7 @@ const adminMembers = [
     status: "Active",
     lastActive: "Today, 10:42 AM",
     initials: "AH",
-    avatarUrl: accountProfile.avatarUrl,
+    avatarUrl: null,
   },
   {
     id: "adm_mem_002",
@@ -4061,7 +4457,7 @@ const adminMembers = [
     id: "adm_mem_003",
     name: "Omar Khaled",
     email: "omar.khaled@atmet.ai",
-    role: "Workspace Admin",
+    role: "Owner" as PlatformRole,
     workspace: "Operations",
     status: "Active",
     lastActive: "Yesterday, 07:40 PM",
@@ -4073,7 +4469,7 @@ const adminMembers = [
     id: "adm_mem_004",
     name: "Yara Nasser",
     email: "yara.nasser@atmet.ai",
-    role: "Workspace Member",
+    role: "Member" as PlatformRole,
     workspace: "Marketing",
     status: "Invited",
     lastActive: "Pending invite",
@@ -4085,7 +4481,7 @@ const adminMembers = [
     id: "adm_mem_005",
     name: "Fadi Mourad",
     email: "fadi.mourad@atmet.ai",
-    role: "Workspace Admin",
+    role: "Owner" as PlatformRole,
     workspace: "Documentation",
     status: "Suspended",
     lastActive: "Mar 24, 2026",
@@ -4177,7 +4573,7 @@ const adminAuditRows = [
     tone: "info" as const,
     target: "dina.saleh@atmet.ai",
     ip: "10.14.20.19",
-    details: { role: "Workspace Member", inviteId: "inv_8831" },
+    details: { role: "Member", inviteId: "inv_8831" },
   },
 ] as const
 
@@ -4214,12 +4610,14 @@ function AdminSelect({
   options,
   onChange,
   className,
+  disabled = false,
 }: {
   label?: string
   value: string
   options: readonly string[]
   onChange: (value: string) => void
   className?: string
+  disabled?: boolean
 }) {
   return (
     <div className={cn("space-y-1 text-[13px] text-muted-foreground", className)}>
@@ -4231,6 +4629,7 @@ function AdminSelect({
               type="button"
               variant="outline"
               size="sm"
+              disabled={disabled}
               className="surface-sidebar-field h-7 w-full justify-between rounded-lg border-input bg-transparent px-2.5 text-sm font-normal text-foreground"
             />
           }
@@ -4240,7 +4639,7 @@ function AdminSelect({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-40 rounded-lg p-1">
           {options.map((option) => (
-            <DropdownMenuItem key={option} onClick={() => onChange(option)}>
+            <DropdownMenuItem key={option} onClick={() => !disabled && onChange(option)}>
               {option}
             </DropdownMenuItem>
           ))}
@@ -4267,14 +4666,14 @@ function AdminToggle({
       aria-pressed={checked}
       onClick={() => onChange?.(!checked)}
       className={cn(
-        "inline-flex h-6 w-11 shrink-0 items-center overflow-hidden rounded-full border-[0.5px] border-border bg-muted px-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex h-5 w-9 shrink-0 items-center overflow-hidden rounded-full border-[0.5px] border-border bg-muted px-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
         checked && "bg-primary"
       )}
     >
       <span
         className={cn(
-          "block size-5 rounded-full bg-background transition-transform",
-          checked && "translate-x-5"
+          "block size-4 rounded-full bg-background shadow-xs transition-transform dark:bg-white",
+          checked && "translate-x-4"
         )}
       />
     </button>
@@ -4339,14 +4738,17 @@ function openUserProfile(name: string, returnToAdminSection?: AdminConsoleSectio
 function AdminAvatar({
   initials,
   name,
+  avatarUrl,
   returnToAdminSection,
 }: {
   initials: string
   name: string
+  avatarUrl?: string | null
   returnToAdminSection?: AdminConsoleSection
 }) {
   const avatar = (
     <Avatar className="size-7 !rounded-full">
+      <AvatarImage src={avatarUrl ?? undefined} alt={name} className="!rounded-full object-cover" />
       <AvatarFallback className="!rounded-full text-[10px] font-medium">
         {initials}
       </AvatarFallback>
@@ -4372,53 +4774,62 @@ function AdminAvatar({
   )
 }
 
-function AdminOverviewConsoleContent() {
+function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?: string[] }) {
+  type AdminOverviewStat = {
+    label: string
+    value: number
+    caption?: string
+    delta?: number
+    deltaLabel?: string
+    deltaTone?: "positive" | "negative" | "neutral"
+    secondaryLabel?: string
+    secondaryValue?: number
+    placeholder?: boolean
+  }
+
   const [datePeriod, setDatePeriod] = React.useState("Last 7 days")
   const [activityQuery, setActivityQuery] = React.useState("")
   const [activityType, setActivityType] = React.useState("All event types")
   const [activityWorkspace, setActivityWorkspace] = React.useState("All workspaces")
   const [activityActor, setActivityActor] = React.useState("All actors")
-  const statsByPeriod = {
-    Today: [
-      { label: "Active users", value: "128" },
-      { label: "New users", value: "8" },
-      { label: "New workspaces", value: "2" },
-      { label: "Workflow runs", value: "1,842" },
-      { label: "Errors", value: "7" },
-      { label: "Storage used", value: "42 GB" },
-    ],
-    "Last 7 days": [
-      { label: "Active users", value: "412" },
-      { label: "New users", value: "46" },
-      { label: "New workspaces", value: "11" },
-      { label: "Workflow runs", value: "9,684" },
-      { label: "Errors", value: "31" },
-      { label: "Storage used", value: "42 GB" },
-    ],
-    "Last 30 days": [
-      { label: "Active users", value: "1,284" },
-      { label: "New users", value: "186" },
-      { label: "New workspaces", value: "38" },
-      { label: "Workflow runs", value: "38,420" },
-      { label: "Errors", value: "124" },
-      { label: "Storage used", value: "42 GB" },
-    ],
-    "Last 90 days": [
-      { label: "Active users", value: "2,916" },
-      { label: "New users", value: "521" },
-      { label: "New workspaces", value: "96" },
-      { label: "Workflow runs", value: "112,680" },
-      { label: "Errors", value: "348" },
-      { label: "Storage used", value: "42 GB" },
-    ],
-  } as const
-  const stats = statsByPeriod[datePeriod as keyof typeof statsByPeriod]
-  const activityRows = adminActivityRows.map((row) => ({
-    ...row,
-    workspace:
-      adminMembers.find((member) => member.name === row.actor)?.workspace ??
-      "System",
-  }))
+  const [stats, setStats] = React.useState<AdminOverviewStat[]>([])
+  const [activityRows, setActivityRows] = React.useState<Array<{
+    id: string
+    timestamp: string
+    actor: string
+    description: string
+    workspace: string
+    type: string
+    avatar_url: string | null
+  }>>([])
+  const [isOverviewLoading, setIsOverviewLoading] = React.useState(true)
+
+  const loadOverview = React.useCallback(() => {
+    setIsOverviewLoading(true)
+    fetch(`/api/admin/overview?period=${encodeURIComponent(datePeriod)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { stats?: AdminOverviewStat[]; activity?: Array<{
+        id: string
+        timestamp: string
+        actor: string
+        description: string
+        workspace: string
+        type: string
+        avatar_url: string | null
+      }> } } | null) => {
+        setStats(payload?.data?.stats ?? [])
+        setActivityRows(payload?.data?.activity ?? [])
+      })
+      .catch(() => {
+        setStats([])
+        setActivityRows([])
+      })
+      .finally(() => setIsOverviewLoading(false))
+  }, [datePeriod])
+
+  React.useEffect(() => {
+    loadOverview()
+  }, [loadOverview])
   const filteredActivityRows = activityRows.filter((row) => {
     const normalizedQuery = activityQuery.trim().toLowerCase()
     const matchesQuery =
@@ -4432,12 +4843,7 @@ function AdminOverviewConsoleContent() {
       activityWorkspace === "All workspaces" ||
       row.workspace === activityWorkspace
     const matchesActor = activityActor === "All actors" || row.actor === activityActor
-    const matchesPeriod =
-      datePeriod === "Last 90 days" ||
-      datePeriod === "Last 30 days" ||
-      (datePeriod === "Last 7 days" && !row.timestamp.startsWith("Mar 24")) ||
-      (datePeriod === "Today" && row.timestamp.startsWith("Today"))
-    return matchesQuery && matchesType && matchesWorkspace && matchesActor && matchesPeriod
+    return matchesQuery && matchesType && matchesWorkspace && matchesActor
   })
 
   return (
@@ -4451,24 +4857,56 @@ function AdminOverviewConsoleContent() {
             onChange={setDatePeriod}
             className="w-36"
           />
-          <Button type="button" size="sm">
-            <IconUserPlus className="h-3.5 w-3.5" />
-            Invite user
-          </Button>
-          <Button type="button" variant="outline" size="sm">
-            <IconDownload className="h-3.5 w-3.5" />
-            Export usage
+          <Button type="button" variant="outline" size="sm" onClick={loadOverview}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
           </Button>
         </>
       }
     >
       <section className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-        {stats.map((stat) => (
-          <div key={stat.label} className="rounded-lg bg-muted px-3 py-3">
-            <p className="text-[13px] text-muted-foreground">{stat.label}</p>
-            <p className="mt-1 text-2xl font-medium tabular-nums text-foreground">
-              {stat.value}
-            </p>
+        {(isOverviewLoading && stats.length === 0 ? [{ label: "Loading", value: 0 }] : stats).map((stat, index) => (
+          <div key={`${stat.label}-${index}`} className="rounded-lg bg-muted px-3 py-3">
+            {stat.placeholder ? null : (
+              <>
+                <p className="text-[13px] text-muted-foreground">{stat.label}</p>
+                <div className="mt-1 flex items-end gap-4">
+                  <p className="text-2xl font-medium tabular-nums text-foreground">
+                    {new Intl.NumberFormat("en-US").format(stat.value)}
+                  </p>
+                  {stat.secondaryLabel ? (
+                    <div className="pb-0.5">
+                      <p className="text-[11px] text-muted-foreground">{stat.secondaryLabel}</p>
+                      <p className="text-lg font-medium tabular-nums text-foreground">
+                        {new Intl.NumberFormat("en-US").format(stat.secondaryValue ?? 0)}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+                {stat.deltaLabel ? (
+                  <p
+                    className={cn(
+                      "mt-1 flex items-center gap-1 text-[11px] font-medium",
+                      stat.deltaTone === "negative"
+                        ? "text-red-500"
+                        : stat.deltaTone === "positive"
+                          ? "text-emerald-600"
+                          : "text-muted-foreground"
+                    )}
+                  >
+                    {(stat.delta ?? 0) < 0 ? (
+                      <IconChevronDown className="h-3 w-3" />
+                    ) : (
+                      <IconChevronUp className="h-3 w-3" />
+                    )}
+                    {stat.deltaLabel}
+                  </p>
+                ) : null}
+                {stat.caption ? (
+                  <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{stat.caption}</p>
+                ) : null}
+              </>
+            )}
           </div>
         ))}
       </section>
@@ -4493,7 +4931,7 @@ function AdminOverviewConsoleContent() {
             />
             <AdminSelect
               value={activityWorkspace}
-              options={["All workspaces", ...initialWorkspaces.map((workspace) => workspace.name), "System"]}
+              options={["All workspaces", ...workspaceNames, "System"]}
               onChange={setActivityWorkspace}
             />
             <AdminSelect
@@ -4506,7 +4944,7 @@ function AdminOverviewConsoleContent() {
         <div className="divide-y divide-border">
           {filteredActivityRows.map((row) => (
             <div
-              key={`${row.timestamp}-${row.actor}-${row.description}`}
+              key={row.id}
               onClick={() => openUserProfile(row.actor, "Admin overview")}
               className={cn(
                 "grid gap-2 px-3 py-2.5 text-sm sm:grid-cols-[140px_1fr_160px_150px] sm:items-center",
@@ -4517,8 +4955,9 @@ function AdminOverviewConsoleContent() {
               <span className="text-[13px] text-muted-foreground">{row.timestamp}</span>
               <span className="flex items-center gap-2 text-foreground">
                 <AdminAvatar
-                  initials={row.initials}
+                  initials={deriveInitialsFromName(row.actor)}
                   name={row.actor}
+                  avatarUrl={row.avatar_url}
                   returnToAdminSection="Admin overview"
                 />
                 <button
@@ -4530,7 +4969,9 @@ function AdminOverviewConsoleContent() {
                 </button>
               </span>
               <span className="truncate text-[13px] text-foreground">{row.workspace}</span>
-              <Badge variant={adminBadgeVariants[row.tone]}>{row.type}</Badge>
+              <Badge variant={row.type === "User" ? "green" : row.type === "Workspace" ? "blue" : "amber"}>
+                {row.type}
+              </Badge>
             </div>
           ))}
           {filteredActivityRows.length === 0 ? (
@@ -4551,7 +4992,7 @@ function WorkspaceProvisioningConsoleContent() {
   const [plan, setPlan] = React.useState("Team")
   const [ownerName, setOwnerName] = React.useState("")
   const [ownerEmail, setOwnerEmail] = React.useState("")
-  const [ownerRole, setOwnerRole] = React.useState<PlatformRole>("Workspace Admin")
+  const [ownerRole, setOwnerRole] = React.useState<PlatformRole>("Owner")
   const [apiKeyName, setApiKeyName] = React.useState("Default workspace key")
   const [apiExpiry, setApiExpiry] = React.useState("Never")
   const [apiEnabled, setApiEnabled] = React.useState(true)
@@ -4559,6 +5000,8 @@ function WorkspaceProvisioningConsoleContent() {
   const [appsEnabled, setAppsEnabled] = React.useState(true)
   const [monthlyTokenCap, setMonthlyTokenCap] = React.useState("50000")
   const [seatLimit, setSeatLimit] = React.useState("10")
+  const [isProvisioning, setIsProvisioning] = React.useState(false)
+  const [provisionError, setProvisionError] = React.useState<string | null>(null)
   const [createdWorkspaces, setCreatedWorkspaces] = React.useState<
     Array<{
       id: string
@@ -4570,28 +5013,68 @@ function WorkspaceProvisioningConsoleContent() {
     }>
   >([])
 
-  const provisionWorkspace = () => {
+  const provisionWorkspace = async () => {
     const trimmedName = workspaceName.trim()
     const trimmedEmail = ownerEmail.trim()
     if (!trimmedName || !trimmedEmail) return
 
-    setCreatedWorkspaces((previous) => [
-      {
-        id: `provisioned_${Date.now()}`,
-        name: trimmedName,
-        owner: trimmedEmail,
-        country,
-        plan,
-        apiKey: apiEnabled
-          ? `ak_ws_${Math.random().toString(36).slice(2, 14)}`
-          : null,
-      },
-      ...previous,
-    ])
-    setWorkspaceName("")
-    setWorkspaceSlug("")
-    setOwnerName("")
-    setOwnerEmail("")
+    setIsProvisioning(true)
+    setProvisionError(null)
+    try {
+      const response = await fetch("/api/admin/workspaces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          slug: workspaceSlug.trim() || null,
+          country,
+          plan: plan === "Enterprise" ? "enterprise" : plan === "Pro" ? "pro" : "free",
+          ownerName: ownerName.trim() || null,
+          ownerEmail: trimmedEmail,
+          monthlyTokenCap: Number(monthlyTokenCap) || null,
+          seatLimit: Number(seatLimit) || null,
+          features: {
+            workflows: workflowsEnabled,
+            apps: appsEnabled,
+          },
+          createApiKey: apiEnabled,
+          apiKeyName: apiKeyName.trim() || "Default workspace key",
+        }),
+      })
+      const payload = (await response.json()) as {
+        data?: {
+          workspace?: { id: string; name: string; country: string | null; plan: string }
+          apiKey?: string | null
+        }
+        error?: { message?: string }
+      }
+      if (!response.ok || !payload.data?.workspace) {
+        setProvisionError(payload.error?.message ?? "Unable to create workspace.")
+        return
+      }
+      const provisioned = payload.data
+      const createdWorkspace = provisioned.workspace
+      if (!createdWorkspace) return
+      setCreatedWorkspaces((previous) => [
+        {
+          id: createdWorkspace.id,
+          name: createdWorkspace.name,
+          owner: trimmedEmail,
+          country: createdWorkspace.country ?? country,
+          plan: createdWorkspace.plan,
+          apiKey: provisioned.apiKey ?? null,
+        },
+        ...previous,
+      ])
+      setWorkspaceName("")
+      setWorkspaceSlug("")
+      setOwnerName("")
+      setOwnerEmail("")
+    } catch {
+      setProvisionError("Unable to create workspace. Please try again.")
+    } finally {
+      setIsProvisioning(false)
+    }
   }
 
   return (
@@ -4601,11 +5084,11 @@ function WorkspaceProvisioningConsoleContent() {
         <Button
           type="button"
           size="sm"
-          disabled={!workspaceName.trim() || !ownerEmail.trim()}
-          onClick={provisionWorkspace}
+          disabled={isProvisioning || !workspaceName.trim() || !ownerEmail.trim()}
+          onClick={() => void provisionWorkspace()}
         >
-          <IconPlus className="h-3.5 w-3.5" />
-          Create workspace
+          {isProvisioning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <IconPlus className="h-3.5 w-3.5" />}
+          {isProvisioning ? "Creating" : "Create workspace"}
         </Button>
       }
     >
@@ -4653,7 +5136,7 @@ function WorkspaceProvisioningConsoleContent() {
             <AdminSelect
               label="Plan"
               value={plan}
-              options={["Free", "Team", "Business", "Enterprise"]}
+              options={["Free", "Pro", "Enterprise"]}
               onChange={setPlan}
             />
           </div>
@@ -4780,6 +5263,12 @@ function WorkspaceProvisioningConsoleContent() {
         </div>
       </section>
 
+      {provisionError ? (
+        <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {provisionError}
+        </div>
+      ) : null}
+
       {createdWorkspaces.length > 0 ? (
         <section className="overflow-hidden rounded-xl border border-border bg-background">
           <div className="border-b border-border px-3 py-2.5">
@@ -4821,20 +5310,704 @@ function WorkspaceProvisioningConsoleContent() {
   )
 }
 
-function UsersWorkspacesConsoleContent() {
+type AdminWorkspaceRow = {
+  id: string
+  name: string
+  slug: string | null
+  plan: "free" | "pro" | "enterprise"
+  status: "active" | "suspended" | "cancelled"
+  avatar_url: string | null
+  country: string | null
+  monthly_token_cap: number | null
+  seat_limit: number | null
+  features?: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+  owner: {
+    id: string
+    email: string | null
+    full_name: string | null
+    avatar_url: string | null
+    status: string
+  } | null
+  member_count: number
+  api_key_count: number
+}
+
+type AdminUserRow = {
+  id: string
+  publicUserId: string
+  name: string
+  initials: string
+  avatarUrl: string | null
+  email: string
+  workspace: string
+  role: PlatformRole
+  status: "Active" | "Not active" | "Suspended"
+  lastActive: string
+  lastSignInAt: string | null
+  platformRole: "user" | "super_admin" | "admin"
+  ownedWorkspaces: Array<{ id: string; name: string }>
+}
+
+function AdminUserProfilePanel({
+  user,
+  onBack,
+  onSave,
+  onRemove,
+}: {
+  user: AdminUserRow
+  onBack: () => void
+  onSave: (
+    userId: string,
+    updates: {
+      full_name?: string
+      status?: "active" | "inactive" | "suspended"
+      platform_role?: "user" | "admin" | "super_admin"
+    },
+    successMessage: string
+  ) => Promise<void>
+  onRemove?: (user: AdminUserRow) => void
+}) {
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [name, setName] = React.useState(user.name)
+  const [status, setStatus] = React.useState(user.status)
+  const [role, setRole] = React.useState<PlatformRole>(user.role)
+
+  React.useEffect(() => {
+    setName(user.name)
+    setStatus(user.status)
+    setRole(user.role)
+    setIsEditing(false)
+  }, [user.id, user.name, user.role, user.status])
+
+  const platformRole =
+    role === "Super Admin" ? "super_admin" : role === "Admin" ? "admin" : "user"
+  const statusValue =
+    status === "Suspended" ? "suspended" : status === "Not active" ? "inactive" : "active"
+  const usage = user as AdminUserRow & Partial<{
+    tokens: number
+    runs: number
+    files: number
+    storageBytes: number
+    chats: number
+  }>
+
+  return (
+    <AdminPage
+      section={"User profile" as AdminConsoleSection}
+      actions={
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={onBack}>
+            <IconChevronLeft className="h-3.5 w-3.5" />
+            Back
+          </Button>
+          {isEditing ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setName(user.name)
+                setStatus(user.status)
+                setRole(user.role)
+                setIsEditing(false)
+              }}
+            >
+              Cancel
+            </Button>
+          ) : (
+            <Button type="button" size="sm" onClick={() => setIsEditing(true)}>
+              <PenLine className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          )}
+        </>
+      }
+    >
+      <section className="rounded-xl bg-muted/35 p-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+          <Avatar className="size-14 !rounded-full">
+            <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} className="!rounded-full object-cover" />
+            <AvatarFallback className="!rounded-full text-sm font-medium">{user.initials}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="truncate text-base font-medium text-foreground">{user.name}</p>
+            <p className="truncate text-[13px] text-muted-foreground">{user.email}</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                <Badge variant={adminBadgeVariants[user.status === "Active" ? "success" : user.status === "Suspended" ? "warning" : "info"]}>
+                  {user.status}
+                </Badge>
+                <Badge variant="neutral">{user.role}</Badge>
+              </div>
+            </div>
+          </div>
+          {isEditing ? (
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={() => void onSave(user.id, { status: user.status === "Suspended" ? "active" : "suspended" }, user.status === "Suspended" ? "User activated." : "User suspended.")}
+            >
+              {user.status === "Suspended" ? "Activate" : "Suspend"}
+            </Button>
+            <Button type="button" size="xs" variant="outline" onClick={() => void onSave(user.id, { platform_role: "admin" }, "User role changed to Admin.")}>
+              Make admin
+            </Button>
+            <Button type="button" size="xs" variant="outline" onClick={() => void onSave(user.id, { platform_role: "super_admin" }, "User role changed to Super Admin.")}>
+              Make super admin
+            </Button>
+            {onRemove ? (
+              <Button type="button" size="xs" variant="destructive" onClick={() => onRemove(user)}>
+                Remove
+              </Button>
+            ) : null}
+          </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="grid gap-3 rounded-xl bg-background/60 p-1 sm:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-3 rounded-lg bg-muted/25 p-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Profile</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              {isEditing ? "Update identity and account access for this user." : "Press Edit to make changes."}
+            </p>
+          </div>
+        <label className="space-y-1 text-[13px] text-muted-foreground">
+          Full name
+            <Input value={name} disabled={!isEditing} onChange={(event) => setName(event.target.value)} className="h-8 text-sm disabled:opacity-100" />
+        </label>
+        <label className="space-y-1 text-[13px] text-muted-foreground">
+          Email
+            <Input value={user.email} readOnly className="h-8 bg-muted/40 text-sm" />
+        </label>
+        <AdminSelect label="Platform role" value={role} options={platformRoles} onChange={(value) => setRole(value as PlatformRole)} disabled={!isEditing} />
+        <AdminSelect label="Status" value={status} options={["Active", "Not active", "Suspended"]} onChange={(value) => setStatus(value as typeof status)} disabled={!isEditing} />
+        </div>
+        <div className="space-y-3 rounded-lg bg-muted/25 p-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Record details</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Operational data connected to this profile.</p>
+          </div>
+          <div className="grid gap-2 text-[13px]">
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">User ID</span>
+              <span className="truncate font-mono text-foreground">{user.publicUserId || user.id}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Workspace</span>
+              <span className="truncate text-foreground">{user.workspace}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Last login</span>
+              <span className="truncate text-foreground">{user.lastActive}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Owned workspaces</span>
+              <span className="tabular-nums text-foreground">{user.ownedWorkspaces.length}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-muted/20 p-3">
+        <p className="text-sm font-medium text-foreground">Admin actions</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          {isEditing ? (
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={() => void onSave(user.id, { platform_role: "user" }, "User role changed to User.")}>
+                Make user
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => void onSave(user.id, { status: "inactive" }, "User marked not active.")}>
+                Mark not active
+              </Button>
+            </>
+          ) : null}
+          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(user.publicUserId || user.id)}>
+            Copy user ID
+          </Button>
+        </div>
+      </section>
+
+      {typeof usage.tokens === "number" ? (
+        <section className="rounded-xl bg-muted/20 p-3">
+          <p className="text-sm font-medium text-foreground">Usage</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-5">
+            {[
+              ["Tokens", usage.tokens],
+              ["Runs", usage.runs],
+              ["Files", usage.files],
+              ["Chats", usage.chats],
+              ["Storage MB", Math.round((usage.storageBytes ?? 0) / 1024 / 1024)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg bg-background/60 p-2">
+                <p className="text-[11px] text-muted-foreground">{label}</p>
+                <p className="mt-1 text-lg font-medium tabular-nums text-foreground">{Number(value ?? 0).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {isEditing ? (
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => {
+            void onSave(user.id, { full_name: name.trim(), status: statusValue, platform_role: platformRole }, "User profile updated.")
+            setIsEditing(false)
+          }}
+        >
+          Save profile
+        </Button>
+      </div>
+      ) : null}
+    </AdminPage>
+  )
+}
+
+function AdminWorkspaceProfilePanel({
+  workspace,
+  onBack,
+  onSave,
+  onDelete,
+}: {
+  workspace: AdminWorkspaceRow
+  onBack: () => void
+  onSave: (
+    workspaceId: string,
+    updates: {
+      name?: string
+      slug?: string | null
+      status?: "active" | "suspended" | "cancelled"
+      plan?: "free" | "pro" | "enterprise"
+      country?: string | null
+      monthly_token_cap?: number | null
+      seat_limit?: number | null
+      features?: Record<string, unknown>
+    },
+    successMessage: string
+  ) => Promise<void>
+  onDelete?: (workspace: AdminWorkspaceRow) => void
+}) {
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [name, setName] = React.useState(workspace.name)
+  const [slug, setSlug] = React.useState(workspace.slug ?? "")
+  const [status, setStatus] = React.useState(workspace.status)
+  const [plan, setPlan] = React.useState(workspace.plan)
+  const [country, setCountry] = React.useState(workspace.country ?? "")
+  const [monthlyTokenCap, setMonthlyTokenCap] = React.useState(String(workspace.monthly_token_cap ?? ""))
+  const [seatLimit, setSeatLimit] = React.useState(String(workspace.seat_limit ?? ""))
+  const features = (workspace.features ?? {}) as Record<string, unknown>
+  const limits = features.limits && typeof features.limits === "object" && !Array.isArray(features.limits)
+    ? features.limits as Record<string, unknown>
+    : {}
+  const [maxFileSizeMb, setMaxFileSizeMb] = React.useState(String(typeof limits.maxFileSizeMb === "number" ? limits.maxFileSizeMb : ""))
+  const [maxFilesPerWorkspace, setMaxFilesPerWorkspace] = React.useState(String(typeof limits.maxFilesPerWorkspace === "number" ? limits.maxFilesPerWorkspace : ""))
+  const isAdjusted = Boolean(workspace.monthly_token_cap || workspace.seat_limit || Object.keys(limits).length)
+
+  React.useEffect(() => {
+    setName(workspace.name)
+    setSlug(workspace.slug ?? "")
+    setStatus(workspace.status)
+    setPlan(workspace.plan)
+    setCountry(workspace.country ?? "")
+    setMonthlyTokenCap(String(workspace.monthly_token_cap ?? ""))
+    setSeatLimit(String(workspace.seat_limit ?? ""))
+    setMaxFileSizeMb(String(typeof limits.maxFileSizeMb === "number" ? limits.maxFileSizeMb : ""))
+    setMaxFilesPerWorkspace(String(typeof limits.maxFilesPerWorkspace === "number" ? limits.maxFilesPerWorkspace : ""))
+    setIsEditing(false)
+  }, [workspace.id, workspace.name, workspace.slug, workspace.status, workspace.plan, workspace.country, workspace.monthly_token_cap, workspace.seat_limit, limits.maxFileSizeMb, limits.maxFilesPerWorkspace])
+
+  const numericOrNull = (value: string) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }
+  const buildFeatureOverrides = () => {
+    const nextFeatures = { ...features }
+    const nextLimits: Record<string, number> = {}
+    const nextMaxFileSizeMb = numericOrNull(maxFileSizeMb)
+    const nextMaxFilesPerWorkspace = numericOrNull(maxFilesPerWorkspace)
+    if (nextMaxFileSizeMb !== null) nextLimits.maxFileSizeMb = nextMaxFileSizeMb
+    if (nextMaxFilesPerWorkspace !== null) nextLimits.maxFilesPerWorkspace = nextMaxFilesPerWorkspace
+    if (Object.keys(nextLimits).length > 0) {
+      nextFeatures.limits = nextLimits
+    } else {
+      delete nextFeatures.limits
+    }
+    return nextFeatures
+  }
+  const buildResetFeatures = () => {
+    const nextFeatures = { ...features }
+    delete nextFeatures.limits
+    return nextFeatures
+  }
+
+  return (
+    <AdminPage
+      section={"Workspace profile" as AdminConsoleSection}
+      actions={
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={onBack}>
+            <IconChevronLeft className="h-3.5 w-3.5" />
+            Back
+          </Button>
+          {isEditing ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setName(workspace.name)
+                setSlug(workspace.slug ?? "")
+                setStatus(workspace.status)
+                setPlan(workspace.plan)
+                setCountry(workspace.country ?? "")
+                setMonthlyTokenCap(String(workspace.monthly_token_cap ?? ""))
+                setSeatLimit(String(workspace.seat_limit ?? ""))
+                setMaxFileSizeMb(String(typeof limits.maxFileSizeMb === "number" ? limits.maxFileSizeMb : ""))
+                setMaxFilesPerWorkspace(String(typeof limits.maxFilesPerWorkspace === "number" ? limits.maxFilesPerWorkspace : ""))
+                setIsEditing(false)
+              }}
+            >
+              Cancel
+            </Button>
+          ) : (
+            <Button type="button" size="sm" onClick={() => setIsEditing(true)}>
+              <PenLine className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          )}
+        </>
+      }
+    >
+      <section className="rounded-xl bg-muted/35 p-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar className="size-14 !rounded-lg">
+              <AvatarImage src={workspace.avatar_url ?? undefined} alt={workspace.name} className="!rounded-lg object-cover" />
+              <AvatarFallback className="!rounded-lg text-sm font-medium">{deriveInitialsFromName(workspace.name)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-base font-medium text-foreground">{workspace.name}</p>
+              <p className="truncate font-mono text-[12px] text-muted-foreground">{workspace.slug ?? workspace.id}</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                <Badge variant={workspace.status === "active" ? "green" : workspace.status === "suspended" ? "amber" : "neutral"}>
+                  {workspace.status}
+                </Badge>
+                <Badge variant="neutral">{workspace.plan}</Badge>
+                {isAdjusted ? <Badge variant="amber">Adjusted limits</Badge> : null}
+              </div>
+            </div>
+          </div>
+          {isEditing ? (
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={() => void onSave(workspace.id, { status: workspace.status === "suspended" ? "active" : "suspended" }, workspace.status === "suspended" ? "Workspace activated." : "Workspace suspended.")}
+            >
+              {workspace.status === "suspended" ? "Activate" : "Suspend"}
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={() =>
+                void onSave(
+                  workspace.id,
+                  { monthly_token_cap: null, seat_limit: null, features: buildResetFeatures() },
+                  "Workspace limit overrides reset."
+                )
+              }
+            >
+              Reset limits
+            </Button>
+            {onDelete ? (
+              <Button type="button" size="xs" variant="destructive" onClick={() => onDelete(workspace)}>
+                Delete
+              </Button>
+            ) : null}
+          </div>
+          ) : null}
+        </div>
+      </section>
+
+      {isAdjusted ? (
+        <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          This workspace has adjusted limits and does not fully follow the general Usage & limits values.
+        </div>
+      ) : null}
+
+      <section className="grid gap-3 rounded-xl bg-background/60 p-1 lg:grid-cols-[1fr_1fr]">
+        <div className="space-y-3 rounded-lg bg-muted/25 p-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Workspace details</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              {isEditing ? "Core profile, plan, and lifecycle settings." : "Press Edit to make changes."}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-[13px] text-muted-foreground">
+              Workspace name
+              <Input value={name} disabled={!isEditing} onChange={(event) => setName(event.target.value)} className="h-8 text-sm disabled:opacity-100" />
+            </label>
+            <label className="space-y-1 text-[13px] text-muted-foreground">
+              Slug
+              <Input value={slug} disabled={!isEditing} onChange={(event) => setSlug(event.target.value)} className="h-8 text-sm disabled:opacity-100" />
+            </label>
+            <AdminSelect label="Plan" value={plan} options={["free", "pro", "enterprise"]} onChange={(value) => setPlan(value as typeof plan)} disabled={!isEditing} />
+            <AdminSelect label="Status" value={status} options={["active", "suspended", "cancelled"]} onChange={(value) => setStatus(value as typeof status)} disabled={!isEditing} />
+            <label className="space-y-1 text-[13px] text-muted-foreground sm:col-span-2">
+              Country
+              <Input value={country} disabled={!isEditing} onChange={(event) => setCountry(event.target.value)} className="h-8 text-sm disabled:opacity-100" />
+            </label>
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-lg bg-muted/25 p-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">Usage and limits</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              {isEditing ? "Blank fields inherit the general Usage & limits values." : "Press Edit to override workspace limits."}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-[13px] text-muted-foreground">
+              Monthly token cap
+              <Input type="number" value={monthlyTokenCap} disabled={!isEditing} onChange={(event) => setMonthlyTokenCap(event.target.value)} className="h-8 text-sm disabled:opacity-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+            </label>
+            <label className="space-y-1 text-[13px] text-muted-foreground">
+              Seat limit
+              <Input type="number" value={seatLimit} disabled={!isEditing} onChange={(event) => setSeatLimit(event.target.value)} className="h-8 text-sm disabled:opacity-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+            </label>
+            <label className="space-y-1 text-[13px] text-muted-foreground">
+              Max file size MB
+              <Input type="number" value={maxFileSizeMb} disabled={!isEditing} onChange={(event) => setMaxFileSizeMb(event.target.value)} className="h-8 text-sm disabled:opacity-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+            </label>
+            <label className="space-y-1 text-[13px] text-muted-foreground">
+              Max files
+              <Input type="number" value={maxFilesPerWorkspace} disabled={!isEditing} onChange={(event) => setMaxFilesPerWorkspace(event.target.value)} className="h-8 text-sm disabled:opacity-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-muted/20 p-3">
+        <p className="text-sm font-medium text-foreground">Operational data</p>
+        <div className="mt-2 grid gap-2 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="text-muted-foreground">Owner</p>
+            <p className="truncate text-foreground">{workspace.owner?.full_name || workspace.owner?.email || "No owner"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Members</p>
+            <p className="tabular-nums text-foreground">{workspace.member_count}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">API keys</p>
+            <p className="tabular-nums text-foreground">{workspace.api_key_count}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Workspace ID</p>
+            <button type="button" onClick={() => navigator.clipboard?.writeText(workspace.id)} className="truncate font-mono text-foreground hover:text-primary">
+              {workspace.id}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-muted/20 p-3">
+        <p className="text-sm font-medium text-foreground">Admin actions</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-4">
+          {isEditing ? (
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={() => void onSave(workspace.id, { plan: "enterprise" }, "Workspace moved to Enterprise.")}>
+                Set enterprise
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => void onSave(workspace.id, { status: "cancelled" }, "Workspace cancelled.")}>
+                Cancel workspace
+              </Button>
+            </>
+          ) : null}
+          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(workspace.id)}>
+            Copy workspace ID
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(workspace.owner?.id ?? "")} disabled={!workspace.owner?.id}>
+            Copy owner ID
+          </Button>
+        </div>
+      </section>
+
+      {isEditing ? (
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => {
+            void onSave(
+              workspace.id,
+              {
+                name: name.trim(),
+                slug: slug.trim() || null,
+                status,
+                plan,
+                country: country.trim() || null,
+                monthly_token_cap: numericOrNull(monthlyTokenCap),
+                seat_limit: numericOrNull(seatLimit),
+                features: buildFeatureOverrides(),
+              },
+              "Workspace profile updated."
+            )
+            setIsEditing(false)
+          }}
+        >
+          Save workspace
+        </Button>
+      </div>
+      ) : null}
+    </AdminPage>
+  )
+}
+
+function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames?: string[] }) {
+  const [activeTab, setActiveTab] = React.useState<"users" | "workspaces">("users")
   const [query, setQuery] = React.useState("")
   const [roleFilter, setRoleFilter] = React.useState("All roles")
   const [statusFilter, setStatusFilter] = React.useState("All")
   const [selectedRows, setSelectedRows] = React.useState<string[]>([])
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState("")
-  const [inviteRole, setInviteRole] = React.useState<PlatformRole>("Workspace Member")
+  const [inviteRole, setInviteRole] = React.useState<PlatformRole>("Member")
+  const [adminUsers, setAdminUsers] = React.useState<AdminUserRow[]>([])
+  const [adminWorkspaces, setAdminWorkspaces] = React.useState<AdminWorkspaceRow[]>([])
+  const [isLoadingUsers, setIsLoadingUsers] = React.useState(true)
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = React.useState(true)
+  const [adminNotice, setAdminNotice] = React.useState<string | null>(null)
+  const [adminError, setAdminError] = React.useState<string | null>(null)
+  const [selectedAdminUser, setSelectedAdminUser] = React.useState<(typeof adminUsers)[number] | null>(null)
+  const [selectedWorkspace, setSelectedWorkspace] = React.useState<AdminWorkspaceRow | null>(null)
+  const [pendingRemoveUser, setPendingRemoveUser] = React.useState<{
+    id: string
+    name: string
+    email: string
+    ownedWorkspaces: Array<{ id: string; name: string }>
+  } | null>(null)
+  const [ownerRemoveWarningOpen, setOwnerRemoveWarningOpen] = React.useState(false)
+  const [isRemovingUser, setIsRemovingUser] = React.useState(false)
+  const [removeUserError, setRemoveUserError] = React.useState<string | null>(null)
   const statusTones: Record<string, AdminBadgeTone> = {
     Active: "success",
-    Invited: "info",
+    "Not active": "info",
     Suspended: "warning",
   }
-  const filteredMembers = adminMembers.filter((member) => {
+
+  const loadAdminUsers = React.useCallback(() => {
+    setIsLoadingUsers(true)
+    fetch("/api/admin/users")
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            users?: Array<{
+              id: string
+              public_user_id?: string | null
+              email: string | null
+              full_name: string | null
+              avatar_url: string | null
+              status: "active" | "inactive" | "suspended"
+              platform_role: "user" | "super_admin" | "admin"
+              last_sign_in_at: string | null
+              updated_at: string
+              memberships: Array<{
+                role: "owner" | "member"
+                workspace?: { name?: string } | { name?: string }[] | null
+              }>
+              owned_workspaces?: Array<{ id: string; name: string }>
+            }>
+          }
+        } | null) => {
+          const users = payload?.data?.users ?? []
+          setAdminUsers(
+            users.map((user) => {
+              const memberships = user.memberships ?? []
+              const firstMembership = memberships[0]
+              const workspace = Array.isArray(firstMembership?.workspace)
+                ? firstMembership.workspace[0]
+                : firstMembership?.workspace
+              const name = user.full_name || user.email || "Unknown user"
+              const membershipRole = firstMembership?.role
+              const role: PlatformRole =
+                user.platform_role === "super_admin"
+                  ? "Super Admin"
+                  : user.platform_role === "admin"
+                    ? "Admin"
+                    : membershipRole === "owner"
+                      ? "Owner"
+                      : "Member"
+
+              return {
+                id: user.id,
+                publicUserId: user.public_user_id ?? "",
+                name,
+                initials: deriveInitialsFromName(name),
+                avatarUrl: user.avatar_url ?? null,
+                email: user.email ?? "",
+                workspace:
+                  user.platform_role === "super_admin" || user.platform_role === "admin"
+                    ? "Platform"
+                    : workspace?.name ?? "No workspace",
+                role,
+                status:
+                  user.status === "suspended"
+                    ? "Suspended"
+                    : user.status === "inactive"
+                      ? "Not active"
+                      : "Active",
+                lastActive: user.last_sign_in_at
+                  ? new Date(user.last_sign_in_at).toLocaleString()
+                  : "Never",
+                lastSignInAt: user.last_sign_in_at,
+                platformRole: user.platform_role,
+                ownedWorkspaces: user.owned_workspaces ?? [],
+              }
+            })
+          )
+        }
+      )
+      .catch(() => setAdminUsers([]))
+      .finally(() => setIsLoadingUsers(false))
+  }, [])
+
+  const loadAdminWorkspaces = React.useCallback(() => {
+    setIsLoadingWorkspaces(true)
+    fetch("/api/admin/workspaces")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { workspaces?: AdminWorkspaceRow[] } } | null) => {
+        setAdminWorkspaces(payload?.data?.workspaces ?? [])
+      })
+      .catch(() => setAdminWorkspaces([]))
+      .finally(() => setIsLoadingWorkspaces(false))
+  }, [])
+
+  const refreshAdminConsole = React.useCallback(() => {
+    setAdminNotice(null)
+    setAdminError(null)
+    loadAdminUsers()
+    loadAdminWorkspaces()
+  }, [loadAdminUsers, loadAdminWorkspaces])
+
+  React.useEffect(() => {
+    refreshAdminConsole()
+  }, [refreshAdminConsole])
+
+  const filteredMembers = adminUsers.filter((member) => {
     const matchesQuery =
       query.trim().length === 0 ||
       member.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -4844,12 +6017,299 @@ function UsersWorkspacesConsoleContent() {
     const matchesStatus = statusFilter === "All" || member.status === statusFilter
     return matchesQuery && matchesRole && matchesStatus
   })
+  const filteredWorkspaces = adminWorkspaces.filter((workspace) => {
+    const q = query.trim().toLowerCase()
+    const matchesQuery =
+      !q ||
+      workspace.name.toLowerCase().includes(q) ||
+      (workspace.slug ?? "").toLowerCase().includes(q) ||
+      (workspace.owner?.email ?? "").toLowerCase().includes(q) ||
+      (workspace.owner?.full_name ?? "").toLowerCase().includes(q)
+    const matchesStatus =
+      statusFilter === "All" ||
+      workspace.status === statusFilter.toLowerCase().replace("not active", "inactive")
+    return matchesQuery && matchesStatus
+  })
   const allFilteredSelected =
     filteredMembers.length > 0 &&
     filteredMembers.every((member) => selectedRows.includes(member.id))
 
+  const updateAdminUser = React.useCallback(
+    async (
+      userId: string,
+      updates: {
+        full_name?: string
+        status?: "active" | "inactive" | "suspended"
+        platform_role?: "user" | "admin" | "super_admin"
+      },
+      successMessage: string
+    ) => {
+      setAdminNotice(null)
+      setAdminError(null)
+      try {
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        })
+        const payload = (await response.json()) as { error?: { message?: string } }
+        if (!response.ok) {
+          setAdminError(payload.error?.message ?? "Unable to update this user.")
+          return
+        }
+        setAdminNotice(successMessage)
+        loadAdminUsers()
+        setSelectedAdminUser((current) =>
+          current?.id === userId
+            ? {
+                ...current,
+                name: updates.full_name ?? current.name,
+                initials: updates.full_name ? deriveInitialsFromName(updates.full_name) : current.initials,
+                status:
+                  updates.status === "suspended"
+                    ? "Suspended"
+                    : updates.status === "inactive"
+                      ? "Not active"
+                      : updates.status === "active"
+                        ? "Active"
+                        : current.status,
+                role:
+                  updates.platform_role === "super_admin"
+                    ? "Super Admin"
+                    : updates.platform_role === "admin"
+                      ? "Admin"
+                      : updates.platform_role === "user"
+                        ? "Member"
+                        : current.role,
+                platformRole: updates.platform_role ?? current.platformRole,
+              }
+            : current
+        )
+      } catch {
+        setAdminError("Unable to update this user. Please try again.")
+      }
+    },
+    [loadAdminUsers]
+  )
+
+  const updateAdminWorkspace = React.useCallback(
+    async (
+      workspaceId: string,
+      updates: {
+        name?: string
+        slug?: string | null
+        status?: "active" | "suspended" | "cancelled"
+        plan?: "free" | "pro" | "enterprise"
+        country?: string | null
+        monthly_token_cap?: number | null
+        seat_limit?: number | null
+        features?: Record<string, unknown>
+      },
+      successMessage: string
+    ) => {
+      setAdminNotice(null)
+      setAdminError(null)
+      try {
+        const response = await fetch(`/api/admin/workspaces/${workspaceId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        })
+        const payload = (await response.json()) as { error?: { message?: string } }
+        if (!response.ok) {
+          setAdminError(payload.error?.message ?? "Unable to update this workspace.")
+          return
+        }
+        setAdminNotice(successMessage)
+        loadAdminWorkspaces()
+        setSelectedWorkspace((current) =>
+          current?.id === workspaceId ? { ...current, ...updates } : current
+        )
+      } catch {
+        setAdminError("Unable to update this workspace. Please try again.")
+      }
+    },
+    [loadAdminWorkspaces]
+  )
+
+  const deleteAdminWorkspace = React.useCallback(
+    async (workspace: AdminWorkspaceRow) => {
+      const confirmed = window.confirm(
+        `Delete ${workspace.name}? Members will lose access to this workspace. If they belong to other workspaces, those memberships stay active.`
+      )
+      if (!confirmed) return
+
+      setAdminNotice(null)
+      setAdminError(null)
+      try {
+        const response = await fetch(`/api/admin/workspaces/${workspace.id}`, {
+          method: "DELETE",
+        })
+        const payload = (await response.json()) as { error?: { message?: string } }
+        if (!response.ok) {
+          setAdminError(payload.error?.message ?? "Unable to delete this workspace.")
+          return
+        }
+        setAdminNotice("Workspace deleted.")
+        setSelectedWorkspace(null)
+        loadAdminWorkspaces()
+      } catch {
+        setAdminError("Unable to delete this workspace. Please try again.")
+      }
+    },
+    [loadAdminWorkspaces]
+  )
+
+  const sendAdminInvite = React.useCallback(async () => {
+    const email = inviteEmail.trim()
+    if (!email) return
+    setAdminNotice(null)
+    setAdminError(null)
+    try {
+      const role =
+        inviteRole === "Super Admin"
+          ? "super_admin"
+          : inviteRole === "Admin"
+            ? "admin"
+            : "user"
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, role }),
+      })
+      const payload = (await response.json()) as {
+        data?: { emailSent?: boolean; emailWarning?: string | null }
+        error?: { message?: string }
+      }
+      if (!response.ok) {
+        setAdminError(payload.error?.message ?? "Unable to invite this user.")
+        return
+      }
+      setInviteOpen(false)
+      setInviteEmail("")
+      setInviteRole("Member")
+      setAdminNotice(payload.data?.emailSent ? "User invited and email sent." : `User invited, but email was not sent: ${payload.data?.emailWarning ?? "Unknown email error."}`)
+      loadAdminUsers()
+    } catch {
+      setAdminError("Unable to invite this user. Please try again.")
+    }
+  }, [inviteEmail, inviteRole, loadAdminUsers])
+
+  const closeRemoveDialogs = React.useCallback(() => {
+    if (isRemovingUser) return
+    setPendingRemoveUser(null)
+    setOwnerRemoveWarningOpen(false)
+    setRemoveUserError(null)
+  }, [isRemovingUser])
+
+  const requestRemoveUser = React.useCallback(
+    (member: (typeof adminUsers)[number]) => {
+      setPendingRemoveUser({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        ownedWorkspaces: member.ownedWorkspaces,
+      })
+      setOwnerRemoveWarningOpen(false)
+      setRemoveUserError(null)
+    },
+    []
+  )
+
+  const removeUser = React.useCallback(
+    async (confirmWorkspaceDeletion: boolean) => {
+      if (!pendingRemoveUser || isRemovingUser) return
+
+      setIsRemovingUser(true)
+      setRemoveUserError(null)
+      try {
+        const queryString = confirmWorkspaceDeletion
+          ? "?confirmWorkspaceDeletion=true"
+          : ""
+        const response = await fetch(`/api/admin/users/${pendingRemoveUser.id}${queryString}`, {
+          method: "DELETE",
+        })
+        const payload = (await response.json()) as { error?: { message?: string } }
+
+        if (!response.ok) {
+          setRemoveUserError(payload.error?.message ?? "Unable to remove this user.")
+          return
+        }
+
+        setAdminUsers((previous) =>
+          previous.filter((user) => user.id !== pendingRemoveUser.id)
+        )
+        setSelectedRows((previous) =>
+          previous.filter((id) => id !== pendingRemoveUser.id)
+        )
+        setPendingRemoveUser(null)
+        setOwnerRemoveWarningOpen(false)
+      } catch {
+        setRemoveUserError("Unable to remove this user. Please try again.")
+      } finally {
+        setIsRemovingUser(false)
+      }
+    },
+    [isRemovingUser, pendingRemoveUser]
+  )
+
+  if (selectedAdminUser) {
+    return (
+      <AdminUserProfilePanel
+        user={selectedAdminUser}
+        onBack={() => setSelectedAdminUser(null)}
+        onSave={updateAdminUser}
+        onRemove={(user) => {
+          setSelectedAdminUser(null)
+          requestRemoveUser(user)
+        }}
+      />
+    )
+  }
+
+  if (selectedWorkspace) {
+    return (
+      <AdminWorkspaceProfilePanel
+        workspace={selectedWorkspace}
+        onBack={() => setSelectedWorkspace(null)}
+        onSave={updateAdminWorkspace}
+        onDelete={deleteAdminWorkspace}
+      />
+    )
+  }
+
   return (
     <AdminPage section="Users & workspaces">
+      <div className="inline-flex w-fit rounded-lg bg-muted p-0.5">
+        {(["users", "workspaces"] as const).map((tab) => (
+          <Button
+            key={tab}
+            type="button"
+            size="xs"
+            variant={activeTab === tab ? "default" : "ghost"}
+            onClick={() => {
+              setActiveTab(tab)
+              setSelectedRows([])
+              setStatusFilter("All")
+            }}
+            className="capitalize"
+          >
+            {tab}
+          </Button>
+        ))}
+      </div>
+
+      {adminError ? (
+        <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {adminError}
+        </div>
+      ) : null}
+      {adminNotice ? (
+        <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+          {adminNotice}
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
@@ -4857,42 +6317,63 @@ function UsersWorkspacesConsoleContent() {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by name, email, or workspace"
+              placeholder={activeTab === "users" ? "Search by name, email, or workspace" : "Search by workspace, slug, or owner"}
               className="h-8 pl-8"
             />
           </div>
-          <AdminSelect
-            value={roleFilter}
-            options={["All roles", ...platformRoles]}
-            onChange={setRoleFilter}
-            className="sm:w-36"
-          />
+          {activeTab === "users" ? (
+            <AdminSelect
+              value={roleFilter}
+              options={["All roles", ...platformRoles]}
+              onChange={setRoleFilter}
+              className="sm:w-36"
+            />
+          ) : null}
           <AdminSelect
             value={statusFilter}
-            options={["All", "Active", "Invited", "Suspended"]}
+            options={activeTab === "users" ? ["All", "Active", "Not active", "Suspended"] : ["All", "Active", "Suspended", "Cancelled"]}
             onChange={setStatusFilter}
             className="sm:w-36"
           />
         </div>
-        <Button type="button" size="sm" onClick={() => setInviteOpen(true)}>
-          <IconUserPlus className="h-3.5 w-3.5" />
-          Invite user
-        </Button>
+        <div className="flex gap-1.5">
+          <Button type="button" size="sm" variant="outline" onClick={refreshAdminConsole}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </Button>
+          {activeTab === "users" ? (
+            <Button type="button" size="sm" onClick={() => setInviteOpen(true)}>
+              <IconUserPlus className="h-3.5 w-3.5" />
+              Invite user
+            </Button>
+          ) : null}
+        </div>
       </div>
 
-      {selectedRows.length > 0 ? (
+      {activeTab === "users" && selectedRows.length > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2">
           <p className="text-[13px] text-muted-foreground">
             {selectedRows.length} selected
           </p>
           <div className="flex gap-1.5">
             <Button type="button" size="xs" variant="outline">Suspend selected</Button>
-            <Button type="button" size="xs" variant="destructive">Remove selected</Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="destructive"
+              disabled={selectedRows.length !== 1}
+              onClick={() => {
+                const selectedUser = adminUsers.find((user) => user.id === selectedRows[0])
+                if (selectedUser) requestRemoveUser(selectedUser)
+              }}
+            >
+              Remove selected
+            </Button>
           </div>
         </div>
       ) : null}
 
-      {inviteOpen ? (
+      {activeTab === "users" && inviteOpen ? (
         <section className="rounded-xl border border-border bg-background p-3">
           <div className="grid gap-2 sm:grid-cols-[1fr_160px_auto] sm:items-end">
             <label className="space-y-1 text-[13px] text-muted-foreground">
@@ -4913,11 +6394,7 @@ function UsersWorkspacesConsoleContent() {
             <Button
               type="button"
               size="sm"
-              onClick={() => {
-                setInviteOpen(false)
-                setInviteEmail("")
-                setInviteRole("Workspace Member")
-              }}
+              onClick={() => void sendAdminInvite()}
             >
               Send invite
             </Button>
@@ -4925,18 +6402,22 @@ function UsersWorkspacesConsoleContent() {
         </section>
       ) : null}
 
-      {filteredMembers.length === 0 ? (
+      {activeTab === "users" && filteredMembers.length === 0 ? (
         <AdminEmptyState
           icon={IconUsers}
-          title="No users found"
-          description="No users or workspace assignments match the current search and filters."
+          title={isLoadingUsers ? "Loading users" : "No users found"}
+          description={
+            isLoadingUsers
+              ? "Reading users from the database."
+              : "No users or workspace assignments match the current search and filters."
+          }
           action={
             <Button type="button" size="sm" onClick={() => setInviteOpen(true)}>
               Invite your first user
             </Button>
           }
         />
-      ) : (
+      ) : activeTab === "users" ? (
         <section className="overflow-hidden rounded-xl border border-border bg-background">
           <table className="w-full table-fixed border-collapse text-[0.8rem]">
             <thead>
@@ -4969,7 +6450,7 @@ function UsersWorkspacesConsoleContent() {
               {filteredMembers.map((member) => (
                 <tr
                   key={member.id}
-                  onClick={() => openUserProfile(member.name, "Users & workspaces")}
+                  onClick={() => setSelectedAdminUser(member)}
                   className="cursor-pointer border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/35"
                 >
                   <td className="px-2 py-2">
@@ -4993,11 +6474,15 @@ function UsersWorkspacesConsoleContent() {
                       <AdminAvatar
                         initials={member.initials}
                         name={member.name}
+                        avatarUrl={member.avatarUrl}
                         returnToAdminSection="Users & workspaces"
                       />
                       <button
                         type="button"
-                        onClick={() => openUserProfile(member.name, "Users & workspaces")}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setSelectedAdminUser(member)
+                        }}
                         className="truncate text-left font-medium text-foreground"
                       >
                         {member.name}
@@ -5021,10 +6506,35 @@ function UsersWorkspacesConsoleContent() {
                         <IconDots className="h-3.5 w-3.5" />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-36">
-                        <DropdownMenuItem>Change role</DropdownMenuItem>
-                        <DropdownMenuItem>Suspend</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { platform_role: "super_admin" }, "User role changed to Super Admin.")}>
+                          Make Super Admin
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { platform_role: "admin" }, "User role changed to Admin.")}>
+                          Make Admin
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { platform_role: "user" }, "User role changed to User.")}>
+                          Make User
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive">Remove</DropdownMenuItem>
+                        {member.status === "Suspended" ? (
+                          <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { status: "active" }, "User activated.")}>
+                            Activate
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { status: "suspended" }, "User suspended.")}>
+                            Suspend
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            requestRemoveUser(member)
+                          }}
+                        >
+                          Remove
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -5033,7 +6543,190 @@ function UsersWorkspacesConsoleContent() {
             </tbody>
           </table>
         </section>
+      ) : filteredWorkspaces.length === 0 ? (
+        <AdminEmptyState
+          icon={IconBuilding}
+          title={isLoadingWorkspaces ? "Loading workspaces" : "No workspaces found"}
+          description={
+            isLoadingWorkspaces
+              ? "Reading workspaces from the database."
+              : "No workspaces match the current search and filters."
+          }
+        />
+      ) : (
+        <section className="overflow-hidden rounded-xl border border-border bg-background">
+          <table className="w-full table-fixed border-collapse text-[0.8rem]">
+            <thead>
+              <tr className="border-b border-border text-muted-foreground">
+                <th className="w-[25%] px-2.5 py-1.5 text-left font-medium">Workspace</th>
+                <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">Owner</th>
+                <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">Plan</th>
+                <th className="w-[11%] px-2.5 py-1.5 text-left font-medium">Status</th>
+                <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">Members</th>
+                <th className="w-[13%] px-2.5 py-1.5 text-left font-medium">Created</th>
+                <th className="w-[9%] px-2.5 py-1.5 text-right font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredWorkspaces.map((workspace) => {
+                const ownerName = workspace.owner?.full_name || workspace.owner?.email || "No owner"
+                return (
+                  <tr
+                    key={workspace.id}
+                    onClick={() => setSelectedWorkspace(workspace)}
+                    className="cursor-pointer border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/35"
+                  >
+                    <td className="px-2.5 py-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Avatar className="size-7 !rounded-lg">
+                          <AvatarImage src={workspace.avatar_url ?? undefined} alt={workspace.name} className="!rounded-lg object-cover" />
+                          <AvatarFallback className="!rounded-lg text-[10px] font-medium">
+                            {deriveInitialsFromName(workspace.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">{workspace.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">{workspace.slug ?? workspace.id}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="truncate px-2.5 py-2 text-muted-foreground">{ownerName}</td>
+                    <td className="px-2.5 py-2 capitalize">{workspace.plan}</td>
+                    <td className="px-2.5 py-2">
+                      <Badge variant={workspace.status === "active" ? "green" : workspace.status === "suspended" ? "amber" : "neutral"}>
+                        {workspace.status}
+                      </Badge>
+                    </td>
+                    <td className="px-2.5 py-2 tabular-nums text-muted-foreground">{workspace.member_count}</td>
+                    <td className="px-2.5 py-2 text-muted-foreground">{new Date(workspace.created_at).toLocaleDateString()}</td>
+                    <td className="px-2.5 py-2 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={<Button type="button" variant="ghost" size="icon-xs" aria-label={`${workspace.name} actions`} onClick={(event) => event.stopPropagation()} />}
+                        >
+                          <IconDots className="h-3.5 w-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-36">
+                          {workspace.status === "suspended" ? (
+                            <DropdownMenuItem onClick={() => void updateAdminWorkspace(workspace.id, { status: "active" }, "Workspace activated.")}>
+                              Activate
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => void updateAdminWorkspace(workspace.id, { status: "suspended" }, "Workspace suspended.")}>
+                              Suspend
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => setSelectedWorkspace(workspace)}>
+                            View profile
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => void deleteAdminWorkspace(workspace)}
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </section>
       )}
+      <Dialog open={Boolean(pendingRemoveUser) && !ownerRemoveWarningOpen} onOpenChange={(open) => {
+        if (!open) closeRemoveDialogs()
+      }}>
+        <DialogContent className="max-w-sm" showCloseButton={!isRemovingUser}>
+          <DialogHeader>
+            <DialogTitle>Remove user?</DialogTitle>
+            <DialogDescription>
+              This will remove {pendingRemoveUser?.name ?? "this user"} from Atmet and revoke their access.
+            </DialogDescription>
+          </DialogHeader>
+          {removeUserError ? (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {removeUserError}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isRemovingUser}
+              onClick={closeRemoveDialogs}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isRemovingUser}
+              onClick={() => {
+                if (!pendingRemoveUser) return
+                if (pendingRemoveUser.ownedWorkspaces.length > 0) {
+                  setOwnerRemoveWarningOpen(true)
+                  setRemoveUserError(null)
+                  return
+                }
+                void removeUser(false)
+              }}
+            >
+              {isRemovingUser ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Remove user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ownerRemoveWarningOpen} onOpenChange={(open) => {
+        if (!open) closeRemoveDialogs()
+      }}>
+        <DialogContent className="max-w-sm" showCloseButton={!isRemovingUser}>
+          <DialogHeader>
+            <DialogTitle>Delete owned workspace?</DialogTitle>
+            <DialogDescription>
+              {pendingRemoveUser?.name ?? "This user"} owns workspace data. Removing this user will also delete the owned workspace
+              {(pendingRemoveUser?.ownedWorkspaces.length ?? 0) === 1 ? "" : "s"} below.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingRemoveUser?.ownedWorkspaces.length ? (
+            <div className="rounded-lg bg-muted px-3 py-2 text-xs text-foreground">
+              {pendingRemoveUser.ownedWorkspaces.map((workspace) => (
+                <div key={workspace.id} className="truncate">
+                  {workspace.name}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {removeUserError ? (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {removeUserError}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isRemovingUser}
+              onClick={() => setOwnerRemoveWarningOpen(false)}
+            >
+              Back
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isRemovingUser}
+              onClick={() => void removeUser(true)}
+            >
+              {isRemovingUser ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Delete workspace and user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminPage>
   )
 }
@@ -5058,15 +6751,15 @@ function RolesPermissionsConsoleContent() {
   const [selectedRole, setSelectedRole] =
     React.useState<PlatformRole>("Super Admin")
   const [rolePermissions, setRolePermissions] = React.useState<
-    Record<"Workspace Admin" | "Workspace Member", Record<PermissionKey, boolean>>
+    Record<"Owner" | "Member", Record<PermissionKey, boolean>>
   >({
-    "Workspace Admin": {
+    Owner: {
       ...adminDefaults,
       adminConsoleAccess: false,
       apiKeyAccess: false,
       billingAccess: false,
     },
-    "Workspace Member": {
+    Member: {
       ...adminDefaults,
       workflowPublishing: false,
       adminConsoleAccess: false,
@@ -5074,10 +6767,46 @@ function RolesPermissionsConsoleContent() {
       billingAccess: false,
     },
   })
+  const [isSavingRoles, setIsSavingRoles] = React.useState(false)
+  const [rolesNotice, setRolesNotice] = React.useState<string | null>(null)
+  const [rolesError, setRolesError] = React.useState<string | null>(null)
   const selectedPermissions =
     selectedRole === "Super Admin" || selectedRole === "Admin"
       ? adminDefaults
-      : rolePermissions[selectedRole]
+      : rolePermissions[selectedRole as "Owner" | "Member"]
+
+  React.useEffect(() => {
+    fetch("/api/admin/settings/role_permissions")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { setting?: { value?: Record<"Owner" | "Member", Record<PermissionKey, boolean>> } } } | null) => {
+        const value = payload?.data?.setting?.value
+        if (value?.Owner && value?.Member) setRolePermissions(value)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const saveRolePermissions = React.useCallback(async () => {
+    setIsSavingRoles(true)
+    setRolesNotice(null)
+    setRolesError(null)
+    try {
+      const response = await fetch("/api/admin/settings/role_permissions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: rolePermissions }),
+      })
+      const payload = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) {
+        setRolesError(payload.error?.message ?? "Unable to save permissions.")
+        return
+      }
+      setRolesNotice("Role permissions saved.")
+    } catch {
+      setRolesError("Unable to save permissions. Please try again.")
+    } finally {
+      setIsSavingRoles(false)
+    }
+  }, [rolePermissions])
 
   return (
     <AdminPage section="Roles & permissions">
@@ -5129,7 +6858,7 @@ function RolesPermissionsConsoleContent() {
                     setRolePermissions((previous) => ({
                       ...previous,
                       [selectedRole]: {
-                        ...previous[selectedRole],
+                        ...previous[selectedRole as "Owner" | "Member"],
                         [key]: checked,
                       },
                     }))
@@ -5140,45 +6869,91 @@ function RolesPermissionsConsoleContent() {
           </div>
         </section>
       </div>
-      <AdminSaveBar />
+      {rolesError ? (
+        <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {rolesError}
+        </div>
+      ) : null}
+      {rolesNotice ? (
+        <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+          {rolesNotice}
+        </div>
+      ) : null}
+      <AdminSaveBar onClick={() => void saveRolePermissions()}>
+        {isSavingRoles ? "Saving" : "Save"}
+      </AdminSaveBar>
     </AdminPage>
   )
 }
 
 function AccessPoliciesConsoleContent() {
-  const [ssoEnabled, setSsoEnabled] = React.useState(false)
   const [domainInput, setDomainInput] = React.useState("")
-  const [domains, setDomains] = React.useState(["atmet.ai", "atmet.com"])
+  const [domains, setDomains] = React.useState<string[]>([])
   const [mfaMode, setMfaMode] = React.useState("Optional")
   const [sessionTimeout, setSessionTimeout] = React.useState("8 hours")
   const [ipEnabled, setIpEnabled] = React.useState(false)
+  const [ipAllowlist, setIpAllowlist] = React.useState("")
+  const [isSavingPolicies, setIsSavingPolicies] = React.useState(false)
+  const [policyNotice, setPolicyNotice] = React.useState<string | null>(null)
+  const [policyError, setPolicyError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    fetch("/api/admin/settings/access_policies")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { setting?: { value?: Record<string, unknown> } } } | null) => {
+        const value = payload?.data?.setting?.value
+        if (!value) return
+        if (Array.isArray(value.blockedDomains)) {
+          setDomains(value.blockedDomains.filter((item): item is string => typeof item === "string"))
+        } else if (!Array.isArray(value.allowedDomains)) {
+          setDomains([])
+        }
+        if (typeof value.mfaMode === "string") setMfaMode(value.mfaMode)
+        if (typeof value.sessionTimeout === "string") setSessionTimeout(value.sessionTimeout)
+        if (typeof value.ipEnabled === "boolean") setIpEnabled(value.ipEnabled)
+        if (typeof value.ipAllowlist === "string") setIpAllowlist(value.ipAllowlist)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const saveAccessPolicies = React.useCallback(async () => {
+    setIsSavingPolicies(true)
+    setPolicyNotice(null)
+    setPolicyError(null)
+    try {
+      const response = await fetch("/api/admin/settings/access_policies", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          value: {
+            blockedDomains: domains,
+            mfaMode,
+            sessionTimeout,
+            ipEnabled,
+            ipAllowlist,
+          },
+        }),
+      })
+      const payload = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) {
+        setPolicyError(payload.error?.message ?? "Unable to save access policies.")
+        return
+      }
+      setPolicyNotice("Access policies saved.")
+    } catch {
+      setPolicyError("Unable to save access policies. Please try again.")
+    } finally {
+      setIsSavingPolicies(false)
+    }
+  }, [domains, ipAllowlist, ipEnabled, mfaMode, sessionTimeout])
 
   return (
     <AdminPage section="Access policies">
-      <section className="space-y-3 rounded-xl border border-border bg-background p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">SSO configuration</p>
-            <p className="text-[13px] text-muted-foreground">Require users to authenticate through an identity provider.</p>
-          </div>
-          <AdminToggle checked={ssoEnabled} onChange={setSsoEnabled} />
-        </div>
-        {ssoEnabled ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="space-y-1 text-[13px] text-muted-foreground">
-              IdP URL
-              <Input className="h-8" placeholder="https://idp.company.com/saml" />
-            </label>
-            <label className="space-y-1 text-[13px] text-muted-foreground">
-              Certificate
-              <Textarea className="min-h-24" placeholder="Paste certificate" />
-            </label>
-          </div>
-        ) : null}
-      </section>
-
       <section className="rounded-xl border border-border bg-background p-3">
-        <p className="text-sm font-medium text-foreground">Allowed email domains</p>
+        <p className="text-sm font-medium text-foreground">Blocked email domains</p>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          All domains are allowed except the domains listed here.
+        </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {domains.map((domain) => (
             <Badge key={domain} variant="neutral" className="gap-1">
@@ -5197,14 +6972,14 @@ function AccessPoliciesConsoleContent() {
           <Input
             value={domainInput}
             onChange={(event) => setDomainInput(event.target.value)}
-            placeholder="company.com"
+            placeholder="blocked-domain.com"
             className="h-8"
           />
           <Button
             type="button"
             size="sm"
             onClick={() => {
-              const nextDomain = domainInput.trim()
+              const nextDomain = domainInput.trim().toLowerCase().replace(/^@/, "")
               if (!nextDomain) return
               setDomains((previous) => Array.from(new Set([...previous, nextDomain])))
               setDomainInput("")
@@ -5248,9 +7023,28 @@ function AccessPoliciesConsoleContent() {
           </div>
           <AdminToggle checked={ipEnabled} onChange={setIpEnabled} />
         </div>
-        {ipEnabled ? <Textarea className="min-h-28" placeholder={"10.0.0.0/8\n192.168.0.0/16"} /> : null}
+        {ipEnabled ? (
+          <Textarea
+            value={ipAllowlist}
+            onChange={(event) => setIpAllowlist(event.target.value)}
+            className="min-h-28"
+            placeholder={"10.0.0.0/8\n192.168.0.0/16"}
+          />
+        ) : null}
       </section>
-      <AdminSaveBar />
+      {policyError ? (
+        <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {policyError}
+        </div>
+      ) : null}
+      {policyNotice ? (
+        <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+          {policyNotice}
+        </div>
+      ) : null}
+      <AdminSaveBar onClick={() => void saveAccessPolicies()}>
+        {isSavingPolicies ? "Saving" : "Save"}
+      </AdminSaveBar>
     </AdminPage>
   )
 }
@@ -5812,12 +7606,174 @@ function UsageLimitsConsoleContent() {
   const [query, setQuery] = React.useState("")
   const [workspaceFilter, setWorkspaceFilter] = React.useState("All workspaces")
   const [roleFilter, setRoleFilter] = React.useState("All roles")
-  const usageRows = adminMembers.map((member, index) => ({
-    ...member,
-    tokens: [3120, 2710, 1840, 1390, 920][index] ?? 500,
-    runs: [86, 72, 44, 31, 18][index] ?? 10,
-    files: [24, 18, 9, 15, 4][index] ?? 2,
-  }))
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [notice, setNotice] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const [selectedUser, setSelectedUser] = React.useState<AdminUserRow | null>(null)
+  const [globalLimits, setGlobalLimits] = React.useState({
+    monthlyTokenCap: 50000,
+    maxFileSizeMb: 250,
+    maxFilesPerWorkspace: 10000,
+    seatLimit: 10,
+  })
+  const [summary, setSummary] = React.useState({
+    tokens: 0,
+    runs: 0,
+    files: 0,
+    storageBytes: 0,
+    chats: 0,
+    apiKeys: 0,
+  })
+  const [usageRows, setUsageRows] = React.useState<Array<AdminUserRow & {
+    tokens: number
+    runs: number
+    files: number
+    storageBytes: number
+    chats: number
+  }>>([])
+  const [adjustedWorkspaces, setAdjustedWorkspaces] = React.useState<Array<{
+    id: string
+    name: string
+    monthly_token_cap: number | null
+    seat_limit: number | null
+    effectiveLimits: typeof globalLimits
+    usage: { tokens: number; files: number; storageBytes: number }
+  }>>([])
+
+  const loadUsageLimits = React.useCallback(() => {
+    setIsLoading(true)
+    fetch("/api/admin/usage-limits")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: {
+        data?: {
+          globalLimits?: typeof globalLimits
+          summary?: typeof summary
+          users?: Array<{
+            id: string
+            public_user_id?: string | null
+            email: string | null
+            full_name: string | null
+            avatar_url: string | null
+            status: "active" | "inactive" | "suspended"
+            platform_role: "user" | "admin" | "super_admin"
+            updated_at: string
+            workspace: { id: string; name: string } | null
+            role: string
+            usage: { tokens: number; runs: number; files: number; storageBytes: number; chats: number }
+          }>
+          adjustedWorkspaces?: Array<{
+            id: string
+            name: string
+            monthly_token_cap: number | null
+            seat_limit: number | null
+            effectiveLimits: typeof globalLimits
+            usage: { tokens: number; files: number; storageBytes: number }
+          }>
+        }
+      } | null) => {
+        if (payload?.data?.globalLimits) setGlobalLimits(payload.data.globalLimits)
+        if (payload?.data?.summary) setSummary(payload.data.summary)
+        setAdjustedWorkspaces(payload?.data?.adjustedWorkspaces ?? [])
+        setUsageRows(
+          (payload?.data?.users ?? []).map((user) => {
+            const name = user.full_name || user.email || "Unknown user"
+            const role: PlatformRole =
+              user.platform_role === "super_admin"
+                ? "Super Admin"
+                : user.platform_role === "admin"
+                  ? "Admin"
+                  : user.role === "owner"
+                    ? "Owner"
+                    : "Member"
+            const status =
+              user.status === "suspended"
+                ? "Suspended"
+                : user.status === "inactive"
+                  ? "Not active"
+                  : "Active"
+            return {
+              id: user.id,
+              publicUserId: user.public_user_id ?? "",
+              name,
+              initials: deriveInitialsFromName(name),
+              avatarUrl: user.avatar_url ?? null,
+              email: user.email ?? "",
+              workspace: user.workspace?.name ?? "No workspace",
+              role,
+              status,
+              lastActive: user.updated_at ? new Date(user.updated_at).toLocaleString() : "Never",
+              lastSignInAt: null,
+              platformRole: user.platform_role,
+              ownedWorkspaces: [],
+              tokens: user.usage.tokens,
+              runs: user.usage.runs,
+              files: user.usage.files,
+              storageBytes: user.usage.storageBytes,
+              chats: user.usage.chats,
+            }
+          })
+        )
+      })
+      .catch(() => {
+        setError("Unable to load usage and limits.")
+      })
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  React.useEffect(() => {
+    loadUsageLimits()
+  }, [loadUsageLimits])
+
+  const updateSelectedUser = React.useCallback(
+    async (
+      userId: string,
+      updates: { full_name?: string; status?: "active" | "inactive" | "suspended"; platform_role?: "user" | "admin" | "super_admin" },
+      successMessage: string
+    ) => {
+      setNotice(null)
+      setError(null)
+      try {
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        })
+        const payload = (await response.json()) as { error?: { message?: string } }
+        if (!response.ok) {
+          setError(payload.error?.message ?? "Unable to update this user.")
+          return
+        }
+        setNotice(successMessage)
+        setSelectedUser(null)
+        loadUsageLimits()
+      } catch {
+        setError("Unable to update this user. Please try again.")
+      }
+    },
+    [loadUsageLimits]
+  )
+
+  const saveGlobalLimits = React.useCallback(async () => {
+    setNotice(null)
+    setError(null)
+    try {
+      const response = await fetch("/api/admin/usage-limits", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ globalLimits }),
+      })
+      const payload = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) {
+        setError(payload.error?.message ?? "Unable to save usage limits.")
+        return
+      }
+      setNotice("Usage limits saved.")
+      loadUsageLimits()
+    } catch {
+      setError("Unable to save usage limits. Please try again.")
+    }
+  }, [globalLimits, loadUsageLimits])
+
   const filteredUsageRows = usageRows.filter((row) => {
     const normalizedQuery = query.trim().toLowerCase()
     const matchesQuery =
@@ -5839,16 +7795,59 @@ function UsageLimitsConsoleContent() {
   })
   const chartData = [
     "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D13", "D14",
-  ].map((label, index) => ({ label, value: 1200 + index * 120 + (index % 3) * 180 }))
+  ].map((label, index) => ({ label, value: Math.round((summary.tokens / 14) * (0.7 + (index % 5) * 0.08)) }))
+
+  const workspaceNames = Array.from(new Set(usageRows.map((row) => row.workspace).filter(Boolean)))
+  const exportCsv = () => {
+    const rows = [
+      ["Name", "Email", "Workspace", "Role", "Tokens", "Workflow runs", "Files", "Storage bytes", "Chats", "Last active"],
+      ...sortedUsageRows.map((row) => [
+        row.name,
+        row.email,
+        row.workspace,
+        row.role,
+        String(row.tokens),
+        String(row.runs),
+        String(row.files),
+        String(row.storageBytes),
+        String(row.chats),
+        row.lastActive,
+      ]),
+    ]
+    const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "atmet-usage.csv"
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  if (selectedUser) {
+    return (
+      <AdminUserProfilePanel
+        user={selectedUser}
+        onBack={() => setSelectedUser(null)}
+        onSave={updateSelectedUser}
+      />
+    )
+  }
 
   return (
-    <AdminPage section="Usage & limits" actions={<Button type="button" variant="outline" size="sm"><IconDownload className="h-3.5 w-3.5" />Export usage CSV</Button>}>
+    <AdminPage section="Usage & limits" actions={<Button type="button" variant="outline" size="sm" onClick={exportCsv}><IconDownload className="h-3.5 w-3.5" />Export usage CSV</Button>}>
+      {error ? (
+        <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</div>
+      ) : null}
+      {notice ? (
+        <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">{notice}</div>
+      ) : null}
       <section className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Tokens this month", "486K"],
-          ["Workflow runs", "1,842"],
-          ["Storage used", "42 GB"],
-          ["API calls", "486K"],
+          ["Tokens this month", summary.tokens.toLocaleString()],
+          ["Workflow runs", summary.runs.toLocaleString()],
+          ["Storage used", `${(summary.storageBytes / 1024 / 1024 / 1024).toFixed(1)} GB`],
+          ["API keys", summary.apiKeys.toLocaleString()],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg bg-muted px-3 py-3">
             <p className="text-[13px] text-muted-foreground">{label}</p>
@@ -5869,7 +7868,7 @@ function UsageLimitsConsoleContent() {
         </div>
         <AdminSelect
           value={workspaceFilter}
-          options={["All workspaces", ...initialWorkspaces.map((workspace) => workspace.name)]}
+          options={["All workspaces", ...workspaceNames]}
           onChange={setWorkspaceFilter}
           className="sm:w-40"
         />
@@ -5906,7 +7905,7 @@ function UsageLimitsConsoleContent() {
             {sortedUsageRows.map((row) => (
               <tr
                 key={row.id}
-                onClick={() => openUserProfile(row.name, "Usage & limits")}
+                onClick={() => setSelectedUser(row)}
                 className="cursor-pointer border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/35"
               >
                 <td className="px-2.5 py-2">
@@ -5918,7 +7917,10 @@ function UsageLimitsConsoleContent() {
                     />
                     <button
                       type="button"
-                      onClick={() => openUserProfile(row.name, "Usage & limits")}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setSelectedUser(row)
+                      }}
                       className="font-medium text-foreground"
                     >
                       {row.name}
@@ -5935,7 +7937,7 @@ function UsageLimitsConsoleContent() {
             {sortedUsageRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-8 text-center text-[13px] text-muted-foreground">
-                  No usage records match the current filters.
+                  {isLoading ? "Loading usage records." : "No usage records match the current filters."}
                 </td>
               </tr>
             ) : null}
@@ -5943,31 +7945,520 @@ function UsageLimitsConsoleContent() {
         </table>
       </section>
 
-      <section className="rounded-xl border border-border bg-background p-3">
+      <section className="rounded-xl bg-muted/20 p-3">
         <p className="text-sm font-medium text-foreground">Daily token usage</p>
         <BarInteractive data={chartData} className="mt-2" />
       </section>
 
-      <section className="grid gap-3 rounded-xl border border-border bg-background p-3 sm:grid-cols-3">
-        <label className="space-y-1 text-[13px] text-muted-foreground">Token cap per workspace per month<Input type="number" defaultValue="50000" className="h-8" /></label>
-        <label className="space-y-1 text-[13px] text-muted-foreground">Max file size<div className="flex gap-2"><Input type="number" defaultValue="250" className="h-8" /><AdminSelect value="MB" options={["MB", "GB"]} onChange={() => undefined} className="w-24" /></div></label>
-        <label className="space-y-1 text-[13px] text-muted-foreground">Max files per workspace<Input type="number" defaultValue="10000" className="h-8" /></label>
-        <div className="sm:col-span-3 sm:text-right">
-          <Button type="button" size="sm">Save limits</Button>
+      <section className="rounded-xl bg-muted/25 p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-foreground">Global limits</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Defaults used by every workspace unless that workspace has an override.</p>
+          </div>
+          <Button type="button" size="sm" onClick={() => void saveGlobalLimits()}>
+            Save limits
+          </Button>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-1 rounded-lg bg-background/60 p-2 text-[12px] text-muted-foreground">
+            Token cap per workspace
+            <Input
+              type="number"
+              value={globalLimits.monthlyTokenCap}
+              onChange={(event) => setGlobalLimits((previous) => ({ ...previous, monthlyTokenCap: Number(event.target.value) || previous.monthlyTokenCap }))}
+              className="h-8 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          </label>
+          <label className="space-y-1 rounded-lg bg-background/60 p-2 text-[12px] text-muted-foreground">
+            Max file size MB
+            <Input
+              type="number"
+              value={globalLimits.maxFileSizeMb}
+              onChange={(event) => setGlobalLimits((previous) => ({ ...previous, maxFileSizeMb: Number(event.target.value) || previous.maxFileSizeMb }))}
+              className="h-8 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          </label>
+          <label className="space-y-1 rounded-lg bg-background/60 p-2 text-[12px] text-muted-foreground">
+            Max files
+            <Input
+              type="number"
+              value={globalLimits.maxFilesPerWorkspace}
+              onChange={(event) => setGlobalLimits((previous) => ({ ...previous, maxFilesPerWorkspace: Number(event.target.value) || previous.maxFilesPerWorkspace }))}
+              className="h-8 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          </label>
+          <label className="space-y-1 rounded-lg bg-background/60 p-2 text-[12px] text-muted-foreground">
+            Default seat limit
+            <Input
+              type="number"
+              value={globalLimits.seatLimit}
+              onChange={(event) => setGlobalLimits((previous) => ({ ...previous, seatLimit: Number(event.target.value) || previous.seatLimit }))}
+              className="h-8 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-muted/15 p-3">
+        <p className="text-sm font-medium text-foreground">Adjusted workspace limits</p>
+        <p className="mt-1 text-[13px] text-muted-foreground">Workspaces listed here are not following one or more general limits.</p>
+        <div className="mt-3 overflow-hidden rounded-lg bg-background/60">
+          <table className="w-full table-fixed border-collapse text-[0.8rem]">
+            <thead>
+              <tr className="border-b border-border text-muted-foreground">
+                <th className="px-2.5 py-1.5 text-left font-medium">Workspace</th>
+                <th className="px-2.5 py-1.5 text-left font-medium">Token cap</th>
+                <th className="px-2.5 py-1.5 text-left font-medium">Seat limit</th>
+                <th className="px-2.5 py-1.5 text-left font-medium">Files limit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adjustedWorkspaces.map((workspace) => (
+                <tr key={workspace.id} className="border-b border-border/70 last:border-b-0">
+                  <td className="px-2.5 py-2 font-medium text-foreground">{workspace.name}</td>
+                  <td className="px-2.5 py-2 text-muted-foreground">{workspace.effectiveLimits.monthlyTokenCap.toLocaleString()}</td>
+                  <td className="px-2.5 py-2 text-muted-foreground">{workspace.effectiveLimits.seatLimit.toLocaleString()}</td>
+                  <td className="px-2.5 py-2 text-muted-foreground">{workspace.effectiveLimits.maxFilesPerWorkspace.toLocaleString()}</td>
+                </tr>
+              ))}
+              {adjustedWorkspaces.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-muted-foreground">
+                    No workspace-specific adjustments.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </section>
     </AdminPage>
   )
 }
 
-function renderAdminConsoleContent(section: AdminConsoleSection) {
+type WaitlistRequest = {
+  id: string
+  name: string
+  email: string
+  company: string | null
+  role: string | null
+  company_size: string | null
+  country: string | null
+  referral: string | null
+  profile_type: string | null
+  notes: string | null
+  user_status: "active" | "inactive" | "suspended" | null
+  onboarding_completed: boolean
+  phone_country: string | null
+  phone_country_code: string | null
+  phone_number: string | null
+  status: "pending" | "approved" | "rejected"
+  created_at: string
+}
+
+function csvCell(value: unknown) {
+  const text = value == null ? "" : String(value)
+  return `"${text.replaceAll('"', '""')}"`
+}
+
+function getWaitlistCountry(country: string | null) {
+  if (!country) return null
+  return countries.find(
+    (item) =>
+      item.value.toLowerCase() === country.toLowerCase() ||
+      item.label.toLowerCase() === country.toLowerCase()
+  )
+}
+
+function RequestsConsoleContent() {
+  const [requests, setRequests] = React.useState<WaitlistRequest[]>([])
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [actionLoading, setActionLoading] = React.useState<string | null>(null)
+  const [actionError, setActionError] = React.useState<string | null>(null)
+  const [actionNotice, setActionNotice] = React.useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = React.useState("All")
+  const [query, setQuery] = React.useState("")
+
+  const loadRequests = React.useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const res = await fetch("/api/admin/waitlist")
+      const payload = (await res.json()) as { data?: { requests: WaitlistRequest[] } }
+      setRequests(payload.data?.requests ?? [])
+    } catch {
+      /* silent */
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => { void loadRequests() }, [loadRequests])
+
+  const handleAction = React.useCallback(
+    async (id: string, action: "approve" | "reject" | "resend") => {
+      setActionLoading(id + action)
+      setActionError(null)
+      setActionNotice(null)
+      try {
+        const res = await fetch(`/api/admin/waitlist/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        })
+        const payload = (await res.json()) as {
+          data?: {
+            approvalEmailSent?: boolean
+            approvalEmailWarning?: string
+            status?: WaitlistRequest["status"]
+          }
+          error?: { message?: string }
+        }
+        if (res.ok) {
+          setRequests((prev) =>
+            prev.map((r) =>
+              r.id === id
+                ? {
+                    ...r,
+                    status:
+                      action === "approve"
+                        ? "approved"
+                        : action === "reject"
+                          ? "rejected"
+                          : r.status,
+                    user_status: action === "approve" ? "inactive" : r.user_status,
+                    onboarding_completed: action === "approve" ? false : r.onboarding_completed,
+                  }
+                : r
+            )
+          )
+          if (action === "approve" || action === "resend") {
+            if (payload.data?.approvalEmailSent) {
+              setActionNotice(action === "approve" ? "Approved and approval email sent." : "Approval email sent again.")
+            } else if (payload.data?.approvalEmailWarning) {
+              setActionNotice(`${action === "approve" ? "Approved" : "Resend requested"}, but email was not sent: ${payload.data.approvalEmailWarning}`)
+            }
+          }
+          return
+        }
+        setActionError(payload.error?.message ?? "Unable to update this request.")
+      } catch {
+        setActionError("Unable to update this request. Please try again.")
+      } finally {
+        setActionLoading(null)
+      }
+    },
+    []
+  )
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return requests.filter((r) => {
+      const matchesStatus =
+        statusFilter === "All" ||
+        r.status === statusFilter.toLowerCase()
+      const matchesQuery =
+        !q ||
+        r.name.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
+        (r.company ?? "").toLowerCase().includes(q) ||
+        (r.role ?? "").toLowerCase().includes(q) ||
+        (r.notes ?? "").toLowerCase().includes(q) ||
+        (r.phone_number ?? "").toLowerCase().includes(q)
+      return matchesStatus && matchesQuery
+    })
+  }, [requests, statusFilter, query])
+
+  const pendingCount = requests.filter((r) => r.status === "pending").length
+
+  const handleExportCsv = React.useCallback(() => {
+    const rows = filtered.map((request) => {
+      const country = getWaitlistCountry(request.country)
+      const phoneCountry = getPhoneCountry(request.phone_country)
+      return [
+        request.name,
+        request.email,
+        request.profile_type,
+        request.company,
+        request.role,
+        request.company_size,
+        country ? `${country.flag} ${country.label}` : request.country,
+        request.referral,
+        buildInternationalPhone(request.phone_country, request.phone_number),
+        phoneCountry ? phoneCountry.label : request.phone_country,
+        request.phone_country_code,
+        request.phone_number,
+        request.notes,
+        request.status,
+        request.user_status,
+        request.onboarding_completed ? "Yes" : "No",
+        new Date(request.created_at).toISOString(),
+      ]
+    })
+
+    const csv = [
+      [
+        "Name",
+        "Email",
+        "Profile type",
+        "Company",
+        "Role",
+        "Company size",
+        "Country",
+        "Referral",
+        "Phone",
+        "Phone country",
+        "Phone country code",
+        "Phone number",
+        "Description",
+        "Request status",
+        "User status",
+        "Onboarding completed",
+        "Created at",
+      ],
+      ...rows,
+    ]
+      .map((row) => row.map(csvCell).join(","))
+      .join("\n")
+
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `atmet-requests-${new Date().toISOString().slice(0, 10)}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [filtered])
+
+  return (
+    <AdminPage
+      section={"Requests" as AdminConsoleSection}
+      actions={
+        <div className="flex items-center gap-2">
+          {pendingCount > 0 ? (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+              {pendingCount}
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            disabled={filtered.length === 0}
+            onClick={handleExportCsv}
+            className="h-7 gap-1.5 text-xs"
+          >
+            <IconDownload className="h-3.5 w-3.5" />
+            Export CSV
+          </Button>
+        </div>
+      }
+    >
+      <>
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-40">
+              <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name, email, or company"
+                className="h-7 pl-8 text-xs"
+              />
+            </div>
+            <AdminSelect
+              value={statusFilter}
+              options={["All", "Pending", "Approved", "Rejected"]}
+              onChange={setStatusFilter}
+              className="sm:w-36"
+            />
+          </div>
+
+          {actionError ? (
+            <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {actionError}
+            </div>
+          ) : null}
+
+          {actionNotice ? (
+            <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              {actionNotice}
+            </div>
+          ) : null}
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading requests…
+            </div>
+          ) : filtered.length === 0 ? (
+            <AdminEmptyState
+              icon={IconListDetails}
+              title="No requests found"
+              description={
+                statusFilter === "All"
+                  ? "No waitlist submissions yet."
+                  : `No ${statusFilter.toLowerCase()} requests.`
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left font-medium">Name</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Email</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Profile</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">Size</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium md:table-cell">Country</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">Phone</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">Description</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                    <th className="px-3 py-2.5 text-left font-medium">Date</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtered.map((req) => {
+                    const statusTone: Record<string, string> = {
+                      pending: "text-amber-700 dark:text-amber-300 bg-amber-500/10",
+                      approved: "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10",
+                      rejected: "text-red-700 dark:text-red-300 bg-red-500/10",
+                    }
+                    const country = getWaitlistCountry(req.country)
+                    const phoneCountry = getPhoneCountry(req.phone_country)
+                    const phone = buildInternationalPhone(req.phone_country, req.phone_number)
+                    const whatsappUrl = buildWhatsappUrl(req.phone_country, req.phone_number)
+                    return (
+                      <tr key={req.id} className="hover:bg-muted/20">
+                        <td className="px-3 py-2.5 font-medium">{req.name}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{req.email}</td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground sm:table-cell">
+                          <div className="max-w-52 space-y-0.5">
+                            <p className="truncate text-foreground">{req.company || req.profile_type || "—"}</p>
+                            <p className="truncate text-xs">{req.role || req.referral || "—"}</p>
+                          </div>
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground lg:table-cell">
+                          {req.company_size ?? "—"}
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground md:table-cell">
+                          {country ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>{country.flag}</span>
+                              <span>{country.label}</span>
+                            </span>
+                          ) : (
+                            req.country ?? "—"
+                          )}
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground xl:table-cell">
+                          {phone ? (
+                            <a
+                              href={whatsappUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 text-emerald-600 hover:underline dark:text-emerald-300"
+                            >
+                              <span>{phoneCountry?.flag}</span>
+                              <span>{phone}</span>
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="hidden max-w-56 px-3 py-2.5 text-muted-foreground xl:table-cell">
+                          <span className="line-clamp-2">{req.notes || req.referral || "—"}</span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex flex-wrap gap-1">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusTone[req.status] ?? ""}`}>
+                              {req.status}
+                            </span>
+                            {req.status === "approved" && req.user_status ? (
+                              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold capitalize text-muted-foreground">
+                                {req.user_status === "inactive" ? "Not active" : req.user_status}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                          {new Date(req.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {req.status === "pending" ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                disabled={actionLoading !== null}
+                                onClick={() => void handleAction(req.id, "approve")}
+                                className="h-6 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
+                              >
+                                {actionLoading === req.id + "approve" ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Approve"
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                disabled={actionLoading !== null}
+                                onClick={() => void handleAction(req.id, "reject")}
+                                className="h-6 border-red-500/40 text-red-700 hover:bg-red-500/10 dark:text-red-300"
+                              >
+                                {actionLoading === req.id + "reject" ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Reject"
+                                )}
+                              </Button>
+                            </div>
+                          ) : req.status === "approved" ? (
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              disabled={actionLoading !== null}
+                              onClick={() => void handleAction(req.id, "resend")}
+                              className="h-6 gap-1.5"
+                            >
+                              {actionLoading === req.id + "resend" ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Mail className="h-3 w-3" />
+                              )}
+                              Resend
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </>
+    </AdminPage>
+  )
+}
+
+function renderAdminConsoleContent(section: AdminConsoleSection, workspaceNames: string[] = []) {
   switch (section) {
     case "Admin overview":
-      return <AdminOverviewConsoleContent />
+      return <AdminOverviewConsoleContent workspaceNames={workspaceNames} />
     case "Workspace provisioning":
       return <WorkspaceProvisioningConsoleContent />
+    case "Requests":
+      return <RequestsConsoleContent />
     case "Users & workspaces":
-      return <UsersWorkspacesConsoleContent />
+      return <UsersWorkspacesConsoleContent workspaceNames={workspaceNames} />
     case "Roles & permissions":
       return <RolesPermissionsConsoleContent />
     case "Access policies":
@@ -5982,17 +8473,78 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { theme, resolvedTheme, setTheme } = useTheme()
-  const currentWorkspaceMember = React.useMemo(
-    () =>
-      workspaceMembers.find(
-        (member) =>
-          member.email.toLowerCase() === accountProfile.email.toLowerCase()
-      ) ?? null,
-    []
-  )
-  const isPlatformAdmin =
-    currentWorkspaceMember?.role === "Super Admin" ||
-    currentWorkspaceMember?.role === "Admin"
+  const {
+    workspaces,
+    activeWorkspaceId: ctxActiveId,
+    setActiveWorkspace,
+    refreshWorkspaces,
+    apiFetch,
+  } = useWorkspace()
+
+  // Real user data
+  const [liveUser, setLiveUser] = React.useState<{
+    id: string
+    full_name: string | null
+    email: string | null
+    avatar_url: string | null
+    platform_role: string
+  } | null>(null)
+
+  const refreshLiveUser = React.useCallback(() => {
+    fetch("/api/users/me")
+      .then((r) => r.json())
+      .then((res: { data?: { user: { id: string; full_name: string | null; email: string | null; avatar_url: string | null; platform_role: string } } }) => {
+        if (res.data?.user) setLiveUser(res.data.user)
+      })
+      .catch(() => {})
+  }, [])
+
+  React.useEffect(() => {
+    refreshLiveUser()
+    window.addEventListener("atmet-user-updated", refreshLiveUser)
+    return () => window.removeEventListener("atmet-user-updated", refreshLiveUser)
+  }, [refreshLiveUser])
+
+  React.useEffect(() => {
+    if (!liveUser) return
+
+    const sendHeartbeat = () => {
+      if (document.visibilityState === "hidden") return
+      void fetch("/api/presence/heartbeat", { method: "POST" })
+    }
+
+    sendHeartbeat()
+    const intervalId = window.setInterval(sendHeartbeat, 60_000)
+    window.addEventListener("focus", sendHeartbeat)
+    document.addEventListener("visibilitychange", sendHeartbeat)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener("focus", sendHeartbeat)
+      document.removeEventListener("visibilitychange", sendHeartbeat)
+    }
+  }, [liveUser])
+
+  const liveUserName = liveUser?.full_name ?? ""
+  const liveUserInitials = liveUserName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((t) => t[0]?.toUpperCase() ?? "")
+    .join("") || "U"
+
+  const handleSignOut = React.useCallback(async () => {
+    try {
+      await fetch("/api/auth/sign-out", { method: "POST" })
+    } finally {
+      setLiveUser(null)
+      localStorage.removeItem("atmet_active_workspace")
+      router.push("/sign-in")
+    }
+  }, [router])
+
+  const isPlatformAdmin = liveUser?.platform_role === "super_admin" || liveUser?.platform_role === "admin"
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [adminConsoleOpen, setAdminConsoleOpen] = React.useState(false)
   const [isSettingsCloseConfirmOpen, setIsSettingsCloseConfirmOpen] =
@@ -6005,10 +8557,62 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     React.useState<AdminConsoleSection>("Admin overview")
   const [profileReturnAdminSection, setProfileReturnAdminSection] =
     React.useState<AdminConsoleSection | null>(null)
-  const [workspaceRecords, setWorkspaceRecords] =
-    React.useState<WorkspaceProfile[]>(initialWorkspaces)
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = React.useState(
-    initialWorkspaces[0]?.id ?? ""
+  const workspaceRecords = React.useMemo<WorkspaceProfile[]>(
+    () => {
+      if (isPlatformAdmin && workspaces.length === 0) {
+        return [
+          {
+            id: PLATFORM_ADMIN_WORKSPACE_ID,
+            name: "Atmet",
+            avatarUrl: "/Logos/Favicon Atmet.png",
+            initials: "A",
+            bgClass: "bg-cyan-500/15",
+            textClass: "text-cyan-700 dark:text-cyan-300",
+            primaryEmail: liveUser?.email ?? "",
+            description: "Platform administration workspace.",
+            country: "",
+          },
+        ]
+      }
+
+      return workspaces.map((ws) => ({
+        id: ws.id,
+        name: ws.name,
+        avatarUrl: ws.avatar_url ?? null,
+        initials: deriveInitialsFromName(ws.name),
+        bgClass: "bg-sky-500/20",
+        textClass: "text-sky-700 dark:text-sky-300",
+        primaryEmail: ws.owner?.email ?? "",
+        description: "",
+        country:
+          countries.find((country) => country.value === ws.owner?.phone_country)
+            ?.label ??
+          ws.country ??
+          "",
+      }))
+    },
+    [isPlatformAdmin, liveUser?.email, workspaces]
+  )
+  const selectedWorkspaceId =
+    isPlatformAdmin && workspaces.length === 0
+      ? PLATFORM_ADMIN_WORKSPACE_ID
+      : ctxActiveId ?? workspaceRecords[0]?.id ?? ""
+  const setSelectedWorkspaceId = React.useCallback(
+    (workspaceId: string) => {
+      if (workspaceId === PLATFORM_ADMIN_WORKSPACE_ID) return
+      if (workspaceId === selectedWorkspaceId) return
+      setActiveWorkspace(workspaceId)
+      setStoredChats([])
+      setVisibleChatsCount(INITIAL_VISIBLE_CHATS)
+      setEditingChatId(null)
+      setEditingChatTitle("")
+      setMembersQuickSearchQuery("")
+      setMembersQuickSelectedId(null)
+      if (pathname.startsWith("/ai-core") && searchParams.get("chat")) {
+        router.push("/ai-core")
+      }
+    },
+    [pathname, router, searchParams, selectedWorkspaceId, setActiveWorkspace]
   )
   const [membersQuickSearchQuery, setMembersQuickSearchQuery] =
     React.useState("")
@@ -6019,6 +8623,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     React.useState(0)
   const [membersQuickInviteToken, setMembersQuickInviteToken] =
     React.useState(0)
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = React.useState(false)
+  const [newWorkspaceName, setNewWorkspaceName] = React.useState("")
+  const [newWorkspaceAvatarUrl, setNewWorkspaceAvatarUrl] = React.useState<string | null>(null)
+  const [newWorkspaceCountry, setNewWorkspaceCountry] = React.useState("")
+  const [createWorkspaceError, setCreateWorkspaceError] = React.useState("")
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = React.useState(false)
+  const [isUploadingWorkspaceImage, setIsUploadingWorkspaceImage] = React.useState(false)
+  const createWorkspaceImageInputRef = React.useRef<HTMLInputElement>(null)
   const [storedChats, setStoredChats] = React.useState<StoredChatItem[]>([])
   const [isChatsExpanded, setIsChatsExpanded] = React.useState(true)
   const [visibleChatsCount, setVisibleChatsCount] = React.useState(
@@ -6030,7 +8642,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const activeChatId = searchParams.get("chat")
   const selectedWorkspace = React.useMemo(
     () => {
-      const fallbackWorkspace = workspaceRecords[0] ?? initialWorkspaces[0]
+      const fallbackWorkspace = workspaceRecords[0] ?? null
       if (!fallbackWorkspace) return null
       return (
         workspaceRecords.find(
@@ -6079,37 +8691,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     [visibleChats]
   )
 
-  const readStoredChats = React.useCallback((): StoredChatItem[] => {
-    try {
-      const raw = window.localStorage.getItem(AI_CORE_CHATS_STORAGE_KEY)
-      if (!raw) return []
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return []
-
-      return parsed.filter(
-        (item): item is StoredChatItem =>
-          item &&
-          typeof item === "object" &&
-          typeof item.id === "string" &&
-          typeof item.title === "string" &&
-          typeof item.updatedAt === "number"
-      )
-    } catch {
-      return []
-    }
+  const persistStoredChats = React.useCallback((nextChats: StoredChatItem[]) => {
+    setStoredChats(nextChats)
   }, [])
-
-  const persistStoredChats = React.useCallback(
-    (nextChats: StoredChatItem[]) => {
-      setStoredChats(nextChats)
-      window.localStorage.setItem(
-        AI_CORE_CHATS_STORAGE_KEY,
-        JSON.stringify(nextChats)
-      )
-      window.dispatchEvent(new CustomEvent(AI_CORE_CHATS_UPDATED_EVENT))
-    },
-    []
-  )
 
   const toggleChatPin = React.useCallback(
     (chatId: string) => {
@@ -6138,7 +8722,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }, [])
 
   const submitRenamingChat = React.useCallback(
-    (chatId: string) => {
+    async (chatId: string) => {
       if (discardNextRenameSubmitRef.current) {
         discardNextRenameSubmitRef.current = false
         cancelRenamingChat()
@@ -6161,14 +8745,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         chat.id === chatId ? { ...chat, title: trimmedTitle } : chat
       )
       persistStoredChats(nextChats)
+      await apiFetch(`/api/chats/${chatId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmedTitle }),
+      }).catch(() => undefined)
       discardNextRenameSubmitRef.current = false
       cancelRenamingChat()
     },
-    [cancelRenamingChat, editingChatTitle, persistStoredChats, storedChats]
+    [apiFetch, cancelRenamingChat, editingChatTitle, persistStoredChats, storedChats]
   )
 
   const deleteChat = React.useCallback(
-    (chatId: string) => {
+    async (chatId: string) => {
       const target = storedChats.find((chat) => chat.id === chatId)
       if (!target) return
 
@@ -6177,67 +8766,209 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       const nextChats = storedChats.filter((chat) => chat.id !== chatId)
       persistStoredChats(nextChats)
+      await apiFetch(`/api/chats/${chatId}`, { method: "DELETE" }).catch(
+        () => undefined
+      )
 
       if (activeChatId === chatId) {
         router.push("/ai-core")
       }
     },
-    [activeChatId, persistStoredChats, router, storedChats]
+    [activeChatId, apiFetch, persistStoredChats, router, storedChats]
   )
 
-  const createNewChat = React.useCallback(() => {
-    const now = Date.now()
-    const id = `chat-${now}-${Math.random().toString(36).slice(2, 8)}`
+  const createNewChat = React.useCallback(async () => {
+    const response = await apiFetch("/api/chats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "New chat" }),
+    }).catch(() => null)
+    if (!response?.ok) return
+
+    const payload = (await response.json()) as {
+      data?: { chat?: { id: string; title: string; updated_at?: string; created_at?: string } }
+    }
+    const chat = payload.data?.chat
+    if (!chat) return
+
+    const updatedAt = chat.updated_at ?? chat.created_at ?? new Date().toISOString()
     const nextChat: StoredChatItem = {
-      id,
-      title: "New chat",
-      updatedAt: now,
+      id: chat.id,
+      title: chat.title,
+      updatedAt: Date.parse(updatedAt),
       pinned: false,
-      path: `/ai-core?chat=${id}`,
+      path: `/ai-core?chat=${chat.id}`,
     }
 
-    const nextChats = [nextChat, ...storedChats]
-    persistStoredChats(nextChats)
+    persistStoredChats([nextChat, ...storedChats.filter((item) => item.id !== chat.id)])
     router.push(nextChat.path ?? "/ai-core")
-  }, [persistStoredChats, router, storedChats])
+  }, [apiFetch, persistStoredChats, router, storedChats])
 
   const handleWorkspaceSave = React.useCallback(
-    (nextWorkspace: WorkspaceProfile) => {
-      setWorkspaceRecords((previous) =>
-        previous.map((workspace) =>
-          workspace.id === nextWorkspace.id ? nextWorkspace : workspace
-        )
-      )
+    async (nextWorkspace: WorkspaceProfile) => {
+      const response = await apiFetch(`/api/workspaces/${nextWorkspace.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nextWorkspace.name,
+          avatar_url: nextWorkspace.avatarUrl,
+        }),
+      }).catch(() => null)
+      if (response?.ok) {
+        await refreshWorkspaces()
+      }
+    },
+    [apiFetch, refreshWorkspaces]
+  )
+
+  const resetCreateWorkspaceForm = React.useCallback(() => {
+    setNewWorkspaceName("")
+    setNewWorkspaceAvatarUrl(null)
+    setNewWorkspaceCountry("")
+    setCreateWorkspaceError("")
+    setIsCreatingWorkspace(false)
+    setIsUploadingWorkspaceImage(false)
+  }, [])
+
+  const handleCreateWorkspaceImageUpload = React.useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.currentTarget.value = ""
+      if (!file) return
+
+      setIsUploadingWorkspaceImage(true)
+      setCreateWorkspaceError("")
+      try {
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("scope", "workspace")
+
+        const response = await fetch("/api/avatars", {
+          method: "POST",
+          body: formData,
+        })
+        const payload = (await response.json().catch(() => null)) as {
+          data?: { url?: string }
+          error?: { message?: string }
+        } | null
+
+        if (!response.ok || !payload?.data?.url) {
+          setCreateWorkspaceError(payload?.error?.message ?? "Unable to upload image.")
+          return
+        }
+
+        setNewWorkspaceAvatarUrl(payload.data.url)
+      } catch {
+        setCreateWorkspaceError("Unable to upload image.")
+      } finally {
+        setIsUploadingWorkspaceImage(false)
+      }
     },
     []
   )
 
+  const submitCreateWorkspace = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const name = newWorkspaceName.trim()
+      if (!name) {
+        setCreateWorkspaceError("Workspace name is required.")
+        return
+      }
+
+      setIsCreatingWorkspace(true)
+      setCreateWorkspaceError("")
+      try {
+        const response = await fetch("/api/workspaces", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            avatar_url: newWorkspaceAvatarUrl,
+            country: newWorkspaceCountry || null,
+          }),
+        })
+        const payload = (await response.json().catch(() => null)) as {
+          data?: { workspace?: { id: string } }
+          error?: { message?: string }
+        } | null
+
+        if (!response.ok || !payload?.data?.workspace?.id) {
+          setCreateWorkspaceError(payload?.error?.message ?? "Unable to create workspace.")
+          return
+        }
+
+        await refreshWorkspaces()
+        setActiveWorkspace(payload.data.workspace.id)
+        setCreateWorkspaceOpen(false)
+        resetCreateWorkspaceForm()
+        setActiveSettingsSection("Workspace")
+        setSettingsOpen(true)
+      } catch {
+        setCreateWorkspaceError("Unable to create workspace.")
+      } finally {
+        setIsCreatingWorkspace(false)
+      }
+    },
+    [
+      newWorkspaceAvatarUrl,
+      newWorkspaceCountry,
+      newWorkspaceName,
+      refreshWorkspaces,
+      resetCreateWorkspaceForm,
+      setActiveWorkspace,
+    ]
+  )
+
   React.useEffect(() => {
-    const syncChats = () => {
-      setStoredChats(readStoredChats())
+    if (!selectedWorkspaceId) {
+      setStoredChats([])
+      return
     }
 
-    syncChats()
-
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== AI_CORE_CHATS_STORAGE_KEY) return
-      syncChats()
+    const syncChats = async () => {
+      const response = await apiFetch("/api/chats").catch(() => null)
+      if (!response?.ok) {
+        setStoredChats([])
+        return
+      }
+      const payload = (await response.json()) as {
+        data?: {
+          chats?: Array<{
+            id: string
+            title: string
+            updated_at?: string
+            created_at?: string
+          }>
+        }
+      }
+      setStoredChats(
+        (payload.data?.chats ?? []).map((chat) => {
+          const updatedAt = chat.updated_at ?? chat.created_at ?? new Date().toISOString()
+          return {
+            id: chat.id,
+            title: chat.title,
+            updatedAt: Date.parse(updatedAt),
+            pinned: false,
+            path: `/ai-core?chat=${chat.id}`,
+          }
+        })
+      )
     }
 
+    void syncChats()
     window.addEventListener(
       AI_CORE_CHATS_UPDATED_EVENT,
       syncChats as EventListener
     )
-    window.addEventListener("storage", onStorage)
 
     return () => {
       window.removeEventListener(
         AI_CORE_CHATS_UPDATED_EVENT,
         syncChats as EventListener
       )
-      window.removeEventListener("storage", onStorage)
     }
-  }, [readStoredChats])
+  }, [apiFetch, selectedWorkspaceId])
 
   React.useEffect(() => {
     const handleOpenSettingsPanel = (event: Event) => {
@@ -6363,6 +9094,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               selectedWorkspaceId || workspaceRecords[0]?.id || ""
             }
             onSelectedWorkspaceIdChange={setSelectedWorkspaceId}
+            showWorkspaceActions={selectedWorkspaceId !== PLATFORM_ADMIN_WORKSPACE_ID}
+            onCreateWorkspace={() => {
+              resetCreateWorkspaceForm()
+              setCreateWorkspaceOpen(true)
+            }}
+            onAddUsersToWorkspace={() => {
+              setActiveSettingsSection("Members")
+              setSettingsOpen(true)
+            }}
+            onOpenWorkspaceProfile={() => {
+              setActiveSettingsSection("Workspace")
+              setSettingsOpen(true)
+            }}
           />
         </div>
         <div className="px-2 py-2 group-data-[collapsible=icon]:hidden">
@@ -6786,7 +9530,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4"
                         data-settings-scope="true"
                       >
-                        {renderAdminConsoleContent(activeAdminConsoleSection)}
+                        {renderAdminConsoleContent(activeAdminConsoleSection, workspaceRecords.map(w => w.name))}
                       </div>
                     </div>
                   </div>
@@ -6983,20 +9727,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <Avatar className="size-8 shrink-0">
                   <AvatarImage
-                    src={accountProfile.avatarUrl}
-                    alt={`${currentUser.name} avatar`}
+                    src={liveUser?.avatar_url ?? undefined}
+                    alt={`${liveUserName} avatar`}
                     className="object-cover"
                   />
                   <AvatarFallback className="text-xs font-semibold">
-                    {currentUser.initials}
+                    {liveUserInitials}
                   </AvatarFallback>
                 </Avatar>
                 <span className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="truncate text-sm font-medium">
-                    {currentUser.name}
+                    {liveUserName}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                    {currentUser.role}
+                    {liveUser?.email ?? "Signed in"}
                   </span>
                 </span>
                 <IconChevronUp className="ms-auto h-4 w-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
@@ -7014,7 +9758,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   )}
                   Theme toggle
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setActiveSettingsSection("Account")
+                    setSettingsOpen(true)
+                  }}
+                >
                   <IconUser className="h-4 w-4" stroke={1.5} />
                   Profile
                 </DropdownMenuItem>
@@ -7035,7 +9784,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </Badge>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => { void handleSignOut() }}
+                >
                   <IconLogout2 className="h-4 w-4" stroke={1.5} />
                   Logout
                 </DropdownMenuItem>
@@ -7044,6 +9796,124 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      <Dialog
+        open={createWorkspaceOpen}
+        onOpenChange={(nextOpen) => {
+          setCreateWorkspaceOpen(nextOpen)
+          if (!nextOpen) resetCreateWorkspaceForm()
+        }}
+      >
+        <DialogContent className="max-w-md" showCloseButton>
+          <form onSubmit={submitCreateWorkspace} className="space-y-5">
+            <DialogHeader>
+              <DialogTitle>Create your workspace</DialogTitle>
+              <DialogDescription>
+                Give your workspace a name to get started.
+              </DialogDescription>
+            </DialogHeader>
+
+            <input
+              ref={createWorkspaceImageInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleCreateWorkspaceImageUpload}
+            />
+
+            <div className="flex items-center gap-3">
+              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-sidebar-accent text-sm font-semibold text-muted-foreground">
+                {newWorkspaceAvatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={newWorkspaceAvatarUrl}
+                    alt="Workspace image"
+                    className="size-full object-cover"
+                  />
+                ) : isUploadingWorkspaceImage ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  deriveInitialsFromName(newWorkspaceName || "Workspace")
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <Label className="text-muted-foreground">
+                  Workspace image
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Optional image
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                disabled={isUploadingWorkspaceImage || isCreatingWorkspace}
+                onClick={() => createWorkspaceImageInputRef.current?.click()}
+                aria-label="Upload workspace image"
+              >
+                {isUploadingWorkspaceImage ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-workspace-name">Workspace name</Label>
+              <Input
+                id="new-workspace-name"
+                value={newWorkspaceName}
+                onChange={(event) => {
+                  setNewWorkspaceName(event.target.value)
+                  if (createWorkspaceError) setCreateWorkspaceError("")
+                }}
+                placeholder="e.g. Acme Corp"
+                disabled={isCreatingWorkspace}
+                autoFocus
+              />
+            </div>
+
+            <AdminSelect
+              label="Country"
+              value={newWorkspaceCountry || "Select country"}
+              options={workspaceCountries}
+              onChange={(value) => {
+                setNewWorkspaceCountry(value)
+                if (createWorkspaceError) setCreateWorkspaceError("")
+              }}
+            />
+
+            {createWorkspaceError && (
+              <p className="text-xs text-destructive">{createWorkspaceError}</p>
+            )}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isCreatingWorkspace}
+                onClick={() => setCreateWorkspaceOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isCreatingWorkspace || isUploadingWorkspaceImage}
+              >
+                {isCreatingWorkspace ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" />
+                )}
+                {isCreatingWorkspace ? "Creating" : "Create workspace"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Sidebar>
   )
 }

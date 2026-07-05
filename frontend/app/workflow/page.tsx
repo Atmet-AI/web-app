@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Pattern as EmptyProjectsPattern } from "@/components/examples/c-empty-13"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { workflowProjects, type WorkflowProject } from "@/lib/workflow-projects"
+import { useWorkspace } from "@/lib/workspace-context"
 import {
   CheckCircle2,
   Clock3,
@@ -24,6 +24,15 @@ import {
 } from "lucide-react"
 
 type ProjectStatus = "Active" | "In review" | "Completed"
+type WorkflowProject = {
+  id: string
+  title: string
+  description: string
+  tags: string[]
+  createdBy: string
+  updatedAt: string
+  status: ProjectStatus
+}
 
 const statusMeta: Record<
   ProjectStatus,
@@ -50,35 +59,69 @@ const statusMeta: Record<
   },
 }
 
-function getProjectStatus(project: WorkflowProject): ProjectStatus {
-  if (project.steps.every((step) => step.status === "Done")) return "Completed"
-  if (project.steps.some((step) => step.status === "In review")) return "In review"
-  return "Active"
-}
-
-function getPendingStepsCount(project: WorkflowProject) {
-  return project.steps.filter((step) => step.status === "Pending").length
-}
-
 export default function WorkflowPage() {
   const router = useRouter()
-  const [projects, setProjects] = useState<WorkflowProject[]>(workflowProjects)
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
+  const [projects, setProjects] = useState<WorkflowProject[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all")
 
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setProjects([])
+      setIsLoading(false)
+      return
+    }
+
+    setIsLoading(true)
+    apiFetch("/api/automations")
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            automations?: Array<{
+              id: string
+              name: string
+              description: string | null
+              status: "active" | "inactive" | "draft"
+              created_by: string
+              updated_at: string
+            }>
+          }
+        } | null) => {
+          setProjects(
+            (payload?.data?.automations ?? []).map((automation) => ({
+              id: automation.id,
+              title: automation.name,
+              description: automation.description ?? "",
+              tags: [automation.status],
+              createdBy: automation.created_by,
+              updatedAt: automation.updated_at,
+              status:
+                automation.status === "active"
+                  ? "Active"
+                  : automation.status === "draft"
+                    ? "In review"
+                    : "Completed",
+            }))
+          )
+        }
+      )
+      .catch(() => setProjects([]))
+      .finally(() => setIsLoading(false))
+  }, [activeWorkspaceId, apiFetch])
+
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
-      const status = getProjectStatus(project)
+      const status = project.status
       const matchesStatus = statusFilter === "all" || statusFilter === status
       const lowerSearch = search.trim().toLowerCase()
       const matchesSearch =
         lowerSearch.length === 0 ||
         project.title.toLowerCase().includes(lowerSearch) ||
         project.description.toLowerCase().includes(lowerSearch) ||
-        project.tags.some((tag) => tag.toLowerCase().includes(lowerSearch)) ||
-        project.members.some((member) =>
-          member.name.toLowerCase().includes(lowerSearch)
-        )
+        project.tags.some((tag) => tag.toLowerCase().includes(lowerSearch))
 
       return matchesStatus && matchesSearch
     })
@@ -97,7 +140,11 @@ export default function WorkflowPage() {
             </p>
           </header>
 
-          {projects.length === 0 ? (
+          {isLoading ? (
+            <div className="flex h-44 w-full items-center justify-center rounded-xl border border-dashed border-border">
+              <p className="text-sm text-muted-foreground">Loading workflows...</p>
+            </div>
+          ) : projects.length === 0 ? (
             <div className="flex h-full min-h-[50vh] items-center justify-center">
               <EmptyProjectsPattern onCreateAutomation={() => router.push("/ai-core")} />
             </div>
@@ -147,11 +194,9 @@ export default function WorkflowPage() {
                 <section className="w-full space-y-4">
                   <div className="surface-sidebar-bg overflow-hidden rounded-xl border border-border/70">
                     {filteredProjects.map((project, index) => {
-                      const status = getProjectStatus(project)
+                      const status = project.status
                       const statusDetails = statusMeta[status]
                       const StatusIcon = statusDetails.icon
-                      const pendingStepsCount = getPendingStepsCount(project)
-                      const assignee = project.members[0]
 
                       return (
                         <article
@@ -177,21 +222,12 @@ export default function WorkflowPage() {
                                   {project.title}
                                 </h2>
                                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                                  <span>{project.steps.length} steps</span>
-                                  <span>·</span>
-                                  <span>{pendingStepsCount} pending</span>
-                                  <span>·</span>
                                   <span className="inline-flex items-center gap-1">
                                     <FolderOpen className="h-3 w-3" />
-                                    Dashboard
+                                    Automation
                                   </span>
                                   <span>·</span>
-                                  <span className="truncate">
-                                    {project.members
-                                      .slice(0, 2)
-                                      .map((member) => member.name)
-                                      .join(", ")}
-                                  </span>
+                                  <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
                                 </div>
                               </div>
                             </div>
@@ -213,17 +249,6 @@ export default function WorkflowPage() {
                               {statusDetails.label}
                             </span>
 
-                            {assignee ? (
-                              <span
-                                className={cn(
-                                  "inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-medium",
-                                  assignee.tone
-                                )}
-                                title={assignee.name}
-                              >
-                                {assignee.initials}
-                              </span>
-                            ) : null}
                             <DropdownMenu>
                               <DropdownMenuTrigger
                                 render={
@@ -261,6 +286,9 @@ export default function WorkflowPage() {
                                   variant="destructive"
                                   onClick={(event) => {
                                     event.stopPropagation()
+                                    void apiFetch(`/api/automations/${project.id}`, {
+                                      method: "DELETE",
+                                    })
                                     setProjects((previous) =>
                                       previous.filter((item) => item.id !== project.id)
                                     )

@@ -18,6 +18,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -32,7 +40,6 @@ import { Input } from "@/components/ui/input"
 import { useSidebar } from "@/components/ui/sidebar"
 import {
   getWorkflowProject,
-  workflowProjects,
   type WorkflowProject,
 } from "@/lib/workflow-projects"
 import {
@@ -47,13 +54,16 @@ import {
   type WorkflowStateEventDetail,
 } from "@/lib/workflow-events"
 import { OPEN_NEW_SKILL_DIALOG_EVENT } from "@/lib/skills-events"
+import { useWorkspace } from "@/lib/workspace-context"
 import {
+  Bell,
   Check,
   ChevronDown,
   ChevronRight,
   Clock3,
   FileClock,
   Loader2,
+  Mail,
   Play,
   Plus,
   Rocket,
@@ -74,6 +84,36 @@ type StoredChatItem = {
 
 type WorkspaceUser = ChatParticipant & {
   email: string
+}
+
+type PendingInvitation = {
+  id: string
+  token: string
+  role: string
+  created_at: string
+  expires_at: string
+  workspace:
+    | {
+        id: string
+        name: string
+        avatar_url: string | null
+      }
+    | Array<{
+        id: string
+        name: string
+        avatar_url: string | null
+      }>
+    | null
+  inviter:
+    | {
+        full_name: string | null
+        email: string | null
+      }
+    | Array<{
+        full_name: string | null
+        email: string | null
+      }>
+    | null
 }
 
 type WorkflowControlState = Omit<WorkflowStateEventDetail, "projectId">
@@ -137,12 +177,8 @@ function buildFallbackFromName(name: string) {
   return letters.slice(0, 2) || "U"
 }
 
-function buildWorkspaceEmail(name: string) {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "")
-  return `${slug || "user"}@atmet.ai`
+function unwrapRelation<T>(value: T | T[] | null | undefined) {
+  return Array.isArray(value) ? value[0] : value
 }
 
 function getDefaultParticipantsForProject(project: WorkflowProject | null) {
@@ -182,6 +218,7 @@ export function PlatformNavbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { activeWorkspaceId, apiFetch, refreshWorkspaces } = useWorkspace()
   const { state: sidebarState, toggleSidebar } = useSidebar()
   const userPickerCardRef = useRef<HTMLDivElement>(null)
   const isAiCore = pathname.startsWith("/ai-core")
@@ -229,7 +266,7 @@ export function PlatformNavbar() {
     () => (workflowProjectId ? getWorkflowProject(workflowProjectId) ?? null : null),
     [workflowProjectId]
   )
-  const isWorkflowProject = Boolean(activeWorkflowProject && workflowProjectId)
+  const isWorkflowProject = Boolean(workflowProjectId)
   const isSkills = pathname.startsWith("/skills")
   const integrationAppId = pathname.startsWith("/integrations")
     ? searchParams.get("app")
@@ -241,49 +278,155 @@ export function PlatformNavbar() {
   const canManageUsersFromNavbar = isAiCore || isWorkflowProject
   const manageUsersLabel = isWorkflowProject ? "Invite users" : "Manage chat users"
   const isChatOwner = true
-  const currentUserFullName = "Amir Haddad"
+  const [liveUser, setLiveUser] = useState<{
+    full_name: string | null
+    email: string | null
+  } | null>(null)
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
+  const [isLoadingInvitations, setIsLoadingInvitations] = useState(false)
+  const [activeInvitationToken, setActiveInvitationToken] = useState<string | null>(null)
+  const [invitationError, setInvitationError] = useState<string | null>(null)
+  const [declineInvitation, setDeclineInvitation] = useState<PendingInvitation | null>(null)
+  const [workspaceUserRows, setWorkspaceUserRows] = useState<WorkspaceUser[]>([])
+  const currentUserFullName = liveUser?.full_name || liveUser?.email || "You"
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false)
   const [userSearchQuery, setUserSearchQuery] = useState("")
+  useEffect(() => {
+    fetch("/api/users/me")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { data?: { user?: { full_name: string | null; email: string | null } } } | null) => {
+        if (payload?.data?.user) setLiveUser(payload.data.user)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const loadPendingInvitations = useCallback(async () => {
+    setIsLoadingInvitations(true)
+    setInvitationError(null)
+    try {
+      const response = await fetch("/api/invitations")
+      const payload = (await response.json().catch(() => null)) as
+        | { data?: { invitations?: PendingInvitation[] }; error?: { message?: string } }
+        | null
+
+      if (!response.ok) {
+        throw new Error(payload?.error?.message ?? "Unable to load invitations.")
+      }
+
+      setPendingInvitations(payload?.data?.invitations ?? [])
+    } catch (error) {
+      setInvitationError(error instanceof Error ? error.message : "Unable to load invitations.")
+      setPendingInvitations([])
+    } finally {
+      setIsLoadingInvitations(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!liveUser?.email) return
+    void loadPendingInvitations()
+
+    const interval = window.setInterval(() => {
+      void loadPendingInvitations()
+    }, 60_000)
+
+    return () => window.clearInterval(interval)
+  }, [liveUser?.email, loadPendingInvitations])
+
+  const respondToInvitation = useCallback(
+    async (invitation: PendingInvitation, action: "accept" | "decline") => {
+      setActiveInvitationToken(invitation.token)
+      setInvitationError(null)
+      try {
+        const response = await fetch(`/api/invitations/${invitation.token}/respond`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        })
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null
+
+        if (!response.ok) {
+          throw new Error(payload?.error?.message ?? `Unable to ${action} invitation.`)
+        }
+
+        setPendingInvitations((previous) =>
+          previous.filter((item) => item.token !== invitation.token)
+        )
+
+        if (action === "accept") {
+          await refreshWorkspaces().catch(() => {})
+        }
+      } catch (error) {
+        setInvitationError(error instanceof Error ? error.message : `Unable to ${action} invitation.`)
+      } finally {
+        setActiveInvitationToken(null)
+        if (action === "decline") setDeclineInvitation(null)
+      }
+    },
+    [refreshWorkspaces]
+  )
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setWorkspaceUserRows([])
+      return
+    }
+
+    apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            members?: Array<{
+              user?: { email: string | null; full_name: string | null } | null
+            }>
+          }
+        } | null) => {
+          setWorkspaceUserRows(
+            (payload?.data?.members ?? []).map((member) => {
+              const name =
+                member.user?.full_name || member.user?.email || "Workspace user"
+              return {
+                name,
+                fallback: buildFallbackFromName(name),
+                email: member.user?.email ?? "",
+              }
+            })
+          )
+        }
+      )
+      .catch(() => setWorkspaceUserRows([]))
+  }, [activeWorkspaceId, apiFetch])
   const workspaceUsers = useMemo<WorkspaceUser[]>(
     () => {
-      const users = new Map<string, WorkspaceUser>([
-        [
-          currentUserFullName,
-          { name: currentUserFullName, fallback: "AH", email: "amir.haddad@atmet.ai" },
-        ],
-        ["Sarah Reed", { name: "Sarah Reed", fallback: "SR", email: "sarah.reed@atmet.ai" }],
-        ["Noah Ali", { name: "Noah Ali", fallback: "NA", email: "noah.ali@atmet.ai" }],
-        ["Lina Omar", { name: "Lina Omar", fallback: "LO", email: "lina.omar@atmet.ai" }],
-        ["Kareem Aziz", { name: "Kareem Aziz", fallback: "KA", email: "kareem.aziz@atmet.ai" }],
-        [
-          "Automation Bot",
-          { name: "Automation Bot", fallback: "AB", email: "automation.bot@atmet.ai" },
-        ],
-        [
-          "Product Manager",
-          { name: "Product Manager", fallback: "PM", email: "product.manager@atmet.ai" },
-        ],
-        ["Engineer", { name: "Engineer", fallback: "EN", email: "engineer@atmet.ai" }],
-      ])
-
-      workflowProjects.forEach((project) => {
-        project.members.forEach((member) => {
-          if (users.has(member.name)) return
-          users.set(member.name, {
-            name: member.name,
-            fallback: member.initials || buildFallbackFromName(member.name),
-            email: buildWorkspaceEmail(member.name),
-          })
-        })
+      const users = new Map<string, WorkspaceUser>()
+      users.set(currentUserFullName, {
+        name: currentUserFullName,
+        fallback: buildFallbackFromName(currentUserFullName),
+        email: liveUser?.email ?? "",
       })
+
+      workspaceUserRows.forEach((member) => users.set(member.name, member))
 
       return Array.from(users.values())
     },
-    [currentUserFullName]
+    [currentUserFullName, liveUser?.email, workspaceUserRows]
   )
   const [aiCoreParticipants, setAiCoreParticipants] = useState<ChatParticipant[]>([
-    { name: currentUserFullName, fallback: "AH" },
+    { name: currentUserFullName, fallback: buildFallbackFromName(currentUserFullName) },
   ])
+  useEffect(() => {
+    setAiCoreParticipants((previous) => {
+      if (previous.length > 1) return previous
+      return [
+        {
+          name: currentUserFullName,
+          fallback: buildFallbackFromName(currentUserFullName),
+        },
+      ]
+    })
+  }, [currentUserFullName])
   const [workflowParticipantsByProject, setWorkflowParticipantsByProject] = useState<
     Record<string, ChatParticipant[]>
   >({})
@@ -728,7 +871,7 @@ export function PlatformNavbar() {
                   <DropdownMenuItem
                     onClick={requestWorkflowPublish}
                     disabled={activeWorkflowControlState.isPublishing}
-                    className="bg-foreground text-background hover:bg-foreground/90 focus:bg-foreground/90 focus:text-background"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary/90 focus:text-primary-foreground"
                   >
                     <Rocket className="h-3.5 w-3.5" />
                     Update Workflow
@@ -928,6 +1071,122 @@ export function PlatformNavbar() {
               </DropdownMenu>
             </>
           )}
+          <DropdownMenu onOpenChange={(open) => {
+            if (open) void loadPendingInvitations()
+          }}>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="relative h-7 w-7"
+                  aria-label="Notifications"
+                />
+              }
+            >
+              <Bell className="h-4 w-4" />
+              {pendingInvitations.length > 0 ? (
+                <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-medium leading-none text-primary-foreground tabular-nums">
+                  {pendingInvitations.length > 9 ? "9+" : pendingInvitations.length}
+                </span>
+              ) : null}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-86 p-0">
+              <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-popover-foreground">Notifications</p>
+                  <p className="text-xs text-muted-foreground">
+                    Workspace invitations
+                  </p>
+                </div>
+                {isLoadingInvitations ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
+              </div>
+              <div className="max-h-96 overflow-y-auto p-2">
+                {invitationError ? (
+                  <p className="rounded-md bg-destructive/10 px-2 py-2 text-xs text-destructive">
+                    {invitationError}
+                  </p>
+                ) : null}
+                {pendingInvitations.map((invitation) => {
+                  const workspace = unwrapRelation(invitation.workspace)
+                  const inviter = unwrapRelation(invitation.inviter)
+                  const workspaceName = workspace?.name ?? "Workspace"
+                  const inviterName = inviter?.full_name || inviter?.email || "A teammate"
+                  const isResponding = activeInvitationToken === invitation.token
+
+                  return (
+                    <div
+                      key={invitation.id}
+                      className="rounded-lg px-2 py-2 transition-colors hover:bg-accent/60"
+                    >
+                      <div className="flex items-start gap-2">
+                        <Avatar size="sm" className="mt-0.5 rounded-lg">
+                          <AvatarImage src={workspace?.avatar_url ?? undefined} alt={workspaceName} />
+                          <AvatarFallback className="rounded-lg text-[10px]">
+                            {buildFallbackFromName(workspaceName)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-popover-foreground">
+                            {workspaceName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Invited by {inviterName}
+                          </p>
+                          <p className="mt-0.5 text-[11px] capitalize text-muted-foreground">
+                            Role: {invitation.role}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex gap-2 ps-8">
+                        <Button
+                          type="button"
+                          size="xs"
+                          className="flex-1"
+                          disabled={isResponding}
+                          onClick={(event) => {
+                            event.preventDefault()
+                            void respondToInvitation(invitation, "accept")
+                          }}
+                        >
+                          {isResponding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                          Accept
+                        </Button>
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          className="flex-1"
+                          disabled={isResponding}
+                          onClick={(event) => {
+                            event.preventDefault()
+                            setDeclineInvitation(invitation)
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                          Decline
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+                {!isLoadingInvitations && pendingInvitations.length === 0 ? (
+                  <div className="px-3 py-8 text-center">
+                    <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <p className="text-sm font-medium text-popover-foreground">
+                      No invitations
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      New workspace invites will appear here.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {shouldShowParticipantsTrigger && (
             <AvatarGroupTooltipTransitionDemo
               users={activeParticipants}
@@ -937,6 +1196,42 @@ export function PlatformNavbar() {
           )}
         </div>
       </header>
+      <Dialog open={Boolean(declineInvitation)} onOpenChange={(open) => {
+        if (!open) setDeclineInvitation(null)
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Decline invitation?</DialogTitle>
+            <DialogDescription>
+              This will remove the pending invitation for{" "}
+              {unwrapRelation(declineInvitation?.workspace)?.name ?? "this workspace"}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeclineInvitation(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!declineInvitation || activeInvitationToken === declineInvitation.token}
+              onClick={() => {
+                if (!declineInvitation) return
+                void respondToInvitation(declineInvitation, "decline")
+              }}
+            >
+              {declineInvitation && activeInvitationToken === declineInvitation.token ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : null}
+              Decline
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {canManageUsersFromNavbar && isUserPickerOpen && (
         <div className="absolute inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
           <div

@@ -12,6 +12,7 @@ import {
 } from "react"
 import { useParams } from "next/navigation"
 import AIPrompt from "@/components/kokonutui/ai-prompt"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
@@ -28,6 +29,7 @@ import {
 import { ContextMenu5Wrapper } from "@/components/examples/c-context-menu-5"
 import { Badge } from "@/registry/spell-ui/badge"
 import { cn } from "@/lib/utils"
+import { useWorkspace } from "@/lib/workspace-context"
 import { getWorkflowProject, type WorkflowProject } from "@/lib/workflow-projects"
 import {
   WORKFLOW_OPEN_LOG_EVENT,
@@ -42,9 +44,11 @@ import {
 } from "@/lib/workflow-events"
 import {
   Check,
+  ExternalLink,
   Files,
   PlayCircle,
   Plus,
+  RefreshCcw,
   Trash2,
   X,
   Zap,
@@ -66,6 +70,7 @@ type WorkflowNode = {
   usedApps: string[]
   usedSkills: string[]
   files: string[]
+  chatId?: string
   x: number
   y: number
 }
@@ -92,6 +97,35 @@ type WorkflowSnapshot = {
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
   selectedNodeId: string
+}
+
+type TelegramAgentBlueprint = {
+  kind?: string
+  agentName?: string
+  channel?: {
+    bot?: string | null
+    webhookUrl?: string
+    webhookPath?: string
+  }
+  brain?: {
+    mode?: "atmet" | "agent_api"
+    agentApiUrl?: string | null
+  }
+  behavior?: {
+    instructions?: string
+    autoReply?: boolean
+    handoffMessage?: string | null
+  }
+}
+
+type TelegramWebhookStatus = {
+  bot: string | null
+  botLink: string | null
+  expectedWebhookUrl: string
+  currentWebhookUrl: string | null
+  webhookConfigured: boolean
+  pendingUpdateCount: number
+  lastErrorMessage: string | null
 }
 
 type AnchorSide = "top" | "right" | "bottom" | "left"
@@ -304,41 +338,22 @@ function getOrthogonalWirePath(
 }
 
 function buildNodes(project: WorkflowProject): WorkflowNode[] {
-  const lastRanSamples = ["Just now", "3 min ago", "11 min ago", "1 hr ago"]
-  const skillPool = [
-    "Summarization",
-    "Entity Extraction",
-    "Risk Scoring",
-    "Route to Owner",
-    "Compliance QA",
-    "Action Planner",
-  ]
-
   return project.steps.map((step, index) => ({
     id: `${project.id}-node-${index + 1}`,
-    nodeType: "Action",
+    nodeType: step.nodeType ?? "Action",
     stepName: step.name,
     status: step.status,
     executionStatus: "idle",
     owner: step.owner,
-    provider: index % 2 === 0 ? "Anthropic" : "ChatGPT",
-    model: index % 2 === 0 ? "Claude Opus 4.1" : "GPT-5.2",
-    prompt: `Execute "${step.name}" for ${project.title}. Return concise, structured output that can be passed to the next workflow node.`,
-    tokenCount: 290 + index * 38,
-    lastRan: lastRanSamples[index % lastRanSamples.length],
-    usedApps:
-      index % 2 === 0
-        ? [index % 3 === 0 ? "Slack" : "Notion", "Airtable", "ChatGPT"]
-        : ["GitHub", "Asana", "Anthropic"],
-    usedSkills: [
-      skillPool[(index + 1) % skillPool.length],
-      skillPool[(index + 3) % skillPool.length],
-    ],
-    files: [
-      `${step.name.replace(/\s+/g, "_")}_input.pdf`,
-      `${step.name.replace(/\s+/g, "_")}_notes.txt`,
-      `${step.name.replace(/\s+/g, "_")}_output.json`,
-    ],
+    provider: step.provider ?? "",
+    model: step.model ?? "",
+    prompt: step.prompt ?? "",
+    tokenCount: step.tokenCount ?? 0,
+    lastRan: "—",
+    usedApps: step.usedApps ?? [],
+    usedSkills: step.usedSkills ?? [],
+    files: step.files ?? [],
+    chatId: step.chatId,
     x: snapCanvasCoord(WORKSPACE_OFFSET_X + 110),
     y: snapCanvasCoord(WORKSPACE_OFFSET_Y + 150 + index * 300),
   }))
@@ -362,16 +377,88 @@ function getRunScheduleIntervalMs(runSchedule: WorkflowRunSchedule) {
   return null
 }
 
+function getTelegramAgentBlueprint(scriptKey: string | null | undefined) {
+  if (!scriptKey) return null
+
+  try {
+    const parsed = JSON.parse(scriptKey) as TelegramAgentBlueprint
+    return parsed.kind === "telegram-agent" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function getStepsFromAutomationBlueprint(scriptKey: string | null | undefined) {
+  if (!scriptKey) return null
+
+  const telegramBlueprint = getTelegramAgentBlueprint(scriptKey)
+  if (telegramBlueprint) {
+    const brainLabel =
+      telegramBlueprint.brain?.mode === "agent_api" ? "Agent API" : "Atmet model"
+    return [
+      {
+        name: telegramBlueprint.agentName ?? "Telegram agent",
+        status: "Done" as const,
+        nodeType: "Action" as const,
+        owner: "Atmet",
+        provider: brainLabel,
+        model: brainLabel,
+        prompt:
+          telegramBlueprint.behavior?.instructions ??
+          "Generate a helpful reply and send it back through Telegram.",
+        usedApps: ["Telegram"],
+        usedSkills: ["Customer agent"],
+      },
+    ]
+  }
+
+  try {
+    const parsed = JSON.parse(scriptKey) as {
+      source?: string
+      steps?: WorkflowProject["steps"]
+    }
+
+    if (parsed.source !== "chat-agent" || !Array.isArray(parsed.steps)) {
+      return null
+    }
+
+    const steps = parsed.steps.filter(
+      (step) =>
+        step &&
+        typeof step.name === "string" &&
+        (step.status === "Done" ||
+          step.status === "In review" ||
+          step.status === "Pending") &&
+        typeof step.owner === "string"
+    )
+
+    return steps.length > 0 ? steps : null
+  } catch {
+    return null
+  }
+}
+
 export default function WorkflowProjectPage() {
+  const { apiFetch } = useWorkspace()
   const params = useParams<{ projectId: string }>()
   const projectId = Array.isArray(params?.projectId)
     ? params.projectId[0]
     : params?.projectId
 
-  const project = useMemo(
+  const fixtureProject = useMemo(
     () => (projectId ? getWorkflowProject(projectId) : undefined),
     [projectId]
   )
+  const [databaseProject, setDatabaseProject] = useState<WorkflowProject | null>(null)
+  const [telegramAgentBlueprint, setTelegramAgentBlueprint] =
+    useState<TelegramAgentBlueprint | null>(null)
+  const [telegramWebhookStatus, setTelegramWebhookStatus] =
+    useState<TelegramWebhookStatus | null>(null)
+  const [telegramWebhookError, setTelegramWebhookError] = useState<string | null>(null)
+  const [isTelegramWebhookLoading, setIsTelegramWebhookLoading] = useState(false)
+  const [isActivatingTelegramWebhook, setIsActivatingTelegramWebhook] = useState(false)
+  const [isLoadingProject, setIsLoadingProject] = useState(false)
+  const project = fixtureProject ?? databaseProject
 
   const [nodes, setNodes] = useState<WorkflowNode[]>([])
   const [edges, setEdges] = useState<WorkflowEdge[]>([])
@@ -431,6 +518,80 @@ export default function WorkflowProjectPage() {
     pointerOffsetY: number
   } | null>(null)
   const pointerCanvasPointRef = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    if (!projectId || fixtureProject) {
+      setDatabaseProject(null)
+      setTelegramAgentBlueprint(null)
+      setTelegramWebhookStatus(null)
+      setTelegramWebhookError(null)
+      setIsLoadingProject(false)
+      return
+    }
+
+    setIsLoadingProject(true)
+    apiFetch(`/api/automations/${projectId}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            automation?: {
+              id: string
+              name: string
+              description: string | null
+              status: "active" | "inactive" | "draft"
+              created_by: string
+              script_key: string | null
+            }
+          }
+        } | null) => {
+          const automation = payload?.data?.automation
+          if (!automation) {
+            setDatabaseProject(null)
+            setTelegramAgentBlueprint(null)
+            setTelegramWebhookStatus(null)
+            return
+          }
+
+          const telegramBlueprint = getTelegramAgentBlueprint(automation.script_key)
+          const blueprintSteps = getStepsFromAutomationBlueprint(automation.script_key)
+          setTelegramAgentBlueprint(telegramBlueprint)
+
+          setDatabaseProject({
+            id: automation.id,
+            title: automation.name,
+            description: automation.description ?? "",
+            icon: "checklist",
+            tags: [automation.status],
+            members: [
+              {
+                name: "Automation owner",
+                initials: "AO",
+                tone: "bg-cyan-100 text-cyan-700",
+              },
+            ],
+            steps: blueprintSteps ?? [
+              {
+                name: automation.name,
+                status:
+                  automation.status === "active"
+                    ? "Done"
+                    : automation.status === "draft"
+                      ? "In review"
+                      : "Pending",
+                owner: "Automation owner",
+              },
+            ],
+          })
+        }
+      )
+      .catch(() => {
+        setDatabaseProject(null)
+        setTelegramAgentBlueprint(null)
+        setTelegramWebhookStatus(null)
+      })
+      .finally(() => setIsLoadingProject(false))
+  }, [apiFetch, fixtureProject, projectId])
 
   const setNodeHeightRef = useCallback((nodeId: string, element: HTMLDivElement | null) => {
     if (!element) return
@@ -513,6 +674,72 @@ export default function WorkflowProjectPage() {
   const canPaste = Boolean(copiedNode)
   const canUndo = historyPast.length > 0
   const canRedo = historyFuture.length > 0
+  const showTelegramAgentPanel = Boolean(telegramAgentBlueprint && selectedNode)
+  const telegramBotLink = useMemo(() => {
+    const bot = telegramWebhookStatus?.bot ?? telegramAgentBlueprint?.channel?.bot
+    if (!bot) return null
+    const username = bot.replace(/^@/, "").trim()
+    return username ? `https://t.me/${username}` : null
+  }, [telegramAgentBlueprint, telegramWebhookStatus])
+
+  const refreshTelegramWebhookStatus = useCallback(async () => {
+    if (!projectId || !telegramAgentBlueprint) return
+
+    setIsTelegramWebhookLoading(true)
+    setTelegramWebhookError(null)
+    try {
+      const response = await apiFetch(`/api/automations/${projectId}/telegram/webhook`)
+      const payload = (await response.json()) as {
+        data?: TelegramWebhookStatus
+        error?: { message?: string }
+      }
+
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error?.message ?? "Unable to load Telegram webhook status.")
+      }
+
+      setTelegramWebhookStatus(payload.data)
+    } catch (error) {
+      setTelegramWebhookError(
+        error instanceof Error ? error.message : "Unable to load Telegram webhook status."
+      )
+    } finally {
+      setIsTelegramWebhookLoading(false)
+    }
+  }, [apiFetch, projectId, telegramAgentBlueprint])
+
+  const activateTelegramWebhook = useCallback(async () => {
+    if (!projectId || !telegramAgentBlueprint) return
+
+    setIsActivatingTelegramWebhook(true)
+    setTelegramWebhookError(null)
+    try {
+      const response = await apiFetch(`/api/automations/${projectId}/telegram/webhook`, {
+        method: "POST",
+      })
+      const payload = (await response.json()) as {
+        data?: TelegramWebhookStatus
+        error?: { message?: string }
+      }
+
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error?.message ?? "Unable to activate Telegram webhook.")
+      }
+
+      setTelegramWebhookStatus(payload.data)
+    } catch (error) {
+      setTelegramWebhookError(
+        error instanceof Error ? error.message : "Unable to activate Telegram webhook."
+      )
+    } finally {
+      setIsActivatingTelegramWebhook(false)
+    }
+  }, [apiFetch, projectId, telegramAgentBlueprint])
+
+  useEffect(() => {
+    if (!telegramAgentBlueprint) return
+    void refreshTelegramWebhookStatus()
+  }, [refreshTelegramWebhookStatus, telegramAgentBlueprint])
 
   useEffect(() => {
     if (!isChatOpen) return
@@ -1759,6 +1986,16 @@ export default function WorkflowProjectPage() {
     runSchedule,
   ])
 
+  if (!project && isLoadingProject) {
+    return (
+      <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 items-center justify-center bg-background px-4 py-10">
+        <div className="rounded-xl border border-border bg-card px-5 py-4 text-center">
+          <p className="text-sm font-medium text-foreground">Loading workflow...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!project) {
     return (
       <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 items-center justify-center bg-background px-4 py-10">
@@ -2203,41 +2440,47 @@ export default function WorkflowProjectPage() {
                     </div>
                   </div>
 
-                  <div className="mt-1.5 !rounded-[8px] border border-border/80 bg-muted/40 p-2">
+                  <div className="mt-1.5 !rounded-[8px] bg-muted/40 p-2">
                     <p className="line-clamp-4 text-[13px] leading-[1.45] text-muted-foreground">
                       {node.prompt}
                     </p>
                   </div>
 
                   {isSelected && (
-                    <div className="absolute -top-[36px] right-0 z-10 flex items-center gap-1">
-                      <button
+                    <div className="absolute -top-[34px] right-0 z-10 flex items-center gap-1">
+                      <Button
                         type="button"
-                        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+                        variant="outline"
+                        size="xs"
+                        className="h-7 bg-background shadow-sm"
                         onClick={() => addNodeNextTo(node.id)}
                         aria-label="Add node"
                       >
-                        <Plus className="h-2.5 w-2.5" />
+                        <Plus className="h-3 w-3" />
                         Add
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+                        variant="outline"
+                        size="xs"
+                        className="h-7 bg-background shadow-sm"
                         onClick={() => setFilesDialogOpen(true)}
                         aria-label="Open node files"
                       >
-                        <Files className="h-2.5 w-2.5" />
+                        <Files className="h-3 w-3" />
                         Files
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="inline-flex h-6 items-center justify-center gap-1 rounded-md border border-destructive/30 bg-background px-1.5 text-[10px] font-medium text-destructive shadow-sm transition-colors hover:bg-destructive/10"
+                        variant="outline"
+                        size="xs"
+                        className="h-7 border-destructive/30 bg-background text-destructive shadow-sm hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => deleteNode(node.id)}
                         aria-label="Delete node"
                       >
-                        <Trash2 className="h-2.5 w-2.5" />
+                        <Trash2 className="h-3 w-3" />
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   )}
 
@@ -2247,6 +2490,165 @@ export default function WorkflowProjectPage() {
             </div>
           </ContextMenu5Wrapper>
         </section>
+        {showTelegramAgentPanel && (
+          <aside className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    Telegram agent
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {telegramWebhookStatus?.bot ??
+                      telegramAgentBlueprint?.channel?.bot ??
+                      "Connected bot"}
+                  </p>
+                </div>
+                <Badge
+                  variant={
+                    telegramWebhookStatus?.webhookConfigured ? "green" : "amber"
+                  }
+                >
+                  {telegramWebhookStatus?.webhookConfigured ? "Live" : "Setup"}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Bot</p>
+                    <p className="mt-1 text-sm font-medium text-foreground">
+                      {telegramWebhookStatus?.bot ??
+                        telegramAgentBlueprint?.channel?.bot ??
+                        "Telegram"}
+                    </p>
+                  </div>
+                  {telegramBotLink ? (
+                    <a
+                      href={telegramBotLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                    >
+                      Open bot
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Webhook
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-foreground">
+                      {telegramWebhookStatus?.webhookConfigured
+                        ? "Telegram points to this agent"
+                        : "Activation needed"}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    disabled={isTelegramWebhookLoading}
+                    onClick={() => void refreshTelegramWebhookStatus()}
+                    aria-label="Refresh Telegram webhook status"
+                  >
+                    <RefreshCcw
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        isTelegramWebhookLoading && "animate-spin"
+                      )}
+                    />
+                  </Button>
+                </div>
+
+                <Input
+                  readOnly
+                  value={
+                    telegramWebhookStatus?.expectedWebhookUrl ??
+                    telegramAgentBlueprint?.channel?.webhookUrl ??
+                    ""
+                  }
+                  className="mt-3 h-8 bg-card text-xs"
+                />
+
+                {telegramWebhookStatus?.lastErrorMessage ? (
+                  <p className="mt-2 text-xs text-destructive">
+                    {telegramWebhookStatus.lastErrorMessage}
+                  </p>
+                ) : null}
+
+                {telegramWebhookError ? (
+                  <p className="mt-2 text-xs text-destructive">
+                    {telegramWebhookError}
+                  </p>
+                ) : null}
+
+                <Button
+                  type="button"
+                  className="mt-3 w-full"
+                  disabled={isActivatingTelegramWebhook}
+                  onClick={() => void activateTelegramWebhook()}
+                >
+                  {isActivatingTelegramWebhook ? (
+                    <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                  Activate Telegram webhook
+                </Button>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <p className="text-xs font-medium text-muted-foreground">Brain</p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {telegramAgentBlueprint?.brain?.mode === "agent_api"
+                      ? "Agent API"
+                      : "Atmet model"}
+                  </p>
+                  <Badge variant="blue">
+                    {telegramAgentBlueprint?.behavior?.autoReply === false
+                      ? "Manual"
+                      : "Auto reply"}
+                  </Badge>
+                </div>
+                {telegramAgentBlueprint?.brain?.mode === "agent_api" &&
+                telegramAgentBlueprint.brain.agentApiUrl ? (
+                  <p className="mt-2 break-all text-xs text-muted-foreground">
+                    {telegramAgentBlueprint.brain.agentApiUrl}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Instructions
+                </p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
+                  {telegramAgentBlueprint?.behavior?.instructions ??
+                    selectedNode?.prompt}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background px-3 py-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Test
+                </p>
+                <p className="mt-1 text-sm leading-6 text-foreground">
+                  Open the bot, press Start, then send a message. The reply should
+                  come from this automation while the webhook badge is Live.
+                </p>
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
       {isChatOpen && activeChatNode && (
         <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
@@ -2276,14 +2678,16 @@ export default function WorkflowProjectPage() {
                     <div className="pt-5">
                       <AIPrompt
                         chatId={
-                          projectId
+                          chatNode.chatId ??
+                          (projectId
                             ? `workflow-node-chat-${projectId}-${nodeId}`
-                            : `workflow-node-chat-${nodeId}`
+                            : `workflow-node-chat-${nodeId}`)
                         }
                         persistChatListEntry={false}
                         hideGreeting
                         glassComposer
                         userFullName={chatNode.owner}
+                        enableCreateAgent={false}
                       />
                     </div>
                   </div>
@@ -2415,7 +2819,7 @@ export default function WorkflowProjectPage() {
                         {index + 1}. {node.stepName}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {node.provider} · {node.owner} · {node.tokenCount} tokens
+                        {[node.provider, node.owner, node.tokenCount ? `${node.tokenCount} tokens` : null].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -2445,10 +2849,6 @@ export default function WorkflowProjectPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
-              For production, connect this panel to backend execution IDs, structured logs,
-              latencies, and failure traces for each node run.
-            </div>
           </div>
         </DialogContent>
       </Dialog>

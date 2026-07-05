@@ -18,7 +18,7 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
   const [hasStartedConversation, setHasStartedConversation] = useState(false)
   const [hasConversationActivity, setHasConversationActivity] = useState(false)
   const [bottomShift, setBottomShift] = useState(0)
-  const currentUserFullName = "Amir Haddad"
+  const [currentUserFullName, setCurrentUserFullName] = useState("there")
 
   const openUserPicker = useCallback(() => {
     window.dispatchEvent(new CustomEvent(OPEN_MANAGE_CHAT_USERS_EVENT))
@@ -40,7 +40,7 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
     setBottomShift(Math.min(320, Math.max(0, centerToBottom)))
   }, [])
 
-  const shouldDockToBottom = hasStartedConversation && hasConversationActivity
+  const shouldDockToBottom = hasConversationActivity
 
   useEffect(() => {
     recalculateBottomShift()
@@ -51,6 +51,29 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
 
     return () => observer.disconnect()
   }, [recalculateBottomShift])
+
+  useEffect(() => {
+    let isMounted = true
+
+    fetch("/api/users/me")
+      .then((response) => response.json())
+      .then(
+        (payload: {
+          data?: { user?: { full_name?: string | null; email?: string | null } }
+        }) => {
+          if (!isMounted) return
+          const user = payload.data?.user
+          const fallbackName = user?.email?.split("@")[0]
+          const displayName = user?.full_name?.trim() || fallbackName || "there"
+          setCurrentUserFullName(displayName)
+        }
+      )
+      .catch(() => undefined)
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   return (
     <div
