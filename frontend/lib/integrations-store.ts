@@ -41,6 +41,18 @@ export interface Integration {
   connected: boolean
   connectedAt?: string
   status?: IntegrationStatus
+  connected_account?: string
+  connection_count?: number
+  connections?: IntegrationConnection[]
+}
+
+export interface IntegrationConnection {
+  id: string
+  connection_name?: string | null
+  connected_account?: string | null
+  status?: IntegrationStatus
+  connected_at?: string | null
+  settings?: Record<string, unknown> | null
 }
 
 const INITIAL_INTEGRATIONS: Integration[] = [

@@ -25,28 +25,41 @@ export async function GET(request: NextRequest) {
 
   const { data: connected } = await supabase
     .from("workspace_integration")
-    .select("status, connected_at, connected_account, integration_provider!inner(slug)")
+    .select("id, status, connected_at, connected_account, connection_name, settings, integration_provider!inner(slug)")
     .eq("workspace_id", ws.workspaceId)
+    .order("created_at", { ascending: true })
 
-  const connectedMap = new Map(
-    (connected ?? []).map((r) => {
+  const connectedMap = new Map<string, typeof connected>()
+  for (const r of connected ?? []) {
       const provider = Array.isArray(r.integration_provider)
         ? r.integration_provider[0]
         : r.integration_provider
 
-      return [provider?.slug, r]
-    })
-  )
+    if (!provider?.slug) continue
+    const rows = connectedMap.get(provider.slug) ?? []
+    rows.push(r)
+    connectedMap.set(provider.slug, rows)
+  }
 
   // Merge catalog with DB connection state
   const integrations = INTEGRATIONS_CATALOG.map((entry) => {
-    const db = connectedMap.get(entry.slug)
+    const connections = connectedMap.get(entry.slug) ?? []
+    const db = connections[0]
     return {
       ...entry,
-      connected: !!db,
+      connected: connections.length > 0,
       status: db?.status ?? undefined,
       connected_at: db?.connected_at ?? undefined,
       connected_account: db?.connected_account ?? undefined,
+      connection_count: connections.length,
+      connections: connections.map((connection) => ({
+        id: connection.id,
+        connection_name: connection.connection_name,
+        connected_account: connection.connected_account,
+        status: connection.status,
+        connected_at: connection.connected_at,
+        settings: connection.settings,
+      })),
     }
   })
 

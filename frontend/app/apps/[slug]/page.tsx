@@ -330,6 +330,41 @@ export default function AppDetailsPage() {
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
+                {integration.connected && integration.connections?.length ? (
+                  <section className="rounded-2xl border border-border bg-card p-5">
+                    <h2 className="text-sm font-semibold text-foreground">
+                      {integration.slug === "telegram" ? "Connected bots" : "Connected accounts"}
+                    </h2>
+                    <div className="mt-3 grid gap-2">
+                      {integration.connections.map((connection) => (
+                        <div
+                          key={connection.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {connection.connection_name ||
+                                connection.connected_account ||
+                                "Telegram bot"}
+                            </p>
+                            {connection.connected_account ? (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {connection.connected_account}
+                              </p>
+                            ) : null}
+                          </div>
+                          <Badge
+                            variant={connection.status === "active" ? "green" : "neutral"}
+                            size="sm"
+                          >
+                            {connection.status ?? "active"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
                 <section className="rounded-2xl border border-border bg-card p-5">
                   <h2 className="text-sm font-semibold text-foreground">What you can do</h2>
                   <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">

@@ -3,7 +3,11 @@ import { getUser } from "@/lib/api/auth"
 import { getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
-import { upsertIntegrationSecret, upsertWorkspaceIntegration } from "@/lib/integrations/connections"
+import {
+  createWorkspaceIntegration,
+  upsertIntegrationSecret,
+  upsertWorkspaceIntegration,
+} from "@/lib/integrations/connections"
 import { ensureIntegrationProvider } from "@/lib/integrations/providers"
 import { formatTelegramBotAccount, getTelegramBotInfo } from "@/lib/integrations/telegram"
 import { connectApiKeySchema } from "@/lib/validations/integration"
@@ -47,18 +51,38 @@ export async function POST(
     if (slug === "telegram") {
       const bot = await getTelegramBotInfo(apiKey)
       connectedAccount = formatTelegramBotAccount(bot)
+      const connectionName = keyName?.trim() || connectedAccount
       settings = {
         ...settings,
+        connection_name: connectionName,
         bot_id: bot.id,
         bot_username: bot.username ?? null,
         bot_first_name: bot.first_name,
       }
+
+      const connection = await createWorkspaceIntegration({
+        workspaceId: ws.workspaceId,
+        providerId: provider.id,
+        userId: user.id,
+        connectionName,
+        connectedAccount,
+        settings,
+      })
+
+      await upsertIntegrationSecret({
+        workspaceIntegrationId: connection.id,
+        secretType: "api_key",
+        payload: { api_key: apiKey, key_name: keyName ?? null },
+      })
+
+      return ok({ success: true, connection })
     }
 
     const connection = await upsertWorkspaceIntegration({
       workspaceId: ws.workspaceId,
       providerId: provider.id,
       userId: user.id,
+      connectionName: keyName ?? null,
       connectedAccount,
       settings,
     })

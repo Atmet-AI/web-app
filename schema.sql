@@ -276,12 +276,12 @@ CREATE TABLE workspace_integration (
   provider_id       uuid                     NOT NULL REFERENCES integration_provider(id) ON DELETE RESTRICT,
   created_by        uuid                     NOT NULL REFERENCES users(id),
   status            integration_status       NOT NULL DEFAULT 'active',
+  connection_name   text,
   connected_account text,
   settings          jsonb                    NOT NULL DEFAULT '{}'::jsonb,
   connected_at      timestamp with time zone,
   created_at        timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at        timestamp with time zone NOT NULL DEFAULT now(),
-  UNIQUE (workspace_id, provider_id)
+  updated_at        timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- integration_secret: encrypted OAuth tokens, API keys, webhook signing secrets,
@@ -513,6 +513,7 @@ CREATE INDEX ON skill (scope);
 CREATE INDEX ON integration_provider (slug);
 CREATE INDEX ON workspace_integration (workspace_id);
 CREATE INDEX ON workspace_integration (provider_id);
+CREATE INDEX ON workspace_integration (workspace_id, provider_id);
 CREATE INDEX ON workspace_integration (status);
 CREATE INDEX ON integration_secret (workspace_integration_id);
 CREATE INDEX ON oauth_state (state);

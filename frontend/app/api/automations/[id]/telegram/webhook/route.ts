@@ -43,10 +43,13 @@ function parseTelegramAgentBlueprint(value: string | null): ParsedTelegramAgentB
   }
 }
 
-function getBotLink(bot: string | null | undefined) {
+function getBotLink(bot: string | null | undefined, startPayload?: string) {
   if (!bot) return null
   const username = bot.replace(/^@/, "").trim()
-  return username ? `https://t.me/${username}` : null
+  if (!username) return null
+  return startPayload
+    ? `https://t.me/${username}?start=${encodeURIComponent(startPayload)}`
+    : `https://t.me/${username}`
 }
 
 function buildWebhookUrl(request: NextRequest, automationId: string, secret: string) {
@@ -61,11 +64,12 @@ async function getTelegramStatus(input: {
   botToken: string
   expectedWebhookUrl: string
   bot: string | null | undefined
+  automationId: string
 }) {
   const webhook = await getTelegramWebhookInfo(input.botToken)
   return {
     bot: input.bot ?? null,
-    botLink: getBotLink(input.bot),
+    botLink: getBotLink(input.bot, input.automationId),
     expectedWebhookUrl: input.expectedWebhookUrl,
     currentWebhookUrl: webhook.url || null,
     webhookConfigured: webhook.url === input.expectedWebhookUrl,
@@ -106,6 +110,7 @@ export async function GET(
     botToken: secret.api_key,
     expectedWebhookUrl: url,
     bot: blueprint.channel.bot,
+    automationId: automation.id,
   })
 
   return ok(status)
@@ -166,6 +171,7 @@ export async function POST(
     botToken: secret.api_key,
     expectedWebhookUrl: url,
     bot: blueprint.channel.bot,
+    automationId: automation.id,
   })
 
   return ok(status)

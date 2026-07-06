@@ -17,6 +17,7 @@ const telegramAgentSchema = z.object({
   agentApiUrl: z.string().url("Agent API URL must be a valid URL.").optional().or(z.literal("")),
   autoReply: z.boolean().default(true),
   handoffMessage: z.string().max(500).optional(),
+  workspaceIntegrationId: z.string().uuid().optional(),
 })
 
 function compactDescription(value: string) {
@@ -61,12 +62,20 @@ export async function POST(
 
   const telegramProvider = await ensureIntegrationProvider(telegramCatalog)
 
-  const { data: telegramConnection, error: telegramError } = await supabase
+  let telegramConnectionQuery = supabase
     .from("workspace_integration")
-    .select("id, connected_account, settings")
+    .select("id, connected_account, connection_name, settings")
     .eq("workspace_id", chat.workspace_id)
     .eq("provider_id", telegramProvider.id)
     .eq("status", "active")
+
+  if (parsed.data.workspaceIntegrationId) {
+    telegramConnectionQuery = telegramConnectionQuery.eq("id", parsed.data.workspaceIntegrationId)
+  }
+
+  const { data: telegramConnection, error: telegramError } = await telegramConnectionQuery
+    .order("created_at", { ascending: true })
+    .limit(1)
     .maybeSingle()
 
   if (telegramError) return Errors.internal()
@@ -86,6 +95,7 @@ export async function POST(
     channel: {
       provider: "telegram",
       workspaceIntegrationId: telegramConnection.id,
+      connectionName: telegramConnection.connection_name ?? null,
       bot: telegramConnection.connected_account ?? null,
       webhookSecret,
       webhookPath,
