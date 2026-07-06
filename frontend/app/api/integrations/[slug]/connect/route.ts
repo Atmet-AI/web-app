@@ -41,7 +41,7 @@ export async function POST(
   const parsed = connectApiKeySchema.safeParse(body)
   if (!parsed.success) return Errors.validationError(parsed.error.issues[0].message)
 
-  const { apiKey, keyName } = parsed.data
+  const { apiKey, keyName, avatarUrl } = parsed.data
 
   try {
     const provider = await ensureIntegrationProvider(catalog)
@@ -55,6 +55,7 @@ export async function POST(
       settings = {
         ...settings,
         connection_name: connectionName,
+        avatar_url: avatarUrl ?? null,
         bot_id: bot.id,
         bot_username: bot.username ?? null,
         bot_first_name: bot.first_name,
