@@ -7,6 +7,7 @@ type WorkspaceIntegrationInput = {
   workspaceId: string
   providerId: string
   userId: string
+  connectionName?: string | null
   connectedAccount?: string | null
   settings?: Record<string, unknown>
 }
@@ -26,23 +27,75 @@ export async function upsertWorkspaceIntegration({
   workspaceId,
   providerId,
   userId,
+  connectionName = null,
+  connectedAccount = null,
+  settings = {},
+}: WorkspaceIntegrationInput): Promise<WorkspaceIntegrationRecord> {
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("workspace_integration")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("provider_id", providerId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (existingError) {
+    throw new Error(existingError.message)
+  }
+
+  if (existing?.id) {
+    const { data, error } = await supabaseAdmin
+      .from("workspace_integration")
+      .update({
+        created_by: userId,
+        status: "active",
+        connection_name: connectionName,
+        connected_account: connectedAccount,
+        settings,
+        connected_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id)
+      .select("id")
+      .single()
+
+    if (error || !data) {
+      throw new Error(error?.message ?? "Unable to save integration connection.")
+    }
+
+    return data
+  }
+
+  return createWorkspaceIntegration({
+    workspaceId,
+    providerId,
+    userId,
+    connectionName,
+    connectedAccount,
+    settings,
+  })
+}
+
+export async function createWorkspaceIntegration({
+  workspaceId,
+  providerId,
+  userId,
+  connectionName = null,
   connectedAccount = null,
   settings = {},
 }: WorkspaceIntegrationInput): Promise<WorkspaceIntegrationRecord> {
   const { data, error } = await supabaseAdmin
     .from("workspace_integration")
-    .upsert(
-      {
-        workspace_id: workspaceId,
-        provider_id: providerId,
-        created_by: userId,
-        status: "active",
-        connected_account: connectedAccount,
-        settings,
-        connected_at: new Date().toISOString(),
-      },
-      { onConflict: "workspace_id,provider_id" }
-    )
+    .insert({
+      workspace_id: workspaceId,
+      provider_id: providerId,
+      created_by: userId,
+      status: "active",
+      connection_name: connectionName,
+      connected_account: connectedAccount,
+      settings,
+      connected_at: new Date().toISOString(),
+    })
     .select("id")
     .single()
 

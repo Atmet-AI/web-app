@@ -301,9 +301,24 @@ export default function AI_Prompt({
   );
   const { apiFetch } = useWorkspace();
 
-  type Integration = { slug: string; name: string; logo: string; connected: boolean };
+  type IntegrationConnection = {
+    id: string;
+    connection_name?: string | null;
+    connected_account?: string | null;
+    status?: string | null;
+  };
+  type Integration = {
+    slug: string;
+    name: string;
+    logo: string;
+    connected: boolean;
+    connection_count?: number;
+    connections?: IntegrationConnection[];
+  };
   const [availableIntegrations, setAvailableIntegrations] = useState<Integration[]>([]);
   const [availableSkillNames, setAvailableSkillNames] = useState<string[]>([]);
+  const [telegramConnections, setTelegramConnections] = useState<IntegrationConnection[]>([]);
+  const [selectedTelegramConnectionId, setSelectedTelegramConnectionId] = useState("");
 
   useEffect(() => {
     apiFetch("/api/integrations")
@@ -329,6 +344,33 @@ export default function AI_Prompt({
     () => availableIntegrations.find((integration) => integration.slug === "telegram") ?? null,
     [availableIntegrations]
   );
+  useEffect(() => {
+    if (!agentSetupMessageId) return;
+    if (!telegramIntegration?.connected) {
+      setTelegramConnections([]);
+      setSelectedTelegramConnectionId("");
+      return;
+    }
+
+    apiFetch("/api/integrations/telegram", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((res: { data?: { integration?: Integration } }) => {
+        const connections = res.data?.integration?.connections ?? telegramIntegration.connections ?? [];
+        const activeConnections = connections.filter((connection) => connection.status !== "error");
+        setTelegramConnections(activeConnections);
+        setSelectedTelegramConnectionId((current) => {
+          if (current && activeConnections.some((connection) => connection.id === current)) {
+            return current;
+          }
+          return activeConnections[0]?.id ?? "";
+        });
+      })
+      .catch(() => {
+        const fallbackConnections = telegramIntegration.connections ?? [];
+        setTelegramConnections(fallbackConnections);
+        setSelectedTelegramConnectionId((current) => current || fallbackConnections[0]?.id || "");
+      });
+  }, [agentSetupMessageId, apiFetch, telegramIntegration]);
   const isTelegramMentioned = useMemo(() => {
     const telegramMentionPattern = /(^|\s)@?telegram(?=\s|$|[.,!?;:])/i;
     return (
@@ -1397,6 +1439,11 @@ export default function AI_Prompt({
       return;
     }
 
+    if (!selectedTelegramConnectionId) {
+      setTelegramAgentError("Choose the Telegram bot for this agent.");
+      return;
+    }
+
     if (telegramAgentMode === "agent_api" && !telegramAgentApiUrl.trim()) {
       setTelegramAgentError("Add the Agent API URL or choose Atmet model.");
       return;
@@ -1416,6 +1463,7 @@ export default function AI_Prompt({
           modelMode: telegramAgentMode,
           agentApiUrl: telegramAgentMode === "agent_api" ? telegramAgentApiUrl.trim() : "",
           autoReply: true,
+          workspaceIntegrationId: selectedTelegramConnectionId,
         }),
       });
       const payload = (await response.json()) as {
@@ -1448,6 +1496,7 @@ export default function AI_Prompt({
     apiFetch,
     resolvedChatId,
     router,
+    selectedTelegramConnectionId,
     telegramAgentApiUrl,
     telegramAgentInstructions,
     telegramAgentMode,
@@ -2691,6 +2740,42 @@ export default function AI_Prompt({
             ) : null}
           </div>
 
+          {telegramIntegration?.connected ? (
+            <div className="mt-3 grid gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">
+                Telegram bot
+              </label>
+              <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+                <select
+                  value={selectedTelegramConnectionId}
+                  onChange={(event) => setSelectedTelegramConnectionId(event.target.value)}
+                  className="h-8 min-w-0 flex-1 rounded-md border border-sidebar-border bg-background/60 px-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                >
+                  {telegramConnections.length === 0 ? (
+                    <option value="">No connected bots found</option>
+                  ) : (
+                    telegramConnections.map((connection) => (
+                      <option key={connection.id} value={connection.id}>
+                        {connection.connection_name ||
+                          connection.connected_account ||
+                          "Telegram bot"}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 shrink-0"
+                  onClick={() => router.push("/apps/telegram")}
+                >
+                  Add bot
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <Input
               value={telegramAgentName}
@@ -2755,7 +2840,11 @@ export default function AI_Prompt({
             <Button
               type="button"
               size="sm"
-              disabled={isCreatingTelegramAgent || !telegramIntegration?.connected}
+              disabled={
+                isCreatingTelegramAgent ||
+                !telegramIntegration?.connected ||
+                !selectedTelegramConnectionId
+              }
               onClick={() => void createTelegramAgentFromChat()}
             >
               {isCreatingTelegramAgent ? (

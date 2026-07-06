@@ -46,7 +46,11 @@ export function AppHeader({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge variant="blue">{getAuthTypeLabel(integration.authType)}</Badge>
               <Badge variant={integration.connected ? "green" : "neutral"}>
-                {integration.connected ? "Connected" : "Not Connected"}
+                {integration.connected && integration.connection_count && integration.connection_count > 1
+                  ? `${integration.connection_count} Connected`
+                  : integration.connected
+                    ? "Connected"
+                    : "Not Connected"}
               </Badge>
             </div>
           </div>
@@ -71,7 +75,7 @@ export function AppHeader({
                 disabled={isSubmitting}
                 className="h-8 rounded-md"
               >
-                Reconnect
+                {integration.slug === "telegram" ? "Add bot" : "Reconnect"}
               </Button>
             </>
           ) : (

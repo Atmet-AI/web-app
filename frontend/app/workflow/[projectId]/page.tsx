@@ -676,11 +676,16 @@ export default function WorkflowProjectPage() {
   const canRedo = historyFuture.length > 0
   const showTelegramAgentPanel = Boolean(telegramAgentBlueprint && selectedNode)
   const telegramBotLink = useMemo(() => {
+    if (telegramWebhookStatus?.botLink) return telegramWebhookStatus.botLink
     const bot = telegramWebhookStatus?.bot ?? telegramAgentBlueprint?.channel?.bot
     if (!bot) return null
     const username = bot.replace(/^@/, "").trim()
-    return username ? `https://t.me/${username}` : null
-  }, [telegramAgentBlueprint, telegramWebhookStatus])
+    return username && projectId
+      ? `https://t.me/${username}?start=${encodeURIComponent(projectId)}`
+      : username
+        ? `https://t.me/${username}`
+        : null
+  }, [projectId, telegramAgentBlueprint, telegramWebhookStatus])
 
   const refreshTelegramWebhookStatus = useCallback(async () => {
     if (!projectId || !telegramAgentBlueprint) return
@@ -2537,6 +2542,9 @@ export default function WorkflowProjectPage() {
                     </a>
                   ) : null}
                 </div>
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                  Telegram keeps one chat per bot. This opens the same bot and starts this agent context.
+                </p>
               </div>
 
               <div className="rounded-lg border border-border bg-background px-3 py-3">

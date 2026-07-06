@@ -30,21 +30,33 @@ export async function GET(
   const { supabase } = auth
   const provider = await ensureIntegrationProvider(catalog)
 
-  const { data: db } = await supabase
+  const { data: connections } = await supabase
     .from("workspace_integration")
-    .select("status, connected_at, connected_account, settings")
+    .select("id, status, connected_at, connected_account, connection_name, settings")
     .eq("workspace_id", ws.workspaceId)
     .eq("provider_id", provider.id)
-    .maybeSingle()
+    .order("created_at", { ascending: true })
+
+  const db = connections?.[0]
 
   return ok({
     integration: {
       ...catalog,
-      connected: !!db,
+      connected: !!connections?.length,
       status: db?.status ?? undefined,
       connected_at: db?.connected_at ?? undefined,
       connected_account: db?.connected_account ?? undefined,
       settings: db?.settings ?? undefined,
+      connection_count: connections?.length ?? 0,
+      connections:
+        connections?.map((connection) => ({
+          id: connection.id,
+          connection_name: connection.connection_name,
+          connected_account: connection.connected_account,
+          status: connection.status,
+          connected_at: connection.connected_at,
+          settings: connection.settings,
+        })) ?? [],
     },
   })
 }
