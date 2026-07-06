@@ -8,6 +8,7 @@ export const connectApiKeySchema = z.object({
       message: "Invalid API key",
     }),
   keyName: z.string().max(100).optional(),
+  avatarUrl: z.string().max(1_500_000).optional().nullable(),
 })
 
 export const testApiKeySchema = z.object({

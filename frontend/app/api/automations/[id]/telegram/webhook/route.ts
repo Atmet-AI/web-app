@@ -162,7 +162,7 @@ export async function POST(
 
   const { error: updateError } = await supabase
     .from("automation")
-    .update({ script_key: JSON.stringify(nextBlueprint) })
+    .update({ script_key: JSON.stringify(nextBlueprint), status: "active" })
     .eq("id", automation.id)
 
   if (updateError) return Errors.internal()

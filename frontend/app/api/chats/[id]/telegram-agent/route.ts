@@ -5,9 +5,7 @@ import { z } from "zod"
 import { getUser } from "@/lib/api/auth"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
-import { getIntegrationSecretPayload } from "@/lib/integrations/connections"
 import { ensureIntegrationProvider } from "@/lib/integrations/providers"
-import { setTelegramWebhook } from "@/lib/integrations/telegram"
 import { buildPublicUrl } from "@/lib/public-url"
 
 const telegramAgentSchema = z.object({
@@ -23,6 +21,12 @@ const telegramAgentSchema = z.object({
 function compactDescription(value: string) {
   const normalized = value.replace(/\s+/g, " ").trim()
   return normalized.length > 240 ? `${normalized.slice(0, 240)}...` : normalized
+}
+
+function getConnectionSetting(settings: unknown, key: string) {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return null
+  const value = (settings as Record<string, unknown>)[key]
+  return typeof value === "string" && value.trim() ? value : null
 }
 
 export async function POST(
@@ -85,6 +89,7 @@ export async function POST(
 
   const webhookSecret = randomBytes(24).toString("hex")
   const webhookPath = `/api/telegram/webhook/pending/${webhookSecret}`
+  const avatarUrl = getConnectionSetting(telegramConnection.settings, "avatar_url")
   const blueprint = {
     version: 1,
     kind: "telegram-agent",
@@ -96,6 +101,7 @@ export async function POST(
       provider: "telegram",
       workspaceIntegrationId: telegramConnection.id,
       connectionName: telegramConnection.connection_name ?? null,
+      avatarUrl,
       bot: telegramConnection.connected_account ?? null,
       webhookSecret,
       webhookPath,
@@ -119,7 +125,7 @@ export async function POST(
       name: parsed.data.name,
       description: compactDescription(parsed.data.instructions),
       script_key: JSON.stringify(blueprint),
-      status: "active",
+      status: "draft",
     })
     .select()
     .single()
@@ -144,24 +150,6 @@ export async function POST(
 
   if (blueprintUpdateError) return Errors.internal()
 
-  let webhookConfigured = false
-  let webhookError: string | null = null
-
-  if (finalWebhookUrl.startsWith("https://")) {
-    try {
-      const secret = await getIntegrationSecretPayload<{ api_key?: string }>(
-        telegramConnection.id,
-        "api_key"
-      )
-      if (!secret.api_key) throw new Error("Telegram bot token was not found.")
-      await setTelegramWebhook(secret.api_key, finalWebhookUrl)
-      webhookConfigured = true
-    } catch (error) {
-      webhookError =
-        error instanceof Error ? error.message : "Telegram webhook setup failed."
-    }
-  }
-
   await supabase.from("chats_automation").insert({
     chat_id: chat.id,
     automation_id: automation.id,
@@ -175,8 +163,8 @@ export async function POST(
       },
       webhookPath: finalWebhookPath,
       webhookUrl: finalWebhookUrl,
-      webhookConfigured,
-      webhookError,
+      webhookConfigured: false,
+      webhookError: null,
     },
     201
   )

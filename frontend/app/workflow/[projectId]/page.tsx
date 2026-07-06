@@ -104,6 +104,8 @@ type TelegramAgentBlueprint = {
   agentName?: string
   channel?: {
     bot?: string | null
+    avatarUrl?: string | null
+    connectionName?: string | null
     webhookUrl?: string
     webhookPath?: string
   }
@@ -686,6 +688,7 @@ export default function WorkflowProjectPage() {
         ? `https://t.me/${username}`
         : null
   }, [projectId, telegramAgentBlueprint, telegramWebhookStatus])
+  const telegramAgentAvatarUrl = telegramAgentBlueprint?.channel?.avatarUrl ?? null
 
   const refreshTelegramWebhookStatus = useCallback(async () => {
     if (!projectId || !telegramAgentBlueprint) return
@@ -1011,6 +1014,10 @@ export default function WorkflowProjectPage() {
     const totalNodes = nodesRef.current.length
     if (totalNodes === 0) return
 
+    if (telegramAgentBlueprint && !telegramWebhookStatus?.webhookConfigured) {
+      void activateTelegramWebhook()
+    }
+
     setIsRunningWorkflow(true)
     setNodes((previous) =>
       previous.map((node) => ({
@@ -1066,7 +1073,12 @@ export default function WorkflowProjectPage() {
     }
 
     executeNodeAt(0)
-  }, [isRunningWorkflow])
+  }, [
+    activateTelegramWebhook,
+    isRunningWorkflow,
+    telegramAgentBlueprint,
+    telegramWebhookStatus?.webhookConfigured,
+  ])
 
   const handlePublishWorkflow = useCallback(() => {
     if (isPublishingWorkflow) return
@@ -2499,15 +2511,31 @@ export default function WorkflowProjectPage() {
           <aside className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-foreground">
-                    Telegram agent
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {telegramWebhookStatus?.bot ??
-                      telegramAgentBlueprint?.channel?.bot ??
-                      "Connected bot"}
-                  </p>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-sm font-semibold text-muted-foreground">
+                    {telegramAgentAvatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={telegramAgentAvatarUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      "TG"
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {telegramAgentBlueprint?.channel?.connectionName ??
+                        telegramAgentBlueprint?.agentName ??
+                        "Telegram agent"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {telegramWebhookStatus?.bot ??
+                        telegramAgentBlueprint?.channel?.bot ??
+                        "Connected bot"}
+                    </p>
+                  </div>
                 </div>
                 <Badge
                   variant={
@@ -2601,15 +2629,15 @@ export default function WorkflowProjectPage() {
                 <Button
                   type="button"
                   className="mt-3 w-full"
-                  disabled={isActivatingTelegramWebhook}
-                  onClick={() => void activateTelegramWebhook()}
+                  disabled={isRunningWorkflow || isActivatingTelegramWebhook}
+                  onClick={() => handleRunWorkflow()}
                 >
-                  {isActivatingTelegramWebhook ? (
+                  {isRunningWorkflow || isActivatingTelegramWebhook ? (
                     <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Check className="h-3.5 w-3.5" />
+                    <PlayCircle className="h-3.5 w-3.5" />
                   )}
-                  Activate Telegram webhook
+                  Run workflow to go live
                 </Button>
               </div>
 

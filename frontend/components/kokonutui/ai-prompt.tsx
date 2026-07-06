@@ -188,6 +188,33 @@ const AI_MODELS = [
 
 const DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS =
   "You are a customer support agent replying on Telegram. Reply in the same language as the customer unless the instructions say otherwise. Be concise, friendly, and practical. Ask one focused question when information is missing. Do not explain how to create, deploy, or connect a Telegram bot unless the customer asks about that. If the request needs a human, say the team will follow up.";
+const TELEGRAM_AVATAR_MAX_BYTES = 750 * 1024;
+
+function readImageAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("Choose an image file for the bot avatar."));
+      return;
+    }
+
+    if (file.size > TELEGRAM_AVATAR_MAX_BYTES) {
+      reject(new Error("Choose an avatar smaller than 750 KB."));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Unable to read this avatar image."));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => reject(new Error("Unable to read this avatar image."));
+    reader.readAsDataURL(file);
+  });
+}
 
 function normalizePlanText(value: string) {
   return value
@@ -256,6 +283,11 @@ export default function AI_Prompt({
   const [isCreatingTelegramAgent, setIsCreatingTelegramAgent] = useState(false);
   const [telegramAgentError, setTelegramAgentError] = useState<string | null>(null);
   const [telegramAgentSuccess, setTelegramAgentSuccess] = useState<string | null>(null);
+  const [telegramBotSetupMode, setTelegramBotSetupMode] = useState<"existing" | "new">("new");
+  const [newTelegramBotToken, setNewTelegramBotToken] = useState("");
+  const [newTelegramBotName, setNewTelegramBotName] = useState("");
+  const [newTelegramBotAvatarUrl, setNewTelegramBotAvatarUrl] = useState<string | null>(null);
+  const [newTelegramBotAvatarName, setNewTelegramBotAvatarName] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachmentDraft[]>([]);
   const [assistantFeedback, setAssistantFeedback] = useState<
@@ -274,6 +306,7 @@ export default function AI_Prompt({
   const fileInputId = `ai-upload-input-${instanceId}`;
   const textareaId = `ai-input-${instanceId}`;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const telegramAvatarInputRef = useRef<HTMLInputElement>(null);
   const attachedFilesRef = useRef<AttachmentDraft[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
   const nextMessageIdRef = useRef(Date.now());
@@ -346,16 +379,11 @@ export default function AI_Prompt({
   );
   useEffect(() => {
     if (!agentSetupMessageId) return;
-    if (!telegramIntegration?.connected) {
-      setTelegramConnections([]);
-      setSelectedTelegramConnectionId("");
-      return;
-    }
 
     apiFetch("/api/integrations/telegram", { cache: "no-store" })
       .then((response) => response.json())
       .then((res: { data?: { integration?: Integration } }) => {
-        const connections = res.data?.integration?.connections ?? telegramIntegration.connections ?? [];
+        const connections = res.data?.integration?.connections ?? telegramIntegration?.connections ?? [];
         const activeConnections = connections.filter((connection) => connection.status !== "error");
         setTelegramConnections(activeConnections);
         setSelectedTelegramConnectionId((current) => {
@@ -364,11 +392,17 @@ export default function AI_Prompt({
           }
           return activeConnections[0]?.id ?? "";
         });
+        setTelegramBotSetupMode((current) =>
+          activeConnections.length > 0 && current === "existing" ? "existing" : "new"
+        );
       })
       .catch(() => {
-        const fallbackConnections = telegramIntegration.connections ?? [];
+        const fallbackConnections = telegramIntegration?.connections ?? [];
         setTelegramConnections(fallbackConnections);
         setSelectedTelegramConnectionId((current) => current || fallbackConnections[0]?.id || "");
+        setTelegramBotSetupMode((current) =>
+          fallbackConnections.length > 0 && current === "existing" ? "existing" : "new"
+        );
       });
   }, [agentSetupMessageId, apiFetch, telegramIntegration]);
   const isTelegramMentioned = useMemo(() => {
@@ -1423,6 +1457,20 @@ export default function AI_Prompt({
     [createAgentFromChat, isTelegramMentioned]
   );
 
+  const handleTelegramAvatarChange = useCallback(async (file: File | null) => {
+    if (!file) return;
+    setTelegramAgentError(null);
+    try {
+      const dataUrl = await readImageAsDataUrl(file);
+      setNewTelegramBotAvatarUrl(dataUrl);
+      setNewTelegramBotAvatarName(file.name);
+    } catch (error) {
+      setTelegramAgentError(
+        error instanceof Error ? error.message : "Unable to use this avatar."
+      );
+    }
+  }, []);
+
   const createTelegramAgentFromChat = useCallback(async () => {
     const currentChatId = activeChatIdRef.current ?? resolvedChatId;
     if (
@@ -1434,13 +1482,13 @@ export default function AI_Prompt({
       return;
     }
 
-    if (!telegramIntegration?.connected) {
-      setTelegramAgentError("Connect Telegram first, then create the agent.");
+    if (telegramBotSetupMode === "existing" && !selectedTelegramConnectionId) {
+      setTelegramAgentError("Choose the Telegram bot for this agent.");
       return;
     }
 
-    if (!selectedTelegramConnectionId) {
-      setTelegramAgentError("Choose the Telegram bot for this agent.");
+    if (telegramBotSetupMode === "new" && !newTelegramBotToken.trim()) {
+      setTelegramAgentError("Paste the BotFather token for this Telegram bot.");
       return;
     }
 
@@ -1454,6 +1502,33 @@ export default function AI_Prompt({
     setIsCreatingTelegramAgent(true);
 
     try {
+      let workspaceIntegrationId = selectedTelegramConnectionId;
+      if (telegramBotSetupMode === "new") {
+        const response = await apiFetch("/api/integrations/telegram/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            apiKey: newTelegramBotToken.trim(),
+            keyName:
+              newTelegramBotName.trim() ||
+              telegramAgentName.trim() ||
+              "Telegram bot",
+            avatarUrl: newTelegramBotAvatarUrl,
+          }),
+        });
+        const payload = (await response.json()) as {
+          data?: { connection?: { id: string } };
+          error?: { message?: string };
+        };
+
+        workspaceIntegrationId = payload.data?.connection?.id ?? "";
+        if (!response.ok || !workspaceIntegrationId) {
+          throw new Error(payload.error?.message ?? "Failed to save Telegram bot.");
+        }
+
+        setSelectedTelegramConnectionId(workspaceIntegrationId);
+      }
+
       const response = await apiFetch(`/api/chats/${currentChatId}/telegram-agent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1463,7 +1538,7 @@ export default function AI_Prompt({
           modelMode: telegramAgentMode,
           agentApiUrl: telegramAgentMode === "agent_api" ? telegramAgentApiUrl.trim() : "",
           autoReply: true,
-          workspaceIntegrationId: selectedTelegramConnectionId,
+          workspaceIntegrationId,
         }),
       });
       const payload = (await response.json()) as {
@@ -1482,7 +1557,7 @@ export default function AI_Prompt({
       setTelegramAgentSuccess(
         payload.data.webhookConfigured
           ? "Telegram agent is live."
-          : `Telegram agent created. Webhook: ${payload.data.webhookUrl ?? "open the agent to finish setup."}`
+          : "Telegram agent created as draft. Press Run in the playground when you want it live."
       );
       router.push(`/workflow/${payload.data.automation.id}`);
     } catch (error) {
@@ -1496,12 +1571,15 @@ export default function AI_Prompt({
     apiFetch,
     resolvedChatId,
     router,
+    newTelegramBotAvatarUrl,
+    newTelegramBotName,
+    newTelegramBotToken,
     selectedTelegramConnectionId,
     telegramAgentApiUrl,
     telegramAgentInstructions,
     telegramAgentMode,
     telegramAgentName,
-    telegramIntegration?.connected,
+    telegramBotSetupMode,
   ]);
 
   const sendMessage = useCallback(async () => {
@@ -2340,6 +2418,13 @@ export default function AI_Prompt({
   const hasConversation = messages.length > 0 || isResponding;
   const showTelegramAgentSetup =
     enableCreateAgent && isTelegramMentioned && agentSetupMessageId !== null;
+  const hasTelegramBotConnections =
+    Boolean(telegramIntegration?.connected) || telegramConnections.length > 0;
+  const canCreateTelegramAgent =
+    !isCreatingTelegramAgent &&
+    (telegramBotSetupMode === "existing"
+      ? Boolean(selectedTelegramConnectionId)
+      : Boolean(newTelegramBotToken.trim()));
   const showGreeting = !hideGreeting && messages.length === 0 && !isResponding;
   const lastAssistantMessageId = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -2717,10 +2802,10 @@ export default function AI_Prompt({
                     Telegram agent
                   </p>
                   <Badge
-                    variant={telegramIntegration?.connected ? "green" : "neutral"}
+                    variant={hasTelegramBotConnections ? "green" : "neutral"}
                     size="sm"
                   >
-                    {telegramIntegration?.connected ? "Connected" : "Not connected"}
+                    {hasTelegramBotConnections ? "Connected" : "Not connected"}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -2728,53 +2813,125 @@ export default function AI_Prompt({
                 </p>
               </div>
             </div>
-            {!telegramIntegration?.connected ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => router.push("/apps/telegram")}
-              >
-                Connect Telegram
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => window.open("https://t.me/BotFather", "_blank", "noreferrer")}
+            >
+              Open BotFather
+            </Button>
           </div>
 
-          {telegramIntegration?.connected ? (
-            <div className="mt-3 grid gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                Telegram bot
-              </label>
-              <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+          <div className="mt-3 rounded-lg border border-sidebar-border bg-background/50 p-2">
+            <div className="grid grid-cols-2 rounded-md bg-muted/40 p-0.5">
+              <button
+                type="button"
+                disabled={telegramConnections.length === 0}
+                onClick={() => setTelegramBotSetupMode("existing")}
+                className={cn(
+                  "h-8 rounded px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                  telegramBotSetupMode === "existing"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Saved bot
+              </button>
+              <button
+                type="button"
+                onClick={() => setTelegramBotSetupMode("new")}
+                className={cn(
+                  "h-8 rounded px-2 text-xs font-medium transition-colors",
+                  telegramBotSetupMode === "new"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                New bot
+              </button>
+            </div>
+
+            {telegramBotSetupMode === "existing" ? (
+              <div className="mt-2 grid gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Telegram bot
+                </label>
                 <select
                   value={selectedTelegramConnectionId}
                   onChange={(event) => setSelectedTelegramConnectionId(event.target.value)}
-                  className="h-8 min-w-0 flex-1 rounded-md border border-sidebar-border bg-background/60 px-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                  className="h-8 min-w-0 rounded-md border border-sidebar-border bg-background/70 px-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
                 >
-                  {telegramConnections.length === 0 ? (
-                    <option value="">No connected bots found</option>
-                  ) : (
-                    telegramConnections.map((connection) => (
-                      <option key={connection.id} value={connection.id}>
-                        {connection.connection_name ||
-                          connection.connected_account ||
-                          "Telegram bot"}
-                      </option>
-                    ))
-                  )}
+                  {telegramConnections.map((connection) => (
+                    <option key={connection.id} value={connection.id}>
+                      {connection.connection_name ||
+                        connection.connected_account ||
+                        "Telegram bot"}
+                    </option>
+                  ))}
                 </select>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 shrink-0"
-                  onClick={() => router.push("/apps/telegram")}
-                >
-                  Add bot
-                </Button>
               </div>
-            </div>
-          ) : null}
+            ) : (
+              <div className="mt-2 grid gap-2">
+                <div className="grid gap-2 sm:grid-cols-[72px_minmax(0,1fr)]">
+                  <div className="grid gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Avatar
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => telegramAvatarInputRef.current?.click()}
+                      className="flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-lg border border-sidebar-border bg-background/70 text-muted-foreground transition-[border-color,color,transform] hover:border-primary hover:text-foreground active:scale-[0.96]"
+                      aria-label="Choose Telegram bot avatar"
+                    >
+                      {newTelegramBotAvatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={newTelegramBotAvatarUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <FileImage className="h-5 w-5" />
+                      )}
+                    </button>
+                    <input
+                      ref={telegramAvatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        void handleTelegramAvatarChange(file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </div>
+                  <div className="grid min-w-0 gap-2">
+                    <Input
+                      value={newTelegramBotToken}
+                      onChange={(event) => setNewTelegramBotToken(event.target.value)}
+                      placeholder="BotFather token"
+                      type="password"
+                      className="h-8 bg-background/70"
+                    />
+                    <Input
+                      value={newTelegramBotName}
+                      onChange={(event) => setNewTelegramBotName(event.target.value)}
+                      placeholder="Bot / brand name"
+                      className="h-8 bg-background/70"
+                    />
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {newTelegramBotAvatarName || "Optional avatar for Atmet UI"}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  In Telegram, create the bot with @BotFather and paste its token here. Atmet will save it and use it for this agent.
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <Input
@@ -2840,11 +2997,7 @@ export default function AI_Prompt({
             <Button
               type="button"
               size="sm"
-              disabled={
-                isCreatingTelegramAgent ||
-                !telegramIntegration?.connected ||
-                !selectedTelegramConnectionId
-              }
+              disabled={!canCreateTelegramAgent}
               onClick={() => void createTelegramAgentFromChat()}
             >
               {isCreatingTelegramAgent ? (
