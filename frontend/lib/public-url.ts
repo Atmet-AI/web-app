@@ -1,13 +1,18 @@
 import { type NextRequest } from "next/server"
 
-const DEFAULT_PUBLIC_APP_URL = "https://atmetai.com"
+const DEFAULT_PUBLIC_APP_URL = "https://www.atmetai.com"
+const APEX_PUBLIC_APP_URL = "https://atmetai.com"
+
+function canonicalizePublicOrigin(origin: string) {
+  return origin === APEX_PUBLIC_APP_URL ? DEFAULT_PUBLIC_APP_URL : origin
+}
 
 function normalizeBaseUrl(value: string | undefined | null) {
   const trimmed = value?.trim().replace(/\/+$/, "")
   if (!trimmed) return null
 
   try {
-    return new URL(trimmed).origin
+    return canonicalizePublicOrigin(new URL(trimmed).origin)
   } catch {
     return null
   }
@@ -27,7 +32,7 @@ export function getPublicAppOrigin(request?: NextRequest) {
   }
 
   if (request && !isLocalOrigin(request.nextUrl.origin)) {
-    return request.nextUrl.origin
+    return canonicalizePublicOrigin(request.nextUrl.origin)
   }
 
   const vercelOrigin = normalizeBaseUrl(
