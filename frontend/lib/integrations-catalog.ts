@@ -102,9 +102,10 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     authType: "apikey",
     apiKeyUrl: "https://t.me/BotFather",
     setupInstructions: [
-      "Open BotFather in Telegram and create a bot.",
-      "Copy the bot token BotFather gives you.",
-      "Paste the token into Atmet, test the connection, and save it.",
+      "Open @BotFather in Telegram and send /newbot.",
+      "Choose the bot display name and username. The username must end with bot.",
+      "Copy the bot token BotFather sends you. It looks like 123456:ABC-DEF...",
+      "Paste that token here, give this bot a clear brand name, then test and save it.",
     ],
     scopes: [
       { name: "bot token", description: "Send messages and receive updates for chats that interact with the bot." },

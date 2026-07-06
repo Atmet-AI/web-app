@@ -53,6 +53,19 @@ export function ConnectApiKeyDrawer({
   onSave,
 }: ConnectApiKeyDrawerProps) {
   const canSave = Boolean(apiKey.trim()) && (testSucceeded || manualConfirm)
+  const isTelegram = integration.slug === "telegram"
+  const secretLabel = isTelegram ? "Bot token" : "API Key"
+  const secretPlaceholder = isTelegram ? "Paste the BotFather token" : "Paste your API key"
+  const nameLabel = isTelegram ? "Bot / brand name (optional)" : "Key name (optional)"
+  const namePlaceholder = isTelegram ? "Hololooloo support" : "Production key"
+  const instructionsTitle = isTelegram ? "How to create your Telegram bot" : "How to find your API key"
+  const apiPageLabel = isTelegram ? "Open BotFather" : "Open API key page"
+  const description = isTelegram
+    ? "Connect a Telegram bot token so Atmet agents can reply from that bot."
+    : "Provide your API key to connect this integration."
+  const confirmationText = isTelegram
+    ? "I confirm this bot token is valid and ready to save."
+    : "I confirm this API key is valid and ready to save."
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,14 +86,14 @@ export function ConnectApiKeyDrawer({
             </span>
             <div>
               <DialogTitle>Connect {integration.name}</DialogTitle>
-              <DialogDescription>Provide your API key to connect this integration.</DialogDescription>
+              <DialogDescription>{description}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         <div className="space-y-4 overflow-y-auto px-5 py-4">
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">How to find your API key</h3>
+            <h3 className="text-sm font-semibold text-foreground">{instructionsTitle}</h3>
             <ol className="space-y-2 text-sm text-muted-foreground">
               {integration.setupInstructions.map((instruction, index) => (
                 <li key={instruction} className="flex gap-2">
@@ -97,7 +110,7 @@ export function ConnectApiKeyDrawer({
                 render={<a href={integration.apiKeyUrl} target="_blank" rel="noreferrer" />}
                 className="h-7"
               >
-                Open API key page
+                {apiPageLabel}
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
             ) : null}
@@ -106,7 +119,7 @@ export function ConnectApiKeyDrawer({
           <section className="space-y-3">
             <div className="space-y-1.5">
               <label htmlFor="api-key" className="text-xs font-medium text-foreground">
-                API Key
+                {secretLabel}
               </label>
               <div className="flex gap-2">
                 <Input
@@ -114,7 +127,7 @@ export function ConnectApiKeyDrawer({
                   value={apiKey}
                   onChange={(event) => onApiKeyChange(event.target.value)}
                   type={showApiKey ? "text" : "password"}
-                  placeholder="Paste your API key"
+                  placeholder={secretPlaceholder}
                   className="h-8"
                 />
                 <Button
@@ -131,13 +144,13 @@ export function ConnectApiKeyDrawer({
 
             <div className="space-y-1.5">
               <label htmlFor="key-name" className="text-xs font-medium text-foreground">
-                Key name (optional)
+                {nameLabel}
               </label>
               <Input
                 id="key-name"
                 value={keyName}
                 onChange={(event) => onKeyNameChange(event.target.value)}
-                placeholder="Production key"
+                placeholder={namePlaceholder}
                 className="h-8"
               />
             </div>
@@ -166,7 +179,7 @@ export function ConnectApiKeyDrawer({
                 onChange={(event) => onManualConfirmChange(event.target.checked)}
                 className="mt-0.5"
               />
-              <span>I confirm this API key is valid and ready to save.</span>
+              <span>{confirmationText}</span>
             </label>
           </section>
         </div>
