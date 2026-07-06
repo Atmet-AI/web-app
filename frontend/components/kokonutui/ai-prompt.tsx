@@ -187,17 +187,39 @@ const AI_MODELS = [
 ] as const;
 
 const DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS =
-  "Reply to customers clearly and briefly. Ask one focused question when information is missing. If the customer needs a human, tell them the team will follow up.";
+  "You are a customer support agent replying on Telegram. Reply in the same language as the customer unless the instructions say otherwise. Be concise, friendly, and practical. Ask one focused question when information is missing. Do not explain how to create, deploy, or connect a Telegram bot unless the customer asks about that. If the request needs a human, say the team will follow up.";
 
-function summarizeAgentInstructionsFromPlan(plan: string) {
-  const normalized = plan
+function normalizePlanText(value: string) {
+  return value
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/[#>*_`-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
 
-  if (!normalized) return DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS;
-  return normalized.length > 1200 ? `${normalized.slice(0, 1197)}...` : normalized;
+function looksLikeSetupGuide(value: string) {
+  return /botfather|newbot|deploy|server|cloud function|webhook|bot token|write the bot code|telegram bot library/i.test(value);
+}
+
+function draftTelegramAgentInstructions(plan: string, transcript: ChatMessage[]) {
+  const normalizedPlan = normalizePlanText(plan);
+  const latestUserAsk = [...transcript]
+    .reverse()
+    .find((message) => message.role === "user" && message.content.trim().length > 0)
+    ?.content.trim();
+
+  const businessGoal = latestUserAsk
+    ? `The user asked Atmet to build this Telegram agent: "${latestUserAsk.slice(0, 420)}".`
+    : "The user asked Atmet to build a Telegram customer agent.";
+
+  if (!normalizedPlan || looksLikeSetupGuide(normalizedPlan)) {
+    return `${DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS}\n\n${businessGoal}`;
+  }
+
+  const planContext =
+    normalizedPlan.length > 700 ? `${normalizedPlan.slice(0, 697)}...` : normalizedPlan;
+
+  return `${DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS}\n\n${businessGoal}\n\nUse this plan as behavior context, not as setup instructions: ${planContext}`;
 }
 
 
@@ -1344,7 +1366,9 @@ export default function AI_Prompt({
       setTelegramAgentError(null);
       setTelegramAgentSuccess(null);
       setAgentSetupMessageId(message.id);
-      setTelegramAgentInstructions(summarizeAgentInstructionsFromPlan(message.content));
+      setTelegramAgentInstructions(
+        draftTelegramAgentInstructions(message.content, messagesRef.current)
+      );
 
       if (activeChatTitleRef.current && activeChatTitleRef.current !== "New chat") {
         setTelegramAgentName(activeChatTitleRef.current);
