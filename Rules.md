@@ -32,6 +32,6 @@
 - Folders naming must follow Kebab Case (kebab-case).
 - Files naming must follow Camel Case (camelCase).
 
-## Virtual Environment
+## Virtual Environmentt
 - Each virtual env **must be named venv**, in the README.md it must explicitly say how to create it using windows/linux/ and mac.
 - A requirements.txt file must exist in the root file of the repo.
