@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server"
 import { getUser } from "@/lib/api/auth"
 import { ok, Errors } from "@/lib/api/response"
+import { assertWorkspaceAdmin } from "@/lib/api/workspace"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
 import { upsertIntegrationSecret, upsertWorkspaceIntegration } from "@/lib/integrations/connections"
 import { ensureIntegrationProvider, getOAuthProvider } from "@/lib/integrations/providers"
@@ -14,7 +15,7 @@ export async function POST(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { user } = auth
+  const { supabase, user } = auth
   const { slug } = await params
 
   const catalog = getCatalogIntegration(slug)
@@ -57,6 +58,13 @@ export async function POST(
     if (stateError || !oauthState) {
       return Errors.badRequest("OAuth state is invalid or expired. Please reconnect the integration.")
     }
+
+    const canManageIntegrations = await assertWorkspaceAdmin(
+      supabase,
+      oauthState.workspace_id,
+      user.id
+    )
+    if (!canManageIntegrations) return Errors.forbidden()
 
     const token = await oauthProvider.exchangeCode({
       requestUrl: request.url,

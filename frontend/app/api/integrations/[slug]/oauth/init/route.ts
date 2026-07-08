@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server"
 import { getUser } from "@/lib/api/auth"
-import { getWorkspaceId } from "@/lib/api/workspace"
+import { assertWorkspaceAdmin, getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
 import { createOAuthState, ensureIntegrationProvider, getOAuthProvider } from "@/lib/integrations/providers"
@@ -15,6 +15,13 @@ export async function POST(
 
   const ws = getWorkspaceId(request)
   if (!ws.ok) return ws.response
+
+  const canManageIntegrations = await assertWorkspaceAdmin(
+    auth.supabase,
+    ws.workspaceId,
+    auth.user.id
+  )
+  if (!canManageIntegrations) return Errors.forbidden()
 
   const { slug } = await params
 
