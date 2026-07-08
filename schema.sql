@@ -5,6 +5,7 @@
 -- IMPORTANT: This drops existing tables and rebuilds from scratch.
 -- Only run on a fresh/dev database. Comment out the DROP section
 -- if you need to preserve existing data.
+-- Production databases must use the additive files in supabase/migrations.
 -- ============================================================
 
 
