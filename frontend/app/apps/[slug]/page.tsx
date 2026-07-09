@@ -113,7 +113,7 @@ export default function AppDetailsPage() {
   const handleConnectClick = React.useCallback(() => {
     if (!integration) return
 
-    if (integration.authType === "oauth") {
+    if (integration.connectorProvider === "composio" || integration.authType === "oauth") {
       setOauthError(null)
       setOauthModalOpen(true)
       return
@@ -150,7 +150,7 @@ export default function AppDetailsPage() {
   const handleReconnect = React.useCallback(() => {
     if (!integration) return
 
-    if (integration.authType === "oauth") {
+    if (integration.connectorProvider === "composio" || integration.authType === "oauth") {
       setOauthError(null)
       setOauthModalOpen(true)
       return
@@ -178,6 +178,7 @@ export default function AppDetailsPage() {
                 },
                 body: JSON.stringify({
                   toolkit: integration.composioToolkit ?? integration.slug,
+                  providerSlug: integration.slug,
                   connectionName: integration.name,
                   callbackPath: `/apps/${integration.slug}?connected=composio`,
                 }),
@@ -360,7 +361,9 @@ export default function AppDetailsPage() {
                 {integration.connected && integration.connections?.length ? (
                   <section className="rounded-2xl border border-border bg-card p-5">
                     <h2 className="text-sm font-semibold text-foreground">
-                      {integration.slug === "telegram" ? "Connected bots" : "Connected accounts"}
+                      {integration.connectorProvider === "composio" || integration.slug !== "telegram"
+                        ? "Connected accounts"
+                        : "Connected bots"}
                     </h2>
                     <div className="mt-3 grid gap-2">
                       {integration.connections.map((connection) => (

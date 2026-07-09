@@ -53,19 +53,14 @@ export function ConnectApiKeyDrawer({
   onSave,
 }: ConnectApiKeyDrawerProps) {
   const canSave = Boolean(apiKey.trim()) && (testSucceeded || manualConfirm)
-  const isTelegram = integration.slug === "telegram"
-  const secretLabel = isTelegram ? "Bot token" : "API Key"
-  const secretPlaceholder = isTelegram ? "Paste the BotFather token" : "Paste your API key"
-  const nameLabel = isTelegram ? "Bot / brand name (optional)" : "Key name (optional)"
-  const namePlaceholder = isTelegram ? "Hololooloo support" : "Production key"
-  const instructionsTitle = isTelegram ? "How to create your Telegram bot" : "How to find your API key"
-  const apiPageLabel = isTelegram ? "Open BotFather" : "Open API key page"
-  const description = isTelegram
-    ? "Connect a Telegram bot token so Atmet agents can reply from that bot."
-    : "Provide your API key to connect this integration."
-  const confirmationText = isTelegram
-    ? "I confirm this bot token is valid and ready to save."
-    : "I confirm this API key is valid and ready to save."
+  const secretLabel = "API Key"
+  const secretPlaceholder = "Paste your API key"
+  const nameLabel = "Key name (optional)"
+  const namePlaceholder = "Production key"
+  const instructionsTitle = "How to find your API key"
+  const apiPageLabel = "Open API key page"
+  const description = "Provide your API key to connect this integration."
+  const confirmationText = "I confirm this API key is valid and ready to save."
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

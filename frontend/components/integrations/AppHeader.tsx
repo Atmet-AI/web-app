@@ -82,7 +82,11 @@ export function AppHeader({
                 disabled={isSubmitting}
                 className="h-8 rounded-md"
               >
-                {integration.slug === "telegram" ? "Add bot" : "Reconnect"}
+                {integration.connectorProvider === "composio"
+                  ? "Add account"
+                  : integration.slug === "telegram"
+                    ? "Add bot"
+                    : "Reconnect"}
               </Button>
             </>
           ) : (

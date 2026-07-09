@@ -9,18 +9,28 @@ import {
   getComposioUserId,
   normalizeComposioToolkit,
 } from "@/lib/integrations/composio"
+import { getCatalogIntegration } from "@/lib/integrations-catalog"
+import { ensureIntegrationProvider } from "@/lib/integrations/providers"
 import { buildPublicUrl } from "@/lib/public-url"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 const authorizeSchema = z.object({
   toolkit: z.string().min(1).max(100),
+  providerSlug: z.string().min(1).max(100).optional(),
   connectionName: z.string().max(100).optional(),
   alias: z.string().max(100).optional(),
   authConfigId: z.string().max(200).optional(),
   callbackPath: z.string().startsWith("/").max(500).optional(),
 })
 
-async function ensureComposioProvider(toolkit: string) {
+async function ensureComposioProvider(toolkit: string, providerSlug?: string) {
+  if (providerSlug) {
+    const catalog = getCatalogIntegration(providerSlug)
+    if (catalog?.connectorProvider === "composio") {
+      return ensureIntegrationProvider(catalog)
+    }
+  }
+
   const slug = `composio_${toolkit}`
   const name = toolkit
     .split(/[_-]/g)
@@ -37,7 +47,7 @@ async function ensureComposioProvider(toolkit: string) {
         auth_type: "oauth",
         category: "composio",
         description: `${name} connected through Composio.`,
-        status: "pending",
+        status: "active",
         connector_provider: "composio",
         external_toolkit: toolkit,
         external_config: {},
@@ -75,7 +85,7 @@ export async function POST(request: NextRequest) {
   }
 
   const toolkit = normalizeComposioToolkit(parsed.data.toolkit)
-  const provider = await ensureComposioProvider(toolkit)
+  const provider = await ensureComposioProvider(toolkit, parsed.data.providerSlug)
   const callbackUrl = buildPublicUrl(
     parsed.data.callbackPath ?? `/integrations/${provider.slug}?connected=composio`,
     request
@@ -98,7 +108,7 @@ export async function POST(request: NextRequest) {
         workspace_id: ws.workspaceId,
         provider_id: provider.id,
         created_by: auth.user.id,
-        status: "active",
+        status: "pending",
         connection_name: parsed.data.connectionName ?? `${toolkit} via Composio`,
         connected_account: toolkit,
         settings: {
