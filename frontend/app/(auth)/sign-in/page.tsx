@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/input-otp"
 import { Kbd } from "@/components/ui/kbd"
 import { Label } from "@/components/ui/label"
+import { ATMET_AUTH_CHANGED_EVENT } from "@/lib/workspace-context"
 
 type AuthStep = "email" | "password" | "otp" | "create-password"
 
@@ -73,6 +74,17 @@ export default function SignInPage() {
     window.setTimeout(() => {
       setToast((previous) => (previous === message ? null : previous))
     }, 2800)
+  }
+
+  const finishSignedInNavigation = async (
+    user: { id: string; email: string; full_name: string | null },
+    destination = "/ai-core"
+  ) => {
+    localStorage.setItem("atmet_user", JSON.stringify(user))
+    window.dispatchEvent(new CustomEvent(ATMET_AUTH_CHANGED_EVENT))
+    await fetch("/api/users/me", { cache: "no-store", credentials: "same-origin" }).catch(() => null)
+    router.replace(destination)
+    router.refresh()
   }
 
   const validateEmail = (): SignInErrors => {
@@ -173,8 +185,7 @@ export default function SignInPage() {
         return
       }
 
-      localStorage.setItem("atmet_user", JSON.stringify(payload.data.user))
-      router.replace("/ai-core")
+      await finishSignedInNavigation(payload.data.user)
     } catch {
       showToast("Something went wrong. Please try again.")
     } finally {
@@ -220,6 +231,7 @@ export default function SignInPage() {
       }
 
       localStorage.setItem("atmet_user", JSON.stringify(payload.data.user))
+      window.dispatchEvent(new CustomEvent(ATMET_AUTH_CHANGED_EVENT))
       setStep("create-password")
     } catch {
       showToast("Something went wrong. Please try again.")
@@ -255,7 +267,9 @@ export default function SignInPage() {
         return
       }
 
+      window.dispatchEvent(new CustomEvent(ATMET_AUTH_CHANGED_EVENT))
       router.replace("/onboarding")
+      router.refresh()
     } catch {
       showToast("Something went wrong. Please try again.")
     } finally {

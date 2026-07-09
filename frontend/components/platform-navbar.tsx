@@ -54,7 +54,7 @@ import {
   type WorkflowStateEventDetail,
 } from "@/lib/workflow-events"
 import { OPEN_NEW_SKILL_DIALOG_EVENT } from "@/lib/skills-events"
-import { useWorkspace } from "@/lib/workspace-context"
+import { ATMET_AUTH_CHANGED_EVENT, ATMET_USER_UPDATED_EVENT, useWorkspace } from "@/lib/workspace-context"
 import {
   Bell,
   Check,
@@ -291,14 +291,24 @@ export function PlatformNavbar() {
   const currentUserFullName = liveUser?.full_name || liveUser?.email || "You"
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false)
   const [userSearchQuery, setUserSearchQuery] = useState("")
-  useEffect(() => {
-    fetch("/api/users/me")
+  const refreshLiveUser = useCallback(() => {
+    fetch("/api/users/me", { cache: "no-store", credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: { data?: { user?: { full_name: string | null; email: string | null } } } | null) => {
         if (payload?.data?.user) setLiveUser(payload.data.user)
       })
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    refreshLiveUser()
+    window.addEventListener(ATMET_AUTH_CHANGED_EVENT, refreshLiveUser)
+    window.addEventListener(ATMET_USER_UPDATED_EVENT, refreshLiveUser)
+    return () => {
+      window.removeEventListener(ATMET_AUTH_CHANGED_EVENT, refreshLiveUser)
+      window.removeEventListener(ATMET_USER_UPDATED_EVENT, refreshLiveUser)
+    }
+  }, [refreshLiveUser])
 
   const loadPendingInvitations = useCallback(async () => {
     setIsLoadingInvitations(true)

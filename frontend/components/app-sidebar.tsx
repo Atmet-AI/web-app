@@ -5,7 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import packageJson from "@/package.json"
-import { useWorkspace } from "@/lib/workspace-context"
+import { ATMET_AUTH_CHANGED_EVENT, ATMET_USER_UPDATED_EVENT, useWorkspace } from "@/lib/workspace-context"
 import { countries } from "@/lib/countries"
 import { buildInternationalPhone, buildWhatsappUrl, getPhoneCountry } from "@/lib/phone-countries"
 
@@ -830,7 +830,7 @@ function AccountSettingsContent() {
         customRole,
         avatarUrl,
       })
-      window.dispatchEvent(new CustomEvent("atmet-user-updated"))
+      window.dispatchEvent(new CustomEvent(ATMET_USER_UPDATED_EVENT))
     } finally {
       setIsSaving(false)
     }
@@ -8491,8 +8491,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   } | null>(null)
 
   const refreshLiveUser = React.useCallback(() => {
-    fetch("/api/users/me")
-      .then((r) => r.json())
+    fetch("/api/users/me", { cache: "no-store", credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
       .then((res: { data?: { user: { id: string; full_name: string | null; email: string | null; avatar_url: string | null; platform_role: string } } }) => {
         if (res.data?.user) setLiveUser(res.data.user)
       })
@@ -8501,8 +8501,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   React.useEffect(() => {
     refreshLiveUser()
-    window.addEventListener("atmet-user-updated", refreshLiveUser)
-    return () => window.removeEventListener("atmet-user-updated", refreshLiveUser)
+    window.addEventListener(ATMET_AUTH_CHANGED_EVENT, refreshLiveUser)
+    window.addEventListener(ATMET_USER_UPDATED_EVENT, refreshLiveUser)
+    return () => {
+      window.removeEventListener(ATMET_AUTH_CHANGED_EVENT, refreshLiveUser)
+      window.removeEventListener(ATMET_USER_UPDATED_EVENT, refreshLiveUser)
+    }
   }, [refreshLiveUser])
 
   React.useEffect(() => {
@@ -8540,6 +8544,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     } finally {
       setLiveUser(null)
       localStorage.removeItem("atmet_active_workspace")
+      window.dispatchEvent(new CustomEvent(ATMET_AUTH_CHANGED_EVENT))
       router.push("/sign-in")
     }
   }, [router])

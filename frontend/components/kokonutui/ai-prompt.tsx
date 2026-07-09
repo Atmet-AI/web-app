@@ -770,6 +770,7 @@ export default function AI_Prompt({
       setMessages([]);
       return;
     }
+    if (isResponding) return;
 
     let isCancelled = false;
     void apiFetch(`/api/chats/${chatId}/messages`)
@@ -794,7 +795,7 @@ export default function AI_Prompt({
     return () => {
       isCancelled = true;
     };
-  }, [apiFetch, chatId]);
+  }, [apiFetch, chatId, isResponding]);
 
   useEffect(() => {
     const copyTimers = copyTimersRef.current;
