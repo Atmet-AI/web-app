@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 
 import AIPrompt from "@/components/kokonutui/ai-prompt"
+import { cn } from "@/lib/utils"
 
 const OPEN_MANAGE_CHAT_USERS_EVENT = "open-manage-chat-users"
 const AUTOMATION_CHAT_STARTED_EVENT = "automation-chat-started"
@@ -15,7 +16,7 @@ type AiCorePageContentProps = {
 function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const promptRef = useRef<HTMLDivElement>(null)
-  const [hasStartedConversation, setHasStartedConversation] = useState(false)
+  const [, setHasStartedConversation] = useState(false)
   const [hasConversationActivity, setHasConversationActivity] = useState(false)
   const [bottomShift, setBottomShift] = useState(0)
   const [currentUserFullName, setCurrentUserFullName] = useState("there")
@@ -78,15 +79,23 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
   return (
     <div
       ref={containerRef}
-      className="relative flex min-h-[calc(100svh-2.5rem)] flex-1 items-center justify-center px-3 py-4"
+      className={cn(
+        "relative flex flex-1 justify-center px-3",
+        shouldDockToBottom
+          ? "h-[calc(100svh-2.5rem)] min-h-0 items-stretch overflow-hidden py-0"
+          : "min-h-[calc(100svh-2.5rem)] items-center py-4"
+      )}
     >
       <div
         ref={promptRef}
-        className="flex w-full justify-center transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+        className={cn(
+          "flex w-full justify-center transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          shouldDockToBottom ? "h-full min-h-0" : "will-change-transform"
+        )}
         style={{
-          transform: `translateY(${
-            shouldDockToBottom && Number.isFinite(bottomShift) ? bottomShift : 0
-          }px)`,
+          transform: shouldDockToBottom
+            ? "none"
+            : `translateY(${Number.isFinite(bottomShift) ? bottomShift : 0}px)`,
         }}
       >
         <AIPrompt

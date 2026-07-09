@@ -664,10 +664,6 @@ export default function AI_Prompt({
 
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-      window.scrollTo({
-        top: document.documentElement.scrollHeight,
-        behavior: "auto",
-      });
     });
   }, [messages.length, isResponding]);
 
@@ -2813,8 +2809,10 @@ export default function AI_Prompt({
     <div
       data-chatbot-scope="true"
       className={cn(
-        "mx-auto w-full max-w-4xl py-4 [&_[data-slot=button]]:rounded-lg",
-        dockComposerToBottom && "flex h-full flex-col"
+        "mx-auto w-full max-w-4xl [&_[data-slot=button]]:rounded-lg",
+        dockComposerToBottom
+          ? "flex h-full min-h-0 flex-col py-4"
+          : "py-4"
       )}
     >
       <input
@@ -2825,7 +2823,7 @@ export default function AI_Prompt({
         multiple
         onChange={handleFileInputChange}
       />
-      <div className={cn(dockComposerToBottom && "min-h-0 flex flex-1 flex-col")}>
+      <div className={cn(dockComposerToBottom && "min-h-0 flex flex-1 flex-col overflow-visible")}>
         {showGreeting && (
           <div className="mb-5 flex flex-col items-center text-center">
             <h2 className="text-2xl font-semibold tracking-tight text-muted-foreground">
@@ -2839,7 +2837,10 @@ export default function AI_Prompt({
         {hasConversation ? (
           <div
             className={cn(
-              glassComposer && "relative mb-0 overflow-hidden rounded-t-2xl"
+              glassComposer && "relative mb-0 rounded-t-2xl",
+              dockComposerToBottom
+                ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                : glassComposer && "overflow-hidden"
             )}
           >
           {glassComposer && (
@@ -2858,7 +2859,8 @@ export default function AI_Prompt({
               "space-y-3",
               glassComposer
                 ? cn(
-                    "relative z-10 max-h-[32vh] min-h-[9rem] overflow-y-auto rounded-t-2xl border-x border-t border-b-0 px-3 pt-3 pb-5",
+                    "relative z-10 min-h-[9rem] overflow-y-auto rounded-t-2xl border-x border-t border-b-0 px-3 pt-3 pb-5",
+                    dockComposerToBottom ? "min-h-0 flex-1" : "max-h-[32vh]",
                     glassBorder,
                     glassLayerFront
                   )
@@ -3384,7 +3386,10 @@ export default function AI_Prompt({
       <div
         className={cn(
           "p-0",
-          hasConversation && "sticky bottom-4 z-20"
+          hasConversation &&
+            (dockComposerToBottom
+              ? "relative z-50 shrink-0 pt-2"
+              : "sticky bottom-4 z-50")
         )}
       >
         {pendingAppAction ? (
@@ -3421,7 +3426,7 @@ export default function AI_Prompt({
         )}
         <div
           className={cn(
-            "relative transition-transform duration-300 ease-out",
+            "relative z-50 overflow-visible transition-transform duration-300 ease-out",
             attachedFiles.length > 0 && "translate-y-[-10px]",
             glassComposer && hasConversation && "-mt-2"
           )}
@@ -3565,7 +3570,7 @@ export default function AI_Prompt({
                                                               </AnimatePresence></DropdownMenuTrigger>
                     <DropdownMenuContent
                       className={cn(
-                        "min-w-[10rem]",
+                        "z-[100] min-w-[10rem]",
                         "border-border bg-popover"
                       )}
                     >
@@ -3613,7 +3618,7 @@ export default function AI_Prompt({
                             <Plus className="h-4 w-4 opacity-80" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
-                            className={cn("min-w-[12rem]", "border-border bg-popover")}
+                            className={cn("z-[100] min-w-[12rem]", "border-border bg-popover")}
                           >
                             {availableIntegrations.length === 0 ? (
                               <DropdownMenuItem disabled className="text-muted-foreground">
@@ -3653,7 +3658,7 @@ export default function AI_Prompt({
                       <span>Skills</span>
                       <Plus className="h-4 w-4 opacity-80" />
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent className={cn("min-w-[12rem]", "border-border bg-popover")}>
+                    <DropdownMenuContent className={cn("z-[100] min-w-[12rem]", "border-border bg-popover")}>
                       <DropdownMenuItem
                         className="flex items-center justify-between gap-2"
                         key="no-skill"
@@ -3699,7 +3704,7 @@ export default function AI_Prompt({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
-                      className={cn("min-w-[15rem]", "border-border bg-popover")}
+                      className={cn("z-[100] min-w-[15rem]", "border-border bg-popover")}
                     >
                       <DropdownMenuItem
                         onPointerDown={(e) => {
@@ -3767,7 +3772,7 @@ export default function AI_Prompt({
             </div>
           </div>
           {commandMenu && commandItems.length > 0 && (
-            <div className="absolute bottom-[calc(100%+0.5rem)] left-3 z-50 min-w-40 max-h-56 overflow-x-hidden overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
+            <div className="absolute bottom-[calc(100%+0.5rem)] left-3 z-[100] max-h-[min(18rem,calc(100dvh-10rem))] min-w-40 overflow-x-hidden overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
               {commandItems.map((item, index) => (
                 <button
                   key={`${commandMenu.type}-${item}`}
