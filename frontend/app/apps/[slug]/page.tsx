@@ -96,9 +96,16 @@ export default function AppDetailsPage() {
 
   React.useEffect(() => {
     if (!integration) return
-    if (searchParams.get("connected") !== "true") return
+    const connectedSource = searchParams.get("connected")
+    if (connectedSource !== "true" && connectedSource !== "composio") return
 
-    setFlashMessage({ type: "success", text: `${integration.name} connected successfully` })
+    setFlashMessage({
+      type: "success",
+      text:
+        connectedSource === "composio"
+          ? `${integration.name} authorization started`
+          : `${integration.name} connected successfully`,
+    })
     router.replace(`/apps/${integration.slug}`)
     void loadIntegration()
   }, [integration, loadIntegration, router, searchParams])
@@ -159,12 +166,32 @@ export default function AppDetailsPage() {
     setOauthError(null)
 
     try {
-      const response = await apiFetch(`/api/integrations/${integration.slug}/oauth/init`, {
-        method: "POST",
-      })
+      const isComposioConnection = integration.connectorProvider === "composio"
+      const response = await apiFetch(
+        isComposioConnection ? "/api/composio/authorize" : `/api/integrations/${integration.slug}/oauth/init`,
+        {
+          method: "POST",
+          ...(isComposioConnection
+            ? {
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  toolkit: integration.composioToolkit ?? integration.slug,
+                  connectionName: integration.name,
+                  callbackPath: `/apps/${integration.slug}?connected=composio`,
+                }),
+              }
+            : {}),
+        }
+      )
 
       if (!response.ok) {
-        throw new Error("Unable to start OAuth connection.")
+        throw new Error(
+          isComposioConnection
+            ? "Unable to start Composio connection."
+            : "Unable to start OAuth connection."
+        )
       }
 
       const result = (await response.json()) as ApiResponse<{ redirectUrl: string }>

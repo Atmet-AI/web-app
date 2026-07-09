@@ -6,7 +6,7 @@ export type IntegrationCategory =
   | "social"
   | "generic"
 
-export type IntegrationStatus = "active" | "expired" | "error"
+export type IntegrationStatus = "pending" | "active" | "expired" | "error"
 
 export interface IntegrationPermission {
   name: string
@@ -33,6 +33,8 @@ export interface Integration {
   description: string
   category: IntegrationCategory
   authType: "oauth" | "apikey"
+  connectorProvider?: "native" | "composio"
+  composioToolkit?: string
   apiKeyUrl?: string
   setupInstructions: string[]
   scopes: IntegrationPermission[]
@@ -53,6 +55,10 @@ export interface IntegrationConnection {
   status?: IntegrationStatus
   connected_at?: string | null
   settings?: Record<string, unknown> | null
+  connector_provider?: "native" | "composio" | "mcp" | "external_api" | null
+  external_connection_id?: string | null
+  external_user_id?: string | null
+  external_metadata?: Record<string, unknown> | null
 }
 
 const INITIAL_INTEGRATIONS: Integration[] = [

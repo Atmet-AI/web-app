@@ -34,6 +34,8 @@ export interface CatalogIntegration {
   description: string
   category: IntegrationCategory
   authType: "oauth" | "apikey"
+  connectorProvider?: "native" | "composio"
+  composioToolkit?: string
   apiKeyUrl?: string
   setupInstructions: string[]
   scopes: IntegrationPermission[]
@@ -74,6 +76,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Post updates and listen for channel activity in real time.",
     category: "communication",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "slack",
     setupInstructions: [
       "Click Connect Slack.",
       "Choose the Slack workspace and review permissions.",
@@ -121,12 +125,42 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     ],
   },
   {
+    slug: "google-sheets",
+    name: "Google Sheets",
+    logo: "https://cdn.simpleicons.org/googlesheets",
+    description: "Create rows, update cells, and sync workflow data into spreadsheets.",
+    category: "productivity",
+    authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "googlesheets",
+    setupInstructions: [
+      "Click Connect Google Sheets.",
+      "Composio will open a secure Google authorization page.",
+      "Choose the Google account and approve access for the sheets you want to automate.",
+      "Return to Atmet and use Sheets actions inside workflows.",
+    ],
+    scopes: [
+      { name: "spreadsheets.read", description: "Read spreadsheet structure and rows for workflow lookups." },
+      { name: "spreadsheets.write", description: "Append rows and update cells from workflow actions." },
+    ],
+    triggers: [
+      { id: "google-sheets-new-row", name: "New row", description: "Starts when a row is added to a selected spreadsheet." },
+      { id: "google-sheets-updated-row", name: "Row updated", description: "Starts when a selected row changes." },
+    ],
+    actions: [
+      { id: "google-sheets-add-row", name: "Add row", description: "Append a row to a selected sheet.", inputFields: ["spreadsheetId", "sheetName", "values"] },
+      { id: "google-sheets-update-row", name: "Update row", description: "Update cells in an existing row.", inputFields: ["spreadsheetId", "range", "values"] },
+    ],
+  },
+  {
     slug: "notion",
     name: "Notion",
     logo: "https://cdn.simpleicons.org/notion",
     description: "Create and update pages, tasks, and databases automatically.",
     category: "productivity",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "notion",
     setupInstructions: [
       "Click Connect Notion.",
       "Select which workspace pages and databases Atmet can access.",
@@ -177,6 +211,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Track pull requests and automate repository operations.",
     category: "developer",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "github",
     setupInstructions: [
       "Click Connect GitHub.",
       "Authorize Atmet for the organizations and repositories you want.",
@@ -202,6 +238,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Sync issue activity and sprint milestones into workflows.",
     category: "developer",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "jira",
     setupInstructions: [
       "Click Connect Jira.",
       "Sign in to Atlassian and choose the Jira site to authorize.",
@@ -227,6 +265,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Track tasks and project updates across teams.",
     category: "productivity",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "asana",
     setupInstructions: [
       "Click Connect Asana.",
       "Choose your Asana workspace and review requested permissions.",
@@ -278,6 +318,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Connect community channels and bot notifications.",
     category: "communication",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "discord",
     setupInstructions: [
       "Click Connect Discord.",
       "Select the server where Atmet can post updates.",
