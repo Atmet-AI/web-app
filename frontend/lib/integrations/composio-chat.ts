@@ -37,7 +37,7 @@ type SheetLookup = {
 }
 
 type GenericConnectedApp = {
-  provider: Exclude<ConnectedAppProvider, "google-sheets">
+  provider: ConnectedAppProvider
   toolkit: string
   label: string
   aliases: RegExp[]
@@ -75,6 +75,12 @@ const GENERIC_CONNECTED_APPS: GenericConnectedApp[] = [
     toolkit: "telegram",
     label: "Telegram",
     aliases: [/\btelegram\b/i],
+  },
+  {
+    provider: "google-sheets",
+    toolkit: "googlesheets",
+    label: "Google Sheets",
+    aliases: [/\bgoogle\s*sheets?\b/i, /\bsheets?\b/i, /\bspreadsheet(s)?\b/i, /\bworksheet(s)?\b/i],
   },
   {
     provider: "google-drive",
@@ -391,7 +397,6 @@ async function getActiveComposioSession(input: {
 }
 
 function detectGenericConnectedApp(content: string) {
-  if (mentionsGoogleSheets(content)) return null
   return GENERIC_CONNECTED_APPS.find((app) =>
     app.aliases.some((alias) => alias.test(content))
   ) ?? null

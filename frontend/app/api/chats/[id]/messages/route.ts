@@ -10,6 +10,11 @@ import {
   parseAppApprovalRequest,
   serializeAppApprovalRequest,
 } from "@/lib/integrations/app-approval"
+import {
+  detectAppMiniUiRequest,
+  parseAppMiniUiRequest,
+  serializeAppMiniUiRequest,
+} from "@/lib/integrations/app-mini-ui"
 
 const FILE_BUCKET = "workspace-files"
 
@@ -215,7 +220,9 @@ export async function POST(
     role: m.role as "system" | "user" | "assistant",
     content: parseAppApprovalRequest(m.content)
       ? "Atmet asked the user to approve adding a connected app to this chat."
-      : m.content,
+      : parseAppMiniUiRequest(m.content)
+        ? "Atmet showed a connected app mini form for the user to complete."
+        : m.content,
   }))
 
   const appApprovalRequest = detectAppApprovalRequest({
@@ -228,6 +235,19 @@ export async function POST(
       chatId,
       content: serializeAppApprovalRequest(appApprovalRequest),
       metadata: { appApprovalRequest },
+    })
+  }
+
+  const appMiniUiRequest = detectAppMiniUiRequest({
+    content: parsed.data.content,
+    conversationMessages: messages,
+  })
+
+  if (appMiniUiRequest) {
+    return streamAssistantText({
+      chatId,
+      content: serializeAppMiniUiRequest(appMiniUiRequest),
+      metadata: { appMiniUiRequest },
     })
   }
 
