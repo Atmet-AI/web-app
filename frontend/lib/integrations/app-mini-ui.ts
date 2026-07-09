@@ -40,14 +40,29 @@ function stripAppMentions(content: string) {
   return content.replace(/(^|\s)@[A-Za-z][A-Za-z0-9 &_-]+(?=\s|$|[.,!?;:])/g, " ").trim()
 }
 
+function normalizeEmailWhitespace(content: string) {
+  return content.replace(
+    /([A-Z0-9._%+-]+)\s*@\s*([A-Z0-9.-]+)\s*\.\s*([A-Z]{2,})/gi,
+    "$1@$2.$3"
+  )
+}
+
+export function cleanEmailAddress(value: string) {
+  const compact = normalizeEmailWhitespace(value)
+    .replace(/[<>"“”']/g, "")
+    .trim()
+  return compact.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? ""
+}
+
 function extractEmail(content: string) {
-  return content.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? ""
+  return cleanEmailAddress(content)
 }
 
 function extractEmailRecipient(content: string) {
-  return (
-    content.match(/\bto\s+["“”']?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})["“”']?/i)?.[1] ??
-    extractEmail(content)
+  const normalized = normalizeEmailWhitespace(content)
+  return cleanEmailAddress(
+    normalized.match(/\bto\s+["“”']?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})["“”']?/i)?.[1] ??
+      extractEmail(normalized)
   )
 }
 
@@ -137,7 +152,7 @@ export function detectAppMiniUiRequest(input: {
     /\b(send|compose|write)\b/i.test(normalized) &&
     /\b(email|mail|message)\b/i.test(normalized)
   ) {
-    const to = extractLabeledValue(normalized, "to") || extractEmailRecipient(normalized)
+    const to = cleanEmailAddress(extractLabeledValue(normalized, "to") || extractEmailRecipient(normalized))
     const subject = extractNaturalEmailSubject(normalized)
     const body = extractNaturalEmailBody(normalized)
 

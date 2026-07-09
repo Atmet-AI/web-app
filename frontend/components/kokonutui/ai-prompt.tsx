@@ -56,6 +56,7 @@ import {
   type AppApprovalRequest,
 } from "@/lib/integrations/app-approval";
 import {
+  cleanEmailAddress,
   parseAppMiniUiRequest,
   type AppMiniUiRequest,
 } from "@/lib/integrations/app-mini-ui";
@@ -1431,9 +1432,11 @@ export default function AI_Prompt({
     (request: AppMiniUiRequest, values: Record<string, string>) => {
       if (request.variant === "gmail-compose") {
         return [
-          `@${request.appName} Send an email to ${values.to?.trim() ?? ""}.`,
+          `@${request.appName} Send an email with these exact fields:`,
+          `To: ${cleanEmailAddress(values.to ?? "")}`,
           `Subject: ${values.subject?.trim() ?? ""}`,
-          `Body: ${values.body?.trim() ?? ""}`,
+          `Body:`,
+          values.body?.trim() ?? "",
         ].join("\n");
       }
 
@@ -1468,7 +1471,11 @@ export default function AI_Prompt({
         return;
       }
 
-      const values = getAppMiniUiValues(request, sourceMessageId);
+      const rawValues = getAppMiniUiValues(request, sourceMessageId);
+      const values =
+        request.variant === "gmail-compose"
+          ? { ...rawValues, to: cleanEmailAddress(rawValues.to ?? "") }
+          : rawValues;
       const missingField = request.fields.find(
         (field) => field.required && !values[field.id]?.trim()
       );

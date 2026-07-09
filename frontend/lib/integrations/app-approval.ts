@@ -16,6 +16,7 @@ const TRIGGER_INTENT = /\b(when|whenever|if|every\s+time|anyone|someone|trigger|
 
 const APP_ALIASES: Record<string, RegExp[]> = {
   gmail: [/\bgmail\b/i, /\bemail(s)?\b/i, /\bmailbox\b/i, /\binbox\b/i],
+  "google-contacts": [/\bgoogle\s*contacts?\b/i, /\bgmail\s*contacts?\b/i, /\bcontacts?\b/i, /\baddress\s*book\b/i],
   "google-sheets": [/\bgoogle\s*sheets?\b/i, /\bsheets?\b/i, /\bspreadsheet(s)?\b/i, /\bworksheet(s)?\b/i],
   "google-drive": [/\bgoogle\s*drive\b/i, /\bgdrive\b/i, /\bdrive\s+file(s)?\b/i, /\bgoogle\s*doc(s)?\b/i],
   chatgpt: [/\bchatgpt\b/i, /\bopenai\b/i, /\bgpt\b/i, /\bvector\s*store(s)?\b/i],
@@ -37,6 +38,18 @@ function escapeRegExp(value: string) {
 
 function hasActionIntent(content: string) {
   return ACTION_INTENT.test(content) || TRIGGER_INTENT.test(content)
+}
+
+function prioritizeCatalogForContent(content: string) {
+  if (!/\b(contacts?|address\s*book)\b/i.test(content)) return INTEGRATIONS_CATALOG
+
+  const contacts = INTEGRATIONS_CATALOG.find((integration) => integration.slug === "google-contacts")
+  if (!contacts) return INTEGRATIONS_CATALOG
+
+  return [
+    contacts,
+    ...INTEGRATIONS_CATALOG.filter((integration) => integration.slug !== contacts.slug),
+  ]
 }
 
 function appMentionPattern(appName: string) {
@@ -89,7 +102,7 @@ export function detectAppApprovalRequest(input: {
   const content = input.content.trim()
   if (!content || !hasActionIntent(content)) return null
 
-  for (const integration of INTEGRATIONS_CATALOG) {
+  for (const integration of prioritizeCatalogForContent(content)) {
     const aliases = APP_ALIASES[integration.slug] ?? [
       new RegExp(`\\b${escapeRegExp(integration.name)}\\b`, "i"),
     ]
