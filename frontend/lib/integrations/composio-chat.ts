@@ -9,6 +9,7 @@ import { getOpenAIClient } from "@/lib/openai"
 
 type ConnectedAppProvider =
   | "gmail"
+  | "google-contacts"
   | "telegram"
   | "google-drive"
   | "google-sheets"
@@ -64,6 +65,12 @@ type ContextMessage = {
 }
 
 const GENERIC_CONNECTED_APPS: GenericConnectedApp[] = [
+  {
+    provider: "google-contacts",
+    toolkit: "googlecontacts",
+    label: "Google Contacts",
+    aliases: [/\bgoogle\s*contacts?\b/i, /\bgmail\s*contacts?\b/i, /\bcontacts?\b/i, /\baddress\s*book\b/i],
+  },
   {
     provider: "gmail",
     toolkit: "gmail",
@@ -414,9 +421,22 @@ function buildToolRequestContent(content: string, contextMessages?: ContextMessa
 
   if (!recentContext) return content
 
+  const gmailIds = Array.from(
+    new Set(
+      Array.from(
+        recentContext.matchAll(/mail\.google\.com\/mail\/[^\s)]*?#\w+\/([a-f0-9]{12,})/gi)
+      )
+        .map((match) => match[1])
+        .filter((id): id is string => Boolean(id))
+    )
+  )
+
   return [
     "Recent conversation context:",
     recentContext,
+    ...(gmailIds.length > 0
+      ? ["", `Detected recent Gmail message/thread ids: ${gmailIds.join(", ")}`]
+      : []),
     "",
     "Latest user message:",
     content,
@@ -463,6 +483,11 @@ async function planComposioToolExecution(input: {
           "If a required target is missing, set execute=false and put a short question in question.",
           "For destructive actions like delete, trash, revoke, remove, or permanent changes, execute only when the user explicitly names the target and asks for that destructive action.",
           "For send/post/create/update/read/search/list actions, execute when the request contains enough required fields.",
+          "When the request contains labeled fields like To, Subject, Body, Recipient, Message, File, or Query, copy those values directly into the matching schema arguments.",
+          "For Gmail send actions, normalize the recipient into a plain email address with no quotes, spaces, or trailing punctuation.",
+          "Gmail is for email messages. Google Contacts is for saved contacts and address book requests.",
+          "For Gmail follow-up requests like 'reply to this email', use the most recent Gmail message, thread, or mail.google.com URL identifier from the conversation context as the target when the schema needs a message or thread id.",
+          "If the user asks to reply and the recent Gmail context contains an email subject, sender, Gmail URL, or message identifier, do not ask the user to provide the id again.",
         ].join(" "),
       },
       {

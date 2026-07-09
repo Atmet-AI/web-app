@@ -36,6 +36,8 @@ const WorkspaceContext = createContext<WorkspaceContextValue>({
 })
 
 const ACTIVE_WS_KEY = "atmet_active_workspace"
+export const ATMET_AUTH_CHANGED_EVENT = "atmet-auth-changed"
+export const ATMET_USER_UPDATED_EVENT = "atmet-user-updated"
 
 const ONBOARDING_PATH = "/onboarding"
 const SKIP_REDIRECT_PATHS = [
@@ -56,14 +58,32 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
 
-  const refreshWorkspaces = useCallback(async () => {
+  const loadWorkspaceState = useCallback(async () => {
     const stored = typeof window !== "undefined"
       ? localStorage.getItem(ACTIVE_WS_KEY)
       : null
-    const res = await fetch("/api/workspaces")
-    const payload = (await res.json()) as { data?: { workspaces: Workspace[] } }
-    const ws = payload.data?.workspaces ?? []
+    const [wsResponse, userResponse] = await Promise.all([
+      fetch("/api/workspaces", { cache: "no-store", credentials: "same-origin" }),
+      fetch("/api/users/me", { cache: "no-store", credentials: "same-origin" }),
+    ])
+    const wsPayload = (await wsResponse.json().catch(() => null)) as
+      | { data?: { workspaces: Workspace[] } }
+      | null
+    const userPayload = (await userResponse.json().catch(() => null)) as
+      | { data?: { user?: { onboarding_completed?: boolean; platform_role?: string } } }
+      | null
+    const ws = wsPayload?.data?.workspaces ?? []
     setWorkspaces(ws)
+
+    const isPlatformAdmin = userPayload?.data?.user?.platform_role === "super_admin"
+    const needsOnboarding =
+      !isPlatformAdmin &&
+      (!userPayload?.data?.user?.onboarding_completed || ws.length === 0)
+
+    if (needsOnboarding && !SKIP_REDIRECT_PATHS.some(p => pathname?.startsWith(p))) {
+      router.push(ONBOARDING_PATH)
+      return
+    }
 
     const storedValid = stored && ws.some((w) => w.id === stored)
     const firstId = ws[0]?.id ?? null
@@ -73,43 +93,37 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     if (activeId && typeof window !== "undefined") {
       localStorage.setItem(ACTIVE_WS_KEY, activeId)
     }
-  }, [])
+  }, [pathname, router])
+
+  const refreshWorkspaces = useCallback(async () => {
+    await loadWorkspaceState()
+  }, [loadWorkspaceState])
 
   useEffect(() => {
-    const stored = typeof window !== "undefined"
-      ? localStorage.getItem(ACTIVE_WS_KEY)
-      : null
-
-    Promise.all([
-      fetch("/api/workspaces").then((r) => r.json()),
-      fetch("/api/users/me").then((r) => r.json()),
-    ])
-      .then(([wsRes, userRes]: [{ data?: { workspaces: Workspace[] } }, { data?: { user: { onboarding_completed?: boolean; platform_role?: string } } }]) => {
-        const ws = wsRes.data?.workspaces ?? []
-        setWorkspaces(ws)
-
-        const isPlatformAdmin = userRes.data?.user?.platform_role === "super_admin"
-        const needsOnboarding =
-          !isPlatformAdmin &&
-          (!userRes.data?.user?.onboarding_completed || ws.length === 0)
-
-        if (needsOnboarding && !SKIP_REDIRECT_PATHS.some(p => pathname?.startsWith(p))) {
-          router.push(ONBOARDING_PATH)
-          return
-        }
-
-        const storedValid = stored && ws.some((w) => w.id === stored)
-        const firstId = ws[0]?.id ?? null
-        const activeId = storedValid ? stored : firstId
-
-        setActiveWorkspaceIdState(activeId)
-        if (activeId && typeof window !== "undefined") {
-          localStorage.setItem(ACTIVE_WS_KEY, activeId)
-        }
-      })
+    Promise.resolve()
+      .then(loadWorkspaceState)
       .catch(() => {})
       .finally(() => setIsLoading(false))
-  }, [pathname, router])
+  }, [loadWorkspaceState])
+
+  useEffect(() => {
+    const refresh = () => {
+      setIsLoading(true)
+      loadWorkspaceState()
+        .catch(() => {})
+        .finally(() => setIsLoading(false))
+    }
+
+    window.addEventListener(ATMET_AUTH_CHANGED_EVENT, refresh)
+    window.addEventListener(ATMET_USER_UPDATED_EVENT, refresh)
+    window.addEventListener("focus", refresh)
+
+    return () => {
+      window.removeEventListener(ATMET_AUTH_CHANGED_EVENT, refresh)
+      window.removeEventListener(ATMET_USER_UPDATED_EVENT, refresh)
+      window.removeEventListener("focus", refresh)
+    }
+  }, [loadWorkspaceState])
 
   const setActiveWorkspace = useCallback((id: string) => {
     setActiveWorkspaceIdState(id)
@@ -124,7 +138,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (activeWorkspaceId) {
         headers.set("x-workspace-id", activeWorkspaceId)
       }
-      return fetch(path, { ...init, headers })
+      return fetch(path, {
+        ...init,
+        headers,
+        cache: init.cache ?? "no-store",
+        credentials: init.credentials ?? "same-origin",
+      })
     },
     [activeWorkspaceId]
   )

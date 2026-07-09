@@ -73,6 +73,32 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     ],
   },
   {
+    slug: "google-contacts",
+    name: "Google Contacts",
+    logo: "https://cdn.simpleicons.org/googlecontacts",
+    description: "Find, create, and update saved Google contacts for communication workflows.",
+    category: "productivity",
+    authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "googlecontacts",
+    setupInstructions: [
+      "Click Connect Google Contacts.",
+      "Composio will open a secure Google authorization page.",
+      "Choose the Google account whose contacts Atmet should access.",
+      "Return to Atmet and use contacts in chats or workflows.",
+    ],
+    scopes: [
+      { name: "contacts.read", description: "Search and view saved Google contacts for lookups." },
+      { name: "contacts.write", description: "Create or update contacts when an approved workflow asks for it." },
+    ],
+    triggers: [],
+    actions: [
+      { id: "google-contacts-list", name: "List contacts", description: "Find saved contacts by name, email, or phone.", inputFields: ["query"] },
+      { id: "google-contacts-create", name: "Create contact", description: "Create a new saved contact.", inputFields: ["name", "email", "phone"] },
+      { id: "google-contacts-update", name: "Update contact", description: "Update an existing saved contact.", inputFields: ["contactId", "fields"] },
+    ],
+  },
+  {
     slug: "slack",
     name: "Slack",
     logo: "https://cdn.simpleicons.org/slack",

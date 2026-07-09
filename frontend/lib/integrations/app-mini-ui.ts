@@ -40,8 +40,30 @@ function stripAppMentions(content: string) {
   return content.replace(/(^|\s)@[A-Za-z][A-Za-z0-9 &_-]+(?=\s|$|[.,!?;:])/g, " ").trim()
 }
 
+function normalizeEmailWhitespace(content: string) {
+  return content.replace(
+    /([A-Z0-9._%+-]+)\s*@\s*([A-Z0-9.-]+)\s*\.\s*([A-Z]{2,})/gi,
+    "$1@$2.$3"
+  )
+}
+
+export function cleanEmailAddress(value: string) {
+  const compact = normalizeEmailWhitespace(value)
+    .replace(/[<>"“”']/g, "")
+    .trim()
+  return compact.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? ""
+}
+
 function extractEmail(content: string) {
-  return content.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? ""
+  return cleanEmailAddress(content)
+}
+
+function extractEmailRecipient(content: string) {
+  const normalized = normalizeEmailWhitespace(content)
+  return cleanEmailAddress(
+    normalized.match(/\bto\s+["“”']?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})["“”']?/i)?.[1] ??
+      extractEmail(normalized)
+  )
 }
 
 function extractLabeledValue(content: string, label: string) {
@@ -54,6 +76,25 @@ function extractLabeledValue(content: string, label: string) {
 function extractQuotedAfter(content: string, words: string[]) {
   const pattern = new RegExp(`\\b(?:${words.join("|")})\\s+["“”']([^"“”']+)["“”']`, "i")
   return content.match(pattern)?.[1]?.trim() ?? ""
+}
+
+function extractNaturalEmailBody(content: string) {
+  return (
+    extractLabeledValue(content, "body") ||
+    extractLabeledValue(content, "message") ||
+    extractQuotedAfter(content, ["says", "say", "saying", "with\\s+message", "body"]) ||
+    content.match(/\b(?:says?|saying)\s+(.+?)\s*$/i)?.[1]?.trim() ||
+    ""
+  )
+}
+
+function extractNaturalEmailSubject(content: string) {
+  return (
+    extractLabeledValue(content, "subject") ||
+    extractQuotedAfter(content, ["subject", "with\\s+subject"]) ||
+    content.match(/\bsubject\s+(?:is\s+)?(.+?)(?=\s+(?:body|message|says?)\b|$)/i)?.[1]?.trim() ||
+    ""
+  )
 }
 
 function extractHeaders(content: string) {
@@ -111,26 +152,26 @@ export function detectAppMiniUiRequest(input: {
     /\b(send|compose|write)\b/i.test(normalized) &&
     /\b(email|mail|message)\b/i.test(normalized)
   ) {
-    const to = extractLabeledValue(normalized, "to") || extractEmail(normalized)
-    const subject = extractLabeledValue(normalized, "subject")
-    const body = extractLabeledValue(normalized, "body") || extractLabeledValue(normalized, "message")
+    const to = cleanEmailAddress(extractLabeledValue(normalized, "to") || extractEmailRecipient(normalized))
+    const subject = extractNaturalEmailSubject(normalized)
+    const body = extractNaturalEmailBody(normalized)
 
-    if (!to || !subject || !body) {
-      return {
-        type: "app_mini_ui",
-        appName: gmail.name,
-        appSlug: gmail.slug,
-        variant: "gmail-compose",
-        title: "Complete email details",
-        description: "Fill the missing fields before Atmet sends from Gmail.",
-        originalRequest: content,
-        submitLabel: "Send email",
-        fields: [
-          { id: "to", label: "To", type: "text", placeholder: "name@example.com", value: to, required: true },
-          { id: "subject", label: "Subject", type: "text", placeholder: "Email subject", value: subject, required: true },
-          { id: "body", label: "Body", type: "textarea", placeholder: "Write the email message", value: body, required: true },
-        ],
-      }
+    return {
+      type: "app_mini_ui",
+      appName: gmail.name,
+      appSlug: gmail.slug,
+      variant: "gmail-compose",
+      title: to && subject && body ? "Review email" : "Complete email details",
+      description: to && subject && body
+        ? "Confirm the details before Atmet sends from Gmail."
+        : "Fill the missing fields before Atmet sends from Gmail.",
+      originalRequest: content,
+      submitLabel: "Send email",
+      fields: [
+        { id: "to", label: "To", type: "text", placeholder: "name@example.com", value: to, required: true },
+        { id: "subject", label: "Subject", type: "text", placeholder: "Email subject", value: subject, required: true },
+        { id: "body", label: "Body", type: "textarea", placeholder: "Write the email message", value: body, required: true },
+      ],
     }
   }
 
