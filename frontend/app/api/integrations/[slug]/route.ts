@@ -3,6 +3,7 @@ import { getUser } from "@/lib/api/auth"
 import { getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
+import { syncComposioWorkspaceConnections } from "@/lib/integrations/composio-sync"
 import { ensureIntegrationProvider } from "@/lib/integrations/providers"
 
 export async function GET(
@@ -30,6 +31,20 @@ export async function GET(
   const { supabase } = auth
   const provider = await ensureIntegrationProvider(catalog)
 
+  if (catalog.connectorProvider === "composio" && catalog.composioToolkit) {
+    try {
+      await syncComposioWorkspaceConnections({
+        workspaceId: ws.workspaceId,
+        providerId: provider.id,
+        providerName: catalog.name,
+        userId: auth.user.id,
+        toolkit: catalog.composioToolkit,
+      })
+    } catch (error) {
+      console.error("Unable to sync Composio integration state", error)
+    }
+  }
+
   const { data: connections } = await supabase
     .from("workspace_integration")
     .select(
@@ -39,17 +54,19 @@ export async function GET(
     .eq("provider_id", provider.id)
     .order("created_at", { ascending: true })
 
-  const db = connections?.[0]
+  const activeConnections =
+    connections?.filter((connection) => connection.status === "active") ?? []
+  const db = activeConnections[0] ?? connections?.[0]
 
   return ok({
     integration: {
       ...catalog,
-      connected: !!connections?.length,
+      connected: activeConnections.length > 0,
       status: db?.status ?? undefined,
       connected_at: db?.connected_at ?? undefined,
       connected_account: db?.connected_account ?? undefined,
       settings: db?.settings ?? undefined,
-      connection_count: connections?.length ?? 0,
+      connection_count: activeConnections.length,
       connections:
         connections?.map((connection) => ({
           id: connection.id,
