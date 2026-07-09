@@ -97,6 +97,10 @@ function asksToAppendRow(content: string) {
   return /\b(add|append|insert|create|write)\b/i.test(content) && /\b(record|row|entry|line|data)\b/i.test(content)
 }
 
+function asksToAddColumn(content: string) {
+  return /\b(column|columns)\b/i.test(content) && /\b(add|append|insert|create|write|update|set|new|random)\b/i.test(content)
+}
+
 function wantsRecentSheets(content: string) {
   return /\b(last|recent|used|opened|latest)\b/i.test(content)
 }
@@ -160,6 +164,7 @@ function extractSpreadsheetName(content: string) {
   const target = content.match(/\b(?:in|into|to|inside)\s+(.+?)\s*[\?.!]*$/i)
   return target?.[1]
     ?.replace(/\b(?:google\s*sheets?|spreadsheet|sheet)\b/gi, "")
+    .replace(/^(?:the|a|an)\s+/i, "")
     .trim()
 }
 
@@ -199,8 +204,39 @@ function firstHeaderRow(value: unknown) {
   return firstRow.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
 }
 
+function valueRows(value: unknown) {
+  const data = recordValue(recordValue(value)?.data)
+  const values = data?.values
+  if (!Array.isArray(values)) return []
+
+  return values.filter((row): row is unknown[] => Array.isArray(row))
+}
+
 function randomSuffix() {
   return Math.random().toString(36).slice(2, 8).toUpperCase()
+}
+
+function randomColumnValue(index: number) {
+  const variants = [
+    `Sample ${randomSuffix()}`,
+    `Test ${index}`,
+    String(Math.floor(Math.random() * 9000) + 1000),
+    new Date().toISOString().slice(0, 10),
+  ]
+  return variants[index % variants.length]
+}
+
+function columnName(index: number) {
+  let value = index
+  let name = ""
+
+  while (value > 0) {
+    const remainder = (value - 1) % 26
+    name = String.fromCharCode(65 + remainder) + name
+    value = Math.floor((value - 1) / 26)
+  }
+
+  return name
 }
 
 function valueForHeader(header: string, index: number) {
@@ -222,6 +258,23 @@ function buildRandomRow(headers: string[]) {
   }
 
   return headers.map((header, index) => valueForHeader(header, index))
+}
+
+function buildRandomColumn(existingRows: unknown[][]) {
+  const maxUsedColumns = Math.max(0, ...existingRows.map((row) => row.length))
+  const rowCount = Math.max(existingRows.length, 10)
+  const nextColumnIndex = Math.max(maxUsedColumns + 1, 1)
+  const nextColumn = columnName(nextColumnIndex)
+  const header = `Atmet Random ${randomSuffix()}`
+  const values = Array.from({ length: rowCount }, (_, index) => [
+    index === 0 ? header : randomColumnValue(index),
+  ])
+
+  return {
+    nextColumn,
+    header,
+    values,
+  }
 }
 
 async function getActiveSheetsSession(input: {
@@ -452,14 +505,15 @@ export async function runComposioChatTool(input: {
 }): Promise<ComposioChatToolResult | null> {
   const shouldSearch = mentionsGoogleSheets(input.content) && asksToSearchOrList(input.content)
   const shouldAppend = asksToAppendRow(input.content)
+  const shouldAddColumn = mentionsGoogleSheets(input.content) && asksToAddColumn(input.content)
   const genericApp = detectGenericConnectedApp(input.content)
 
-  if (!shouldSearch && !shouldAppend && !genericApp) {
+  if (!shouldSearch && !shouldAppend && !shouldAddColumn && !genericApp) {
     return null
   }
 
   try {
-    if (!shouldSearch && !shouldAppend && genericApp) {
+    if (!shouldSearch && !shouldAppend && !shouldAddColumn && genericApp) {
       return await runGenericComposioAppTool({
         workspaceId: input.workspaceId,
         userId: input.userId,
@@ -477,10 +531,115 @@ export async function runComposioChatTool(input: {
       return {
         ok: false,
         provider: "google-sheets",
-        operation: shouldAppend ? "append-row" : "search",
+        operation: shouldAddColumn ? "add-column" : shouldAppend ? "append-row" : "search",
         summary:
           "Google Sheets is mentioned, but Composio does not report an active Google Sheets connection for this workspace user yet.",
         error: sheets.error,
+      }
+    }
+
+    if (shouldAddColumn) {
+      const spreadsheetId = extractSpreadsheetId(input.content)
+      const spreadsheetName = extractSpreadsheetName(input.content)
+
+      if (!spreadsheetId && !spreadsheetName) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "add-column",
+          summary: "A Google Sheets column edit was requested, but no spreadsheet name or URL was provided.",
+          error: "Ask the user for the spreadsheet name or URL before writing.",
+        }
+      }
+
+      let target: SheetLookup | null = spreadsheetId ? { id: spreadsheetId } : null
+      let searchResult: unknown = null
+
+      if (!target && spreadsheetName) {
+        searchResult = await sheets.session.execute(
+          "GOOGLESHEETS_SEARCH_SPREADSHEETS",
+          buildNamedSearchArgs(spreadsheetName)
+        )
+        const matches = spreadsheetsFromSearch(searchResult)
+        target = matches[0] ?? null
+      }
+
+      if (!target) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "add-column",
+          summary: "A Google Sheets column edit was requested, but the target spreadsheet could not be found.",
+          error: spreadsheetName
+            ? `No spreadsheet matched "${spreadsheetName}".`
+            : "No spreadsheet matched the provided target.",
+        }
+      }
+
+      const namesResult = await sheets.session.execute("GOOGLESHEETS_GET_SHEET_NAMES", {
+        spreadsheet_id: target.id,
+        exclude_hidden: true,
+      })
+      const sheetNames = sheetNamesFromResult(namesResult)
+      const firstSheetName = sheetNames[0]
+
+      if (!firstSheetName) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "add-column",
+          summary: "The target spreadsheet was found, but no writable sheet tab was discovered.",
+          error: "No sheet names were returned.",
+        }
+      }
+
+      const existingValuesResult = await sheets.session.execute("GOOGLESHEETS_VALUES_GET", {
+        spreadsheet_id: target.id,
+        range: `${firstSheetName}!A1:ZZ1000`,
+      })
+      const existingRows = valueRows(existingValuesResult)
+      const randomColumn = buildRandomColumn(existingRows)
+      const range = `${firstSheetName}!${randomColumn.nextColumn}1:${randomColumn.nextColumn}${randomColumn.values.length}`
+      const updateResult = await sheets.session.execute("GOOGLESHEETS_UPDATE_VALUES_BATCH", {
+        spreadsheet_id: target.id,
+        valueInputOption: "USER_ENTERED",
+        includeValuesInResponse: true,
+        data: [
+          {
+            range,
+            majorDimension: "ROWS",
+            values: randomColumn.values,
+          },
+        ],
+      })
+
+      if (updateResult.error) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "add-column",
+          summary: "Google Sheets column update ran but Composio returned an error.",
+          error: updateResult.error,
+        }
+      }
+
+      return {
+        ok: true,
+        provider: "google-sheets",
+        operation: "add-column",
+        summary: "A random column was added to the target Google Sheet through Composio.",
+        data: {
+          tool: "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+          connectedAccountId: sheets.activeAccount.id,
+          spreadsheet: target,
+          sheetName: firstSheetName,
+          range,
+          header: randomColumn.header,
+          values: randomColumn.values,
+          searchResult,
+          sheetNames,
+          result: updateResult.data,
+        },
       }
     }
 
@@ -617,7 +776,7 @@ export async function runComposioChatTool(input: {
     return {
       ok: false,
       provider: "google-sheets",
-      operation: asksToAppendRow(input.content) ? "append-row" : "search",
+      operation: asksToAddColumn(input.content) ? "add-column" : asksToAppendRow(input.content) ? "append-row" : "search",
       summary: "Google Sheets request could not be completed through Composio.",
       error: error instanceof Error ? error.message : "Unknown Composio error",
     }
