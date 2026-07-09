@@ -176,6 +176,7 @@ export async function POST(
     workspaceId: chat.workspace_id,
     userId: auth.user.id,
     content: parsed.data.content,
+    contextMessages: messages.slice(-10),
   })
 
   // Stream response from OpenAI
