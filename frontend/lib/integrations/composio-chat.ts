@@ -106,6 +106,13 @@ function asksToAddColumn(content: string) {
   return /\b(column|columns)\b/i.test(content) && /\b(add|append|insert|create|write|update|set|new|random)\b/i.test(content)
 }
 
+function asksToEditSheetGrid(content: string) {
+  return (
+    /\b(column|columns|row|rows|cell|cells|range|header|heading)\b/i.test(content) &&
+    /\b(add|append|insert|create|write|update|set|new|called|named|change)\b/i.test(content)
+  )
+}
+
 function wantsRecentSheets(content: string) {
   return /\b(last|recent|used|opened|latest)\b/i.test(content)
 }
@@ -205,8 +212,20 @@ function extractRequestedColumnName(content: string) {
   return column?.[1] ? cleanSpreadsheetTargetName(column[1]) : null
 }
 
+function extractRequestedColumnLetter(content: string) {
+  const letter = content.match(/\bcolumn\s+([a-z]{1,3})\b/i)?.[1]
+  return letter ? letter.toUpperCase() : null
+}
+
+function asksToSetColumnHeader(content: string) {
+  return /\b(header|heading)\b/i.test(content) && /\bcolumn\b/i.test(content)
+}
+
 function looksLikeSheetsFollowUp(content: string) {
-  return /\b(try|same|this\s+one|that\s+one|for\s+["“”']?|go\s+ahead|yes)\b/i.test(content)
+  return (
+    /\b(try|same|this\s+one|that\s+one|for\s+["“”']?|go\s+ahead|yes)\b/i.test(content) ||
+    asksToEditSheetGrid(content)
+  )
 }
 
 function spreadsheetsFromSearch(value: unknown): SheetLookup[] {
@@ -625,6 +644,8 @@ export async function runComposioChatTool(input: {
       const spreadsheetName = extractSpreadsheetName(targetContent)
       const requestedColumnName =
         extractRequestedColumnName(input.content) ?? extractRequestedColumnName(sheetsIntentContent)
+      const requestedColumnLetter =
+        extractRequestedColumnLetter(input.content) ?? extractRequestedColumnLetter(sheetsIntentContent)
 
       if (!spreadsheetId && !spreadsheetName) {
         return {
@@ -674,6 +695,60 @@ export async function runComposioChatTool(input: {
           operation: "add-column",
           summary: "The target spreadsheet was found, but no writable sheet tab was discovered.",
           error: "No sheet names were returned.",
+        }
+      }
+
+      if (requestedColumnLetter && asksToSetColumnHeader(sheetsIntentContent)) {
+        if (!requestedColumnName) {
+          return {
+            ok: false,
+            provider: "google-sheets",
+            operation: "set-column-header",
+            summary: "A Google Sheets column header edit was requested, but no header name was provided.",
+            error: "Ask the user what header name to write.",
+          }
+        }
+
+        const range = `${firstSheetName}!${requestedColumnLetter}1:${requestedColumnLetter}1`
+        const updateResult = await sheets.session.execute("GOOGLESHEETS_UPDATE_VALUES_BATCH", {
+          spreadsheet_id: target.id,
+          valueInputOption: "USER_ENTERED",
+          includeValuesInResponse: true,
+          data: [
+            {
+              range,
+              majorDimension: "ROWS",
+              values: [[requestedColumnName]],
+            },
+          ],
+        })
+
+        if (updateResult.error) {
+          return {
+            ok: false,
+            provider: "google-sheets",
+            operation: "set-column-header",
+            summary: "Google Sheets header update ran but Composio returned an error.",
+            error: updateResult.error,
+          }
+        }
+
+        return {
+          ok: true,
+          provider: "google-sheets",
+          operation: "set-column-header",
+          summary: `Column ${requestedColumnLetter} header was set to "${requestedColumnName}" in the target Google Sheet through Composio.`,
+          data: {
+            tool: "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+            connectedAccountId: sheets.activeAccount.id,
+            spreadsheet: target,
+            sheetName: firstSheetName,
+            range,
+            header: requestedColumnName,
+            searchResult,
+            sheetNames,
+            result: updateResult.data,
+          },
         }
       }
 
