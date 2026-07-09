@@ -17,6 +17,11 @@ function getAuthTypeLabel(authType: Integration["authType"]) {
   return authType === "oauth" ? "OAuth 2.0" : "API Key"
 }
 
+function getConnectorLabel(integration: Integration) {
+  if (integration.connectorProvider === "composio") return "Composio"
+  return getAuthTypeLabel(integration.authType)
+}
+
 export function AppHeader({
   integration,
   onConnect,
@@ -44,12 +49,14 @@ export function AppHeader({
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">{integration.name}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{integration.description}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge variant="blue">{getAuthTypeLabel(integration.authType)}</Badge>
-              <Badge variant={integration.connected ? "green" : "neutral"}>
+              <Badge variant="blue">{getConnectorLabel(integration)}</Badge>
+              <Badge variant={integration.status === "active" ? "green" : "neutral"}>
                 {integration.connected && integration.connection_count && integration.connection_count > 1
                   ? `${integration.connection_count} Connected`
                   : integration.connected
-                    ? "Connected"
+                    ? integration.status === "pending"
+                      ? "Pending"
+                      : "Connected"
                     : "Not Connected"}
               </Badge>
             </div>
@@ -75,7 +82,11 @@ export function AppHeader({
                 disabled={isSubmitting}
                 className="h-8 rounded-md"
               >
-                {integration.slug === "telegram" ? "Add bot" : "Reconnect"}
+                {integration.connectorProvider === "composio"
+                  ? "Add account"
+                  : integration.slug === "telegram"
+                    ? "Add bot"
+                    : "Reconnect"}
               </Button>
             </>
           ) : (

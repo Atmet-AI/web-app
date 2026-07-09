@@ -8,6 +8,7 @@ import {
   type TelegramUpdate,
 } from "@/lib/integrations/telegram"
 import { getOpenAIClient } from "@/lib/openai"
+import { safeExternalFetch } from "@/lib/security/outbound-url"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 
 type TelegramAgentBlueprint = {
@@ -91,7 +92,7 @@ async function generateAgentApiReply(
     telegramUpdate: TelegramUpdate
   }
 ) {
-  const response = await fetch(agentApiUrl, {
+  const response = await safeExternalFetch(agentApiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

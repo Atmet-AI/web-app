@@ -7,6 +7,7 @@ import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
 import { ensureIntegrationProvider } from "@/lib/integrations/providers"
 import { buildPublicUrl } from "@/lib/public-url"
+import { assertPublicHttpsUrl } from "@/lib/security/outbound-url"
 
 const telegramAgentSchema = z.object({
   name: z.string().min(1, "Agent name is required").max(100),
@@ -51,6 +52,16 @@ export async function POST(
 
   if (parsed.data.modelMode === "agent_api" && !parsed.data.agentApiUrl) {
     return Errors.validationError("Agent API URL is required when using an external agent API.")
+  }
+
+  if (parsed.data.modelMode === "agent_api" && parsed.data.agentApiUrl) {
+    try {
+      await assertPublicHttpsUrl(parsed.data.agentApiUrl)
+    } catch (error) {
+      return Errors.validationError(
+        error instanceof Error ? error.message : "Agent API URL is not allowed."
+      )
+    }
   }
 
   const { data: chat, error: chatError } = await supabase

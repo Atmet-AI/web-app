@@ -31,6 +31,9 @@ export function ConnectOAuthModal({
   isSubmitting,
   errorMessage,
 }: ConnectOAuthModalProps) {
+  const isComposio = integration.connectorProvider === "composio"
+  const authProviderName = isComposio ? "Composio" : integration.name
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -52,7 +55,7 @@ export function ConnectOAuthModal({
             <div>
               <DialogTitle>Connect {integration.name} to Atmet</DialogTitle>
               <DialogDescription>
-                Review permissions before continuing to {integration.name}.
+                Review permissions before continuing to {authProviderName}.
               </DialogDescription>
             </div>
           </div>
@@ -79,8 +82,8 @@ export function ConnectOAuthModal({
             <div className="inline-flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5" />
               <p>
-                You will be redirected to {integration.name} to authorize access. Atmet never stores
-                your password.
+                You will be redirected to {authProviderName} to authorize access. Atmet never
+                stores your password.
               </p>
             </div>
           </div>
@@ -102,7 +105,7 @@ export function ConnectOAuthModal({
             Cancel
           </Button>
           <Button type="button" onClick={onContinue} disabled={isSubmitting}>
-            Continue to {integration.name}
+            Continue to {authProviderName}
           </Button>
         </div>
       </DialogContent>

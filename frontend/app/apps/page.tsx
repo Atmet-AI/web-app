@@ -38,6 +38,11 @@ function getAuthTypeLabel(authType: Integration["authType"]) {
   return authType === "oauth" ? "OAuth 2.0" : "API Key"
 }
 
+function getConnectorLabel(integration: Integration) {
+  if (integration.connectorProvider === "composio") return "Composio"
+  return getAuthTypeLabel(integration.authType)
+}
+
 export default function AppsPage() {
   const { apiFetch } = useWorkspace()
   const [integrations, setIntegrations] = React.useState<Integration[]>([])
@@ -192,7 +197,7 @@ export default function AppsPage() {
 
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <Badge variant="blue" size="sm">
-                      {getAuthTypeLabel(integration.authType)}
+                      {getConnectorLabel(integration)}
                     </Badge>
                     {integration.connected ? (
                       <Badge variant="green" size="sm">
@@ -252,7 +257,7 @@ export default function AppsPage() {
                         {selectedIntegration.name}
                       </DialogTitle>
                       <Badge variant="blue" size="sm">
-                        {getAuthTypeLabel(selectedIntegration.authType)}
+                        {getConnectorLabel(selectedIntegration)}
                       </Badge>
                       <Badge
                         variant={selectedIntegration.connected ? "green" : "neutral"}
@@ -295,7 +300,7 @@ export default function AppsPage() {
                     information synchronized without switching between tools.
                   </p>
                   <p className="mt-3 text-pretty text-sm leading-7 text-muted-foreground">
-                    This integration uses {getAuthTypeLabel(selectedIntegration.authType)} and
+                    This integration uses {getConnectorLabel(selectedIntegration)} and
                     requests only the permissions needed for the workflows you choose to run.
                   </p>
                 </section>

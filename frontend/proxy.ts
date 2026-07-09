@@ -30,6 +30,7 @@ function isPublicApiPath(pathname: string) {
   return (
     PUBLIC_API_PATHS.has(pathname) ||
     pathname.startsWith("/api/telegram/webhook/") ||
+    pathname.startsWith("/api/composio/webhook") ||
     (pathname.startsWith("/api/invitations/") && !pathname.endsWith("/revoke"))
   )
 }

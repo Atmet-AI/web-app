@@ -128,6 +128,8 @@ export function createOAuthState() {
 
 export function getProviderConfig(catalog: CatalogIntegration) {
   return {
+    connectorProvider: catalog.connectorProvider ?? "native",
+    composioToolkit: catalog.composioToolkit,
     scopes: catalog.scopes,
     setupInstructions: catalog.setupInstructions,
     triggers: catalog.triggers,
@@ -149,6 +151,11 @@ export async function ensureIntegrationProvider(
         logo_url: catalog.logo,
         description: catalog.description,
         status: "active",
+        connector_provider: catalog.connectorProvider ?? "native",
+        external_toolkit: catalog.composioToolkit ?? null,
+        external_config: catalog.connectorProvider === "composio"
+          ? { toolkit: catalog.composioToolkit ?? catalog.slug }
+          : {},
         config: getProviderConfig(catalog),
       },
       { onConflict: "slug" }

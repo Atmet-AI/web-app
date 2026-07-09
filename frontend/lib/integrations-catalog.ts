@@ -34,6 +34,8 @@ export interface CatalogIntegration {
   description: string
   category: IntegrationCategory
   authType: "oauth" | "apikey"
+  connectorProvider?: "native" | "composio"
+  composioToolkit?: string
   apiKeyUrl?: string
   setupInstructions: string[]
   scopes: IntegrationPermission[]
@@ -49,10 +51,13 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Send and organize email activity directly from workflows.",
     category: "communication",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "gmail",
     setupInstructions: [
       "Click Connect Gmail.",
-      "Sign in to your Google account and review the requested scopes.",
-      "Approve access and return to Atmet to finish setup.",
+      "Composio will open a secure Google authorization page.",
+      "Choose the mailbox Atmet should automate and approve the requested access.",
+      "Return to Atmet and use Gmail triggers or actions inside workflows.",
     ],
     scopes: [
       { name: "gmail.modify", description: "Read, send, label, archive, and move Gmail messages to trash when workflows run." },
@@ -74,6 +79,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Post updates and listen for channel activity in real time.",
     category: "communication",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "slack",
     setupInstructions: [
       "Click Connect Slack.",
       "Choose the Slack workspace and review permissions.",
@@ -99,13 +106,14 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     logo: "https://cdn.simpleicons.org/telegram",
     description: "Send alerts, workflow updates, and agent replies through a Telegram bot.",
     category: "communication",
-    authType: "apikey",
-    apiKeyUrl: "https://t.me/BotFather",
+    authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "telegram",
     setupInstructions: [
-      "Open @BotFather in Telegram and send /newbot.",
-      "Choose the bot display name and username. The username must end with bot.",
-      "Copy the bot token BotFather sends you. It looks like 123456:ABC-DEF...",
-      "Paste that token here, give this bot a clear brand name, then test and save it.",
+      "Click Connect Telegram.",
+      "Composio will open the Telegram connection flow.",
+      "Approve the Telegram account or bot access Composio asks for.",
+      "Return to Atmet and use Telegram triggers or actions inside workflows.",
     ],
     scopes: [
       { name: "bot token", description: "Send messages and receive updates for chats that interact with the bot." },
@@ -121,12 +129,42 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     ],
   },
   {
+    slug: "google-sheets",
+    name: "Google Sheets",
+    logo: "https://cdn.simpleicons.org/googlesheets",
+    description: "Create rows, update cells, and sync workflow data into spreadsheets.",
+    category: "productivity",
+    authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "googlesheets",
+    setupInstructions: [
+      "Click Connect Google Sheets.",
+      "Composio will open a secure Google authorization page.",
+      "Choose the Google account and approve access for the sheets you want to automate.",
+      "Return to Atmet and use Sheets actions inside workflows.",
+    ],
+    scopes: [
+      { name: "spreadsheets.read", description: "Read spreadsheet structure and rows for workflow lookups." },
+      { name: "spreadsheets.write", description: "Append rows and update cells from workflow actions." },
+    ],
+    triggers: [
+      { id: "google-sheets-new-row", name: "New row", description: "Starts when a row is added to a selected spreadsheet." },
+      { id: "google-sheets-updated-row", name: "Row updated", description: "Starts when a selected row changes." },
+    ],
+    actions: [
+      { id: "google-sheets-add-row", name: "Add row", description: "Append a row to a selected sheet.", inputFields: ["spreadsheetId", "sheetName", "values"] },
+      { id: "google-sheets-update-row", name: "Update row", description: "Update cells in an existing row.", inputFields: ["spreadsheetId", "range", "values"] },
+    ],
+  },
+  {
     slug: "notion",
     name: "Notion",
     logo: "https://cdn.simpleicons.org/notion",
     description: "Create and update pages, tasks, and databases automatically.",
     category: "productivity",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "notion",
     setupInstructions: [
       "Click Connect Notion.",
       "Select which workspace pages and databases Atmet can access.",
@@ -150,12 +188,14 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     logo: "https://cdn.simpleicons.org/hubspot",
     description: "Sync contacts and deal activity with your CRM workflows.",
     category: "crm",
-    authType: "apikey",
-    apiKeyUrl: "https://app.hubspot.com/",
+    authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "hubspot",
     setupInstructions: [
-      "Open your HubSpot account settings and create a private app token.",
-      "Copy the token and paste it into Atmet.",
-      "Test the connection and then save to activate the integration.",
+      "Click Connect HubSpot.",
+      "Composio will open the HubSpot authorization flow.",
+      "Approve the HubSpot account Atmet should automate.",
+      "Return to Atmet and use HubSpot inside workflows.",
     ],
     scopes: [
       { name: "crm.objects.contacts.read", description: "Read contact records for trigger and lookup steps." },
@@ -177,6 +217,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Track pull requests and automate repository operations.",
     category: "developer",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "github",
     setupInstructions: [
       "Click Connect GitHub.",
       "Authorize Atmet for the organizations and repositories you want.",
@@ -202,6 +244,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Sync issue activity and sprint milestones into workflows.",
     category: "developer",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "jira",
     setupInstructions: [
       "Click Connect Jira.",
       "Sign in to Atlassian and choose the Jira site to authorize.",
@@ -227,6 +271,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Track tasks and project updates across teams.",
     category: "productivity",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "asana",
     setupInstructions: [
       "Click Connect Asana.",
       "Choose your Asana workspace and review requested permissions.",
@@ -251,12 +297,14 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     logo: "https://cdn.simpleicons.org/salesforce",
     description: "Automate lead, account, and opportunity operations.",
     category: "crm",
-    authType: "apikey",
-    apiKeyUrl: "https://login.salesforce.com/",
+    authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "salesforce",
     setupInstructions: [
-      "Open Salesforce setup and create an API-enabled integration user key.",
-      "Copy the API key and paste it into Atmet.",
-      "Test and save to activate Salesforce.",
+      "Click Connect Salesforce.",
+      "Composio will open the Salesforce authorization flow.",
+      "Approve the Salesforce org Atmet should automate.",
+      "Return to Atmet and use Salesforce inside workflows.",
     ],
     scopes: [
       { name: "objects.read", description: "Read CRM records for trigger conditions and lookups." },
@@ -278,6 +326,8 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     description: "Connect community channels and bot notifications.",
     category: "communication",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "discord",
     setupInstructions: [
       "Click Connect Discord.",
       "Select the server where Atmet can post updates.",
@@ -302,12 +352,14 @@ export const INTEGRATIONS_CATALOG: CatalogIntegration[] = [
     logo: "https://cdn.simpleicons.org/x",
     description: "Publish posts and react to social engagement signals.",
     category: "social",
-    authType: "apikey",
-    apiKeyUrl: "https://developer.x.com/",
+    authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "x",
     setupInstructions: [
-      "Open the X developer portal and create an app.",
-      "Generate an API key and secret for your environment.",
-      "Paste the key in Atmet and test before saving.",
+      "Click Connect X.",
+      "Composio will open the X authorization flow.",
+      "Approve the account Atmet should automate.",
+      "Return to Atmet and use X actions inside workflows.",
     ],
     scopes: [
       { name: "tweet.read", description: "Read post events that can trigger workflows." },
