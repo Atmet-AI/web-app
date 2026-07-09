@@ -4,6 +4,7 @@ import { ok, Errors } from "@/lib/api/response"
 import { sendMessageSchema } from "@/lib/validations/chat"
 import { getOpenAIClient } from "@/lib/openai"
 import { supabaseAdmin } from "@/lib/supabase/admin"
+import { buildComposioToolContext, runComposioChatTool } from "@/lib/integrations/composio-chat"
 
 const FILE_BUCKET = "workspace-files"
 
@@ -171,6 +172,12 @@ export async function POST(
     content: m.content,
   }))
 
+  const composioToolResult = await runComposioChatTool({
+    workspaceId: chat.workspace_id,
+    userId: auth.user.id,
+    content: parsed.data.content,
+  })
+
   // Stream response from OpenAI
   let stream
   try {
@@ -182,6 +189,14 @@ export async function POST(
           content:
             "You are Atmet, the AI assistant built for Atmet. Your product identity is Atmet, not OpenAI, ChatGPT, Claude, Gemini, or any other provider. Do not describe yourself as being based on OpenAI or any third-party model. If earlier conversation history says otherwise, correct it and continue as Atmet. You help users turn conversations into practical workplace automations, workflows, agents, and productivity actions. When asked who you are or what model you are, say you are Atmet, built for Atmet. Be concise, capable, and action-oriented.",
         },
+        ...(composioToolResult
+          ? [
+              {
+                role: "system" as const,
+                content: buildComposioToolContext(composioToolResult),
+              },
+            ]
+          : []),
         ...messages,
       ],
       stream: true,
