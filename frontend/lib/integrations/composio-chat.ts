@@ -5,19 +5,27 @@ import {
   getComposioUserId,
   listComposioConnectedAccounts,
 } from "@/lib/integrations/composio"
+import { getOpenAIClient } from "@/lib/openai"
+
+type ConnectedAppProvider =
+  | "gmail"
+  | "telegram"
+  | "google-drive"
+  | "google-sheets"
+  | "chatgpt"
 
 type ComposioChatToolResult =
   | {
       ok: true
-      provider: "google-sheets"
-      operation: "search" | "append-row"
+      provider: ConnectedAppProvider
+      operation: string
       summary: string
       data: unknown
     }
   | {
       ok: false
-      provider: "google-sheets"
-      operation: "search" | "append-row"
+      provider: ConnectedAppProvider
+      operation: string
       summary: string
       error: string
     }
@@ -27,6 +35,55 @@ type SheetLookup = {
   name?: string
   url?: string
 }
+
+type GenericConnectedApp = {
+  provider: Exclude<ConnectedAppProvider, "google-sheets">
+  toolkit: string
+  label: string
+  aliases: RegExp[]
+}
+
+type ToolSchema = {
+  toolSlug?: string
+  description?: string
+  hasFullSchema?: boolean
+  inputSchema?: unknown
+}
+
+type ToolPlan = {
+  execute?: boolean
+  toolSlug?: string
+  arguments?: Record<string, unknown>
+  reason?: string
+  question?: string
+}
+
+const GENERIC_CONNECTED_APPS: GenericConnectedApp[] = [
+  {
+    provider: "gmail",
+    toolkit: "gmail",
+    label: "Gmail",
+    aliases: [/\bgmail\b/i, /\bmailbox\b/i, /\bemail(s)?\b/i],
+  },
+  {
+    provider: "telegram",
+    toolkit: "telegram",
+    label: "Telegram",
+    aliases: [/\btelegram\b/i],
+  },
+  {
+    provider: "google-drive",
+    toolkit: "googledrive",
+    label: "Google Drive",
+    aliases: [/\bgoogle\s*drive\b/i, /\bgdrive\b/i, /\bdrive\s+file(s)?\b/i, /\bgoogle\s*doc(s)?\b/i],
+  },
+  {
+    provider: "chatgpt",
+    toolkit: "openai",
+    label: "ChatGPT/OpenAI",
+    aliases: [/\bchatgpt\b/i, /\bopenai\b/i, /\bgpt\b/i, /\bvector\s*store(s)?\b/i],
+  },
+]
 
 function mentionsGoogleSheets(content: string) {
   return /\b(google\s*sheets?|sheets?|spreadsheet|spreadsheets|worksheet)\b/i.test(content)
@@ -171,12 +228,23 @@ async function getActiveSheetsSession(input: {
   workspaceId: string
   userId: string
 }) {
+  return getActiveComposioSession({
+    ...input,
+    toolkit: "googlesheets",
+  })
+}
+
+async function getActiveComposioSession(input: {
+  workspaceId: string
+  userId: string
+  toolkit: string
+}) {
   const composio = getComposioClient()
   const composioUserId = getComposioUserId(input.workspaceId, input.userId)
   const connectedAccounts = await listComposioConnectedAccounts({
     workspaceId: input.workspaceId,
     userId: input.userId,
-    toolkit: "googlesheets",
+    toolkit: input.toolkit,
   })
   const activeAccount = connectedAccounts.find(
     (account) => account.status === "ACTIVE" && !account.isDisabled
@@ -195,9 +263,9 @@ async function getActiveSheetsSession(input: {
   }
 
   const session = await composio.sessions.create(composioUserId, {
-    toolkits: ["googlesheets"],
+    toolkits: [input.toolkit],
     connectedAccounts: {
-      googlesheets: activeAccount.id,
+      [input.toolkit]: activeAccount.id,
     },
     manageConnections: false,
   })
@@ -209,6 +277,174 @@ async function getActiveSheetsSession(input: {
   }
 }
 
+function detectGenericConnectedApp(content: string) {
+  if (mentionsGoogleSheets(content)) return null
+  return GENERIC_CONNECTED_APPS.find((app) =>
+    app.aliases.some((alias) => alias.test(content))
+  ) ?? null
+}
+
+function parseJsonObject(content: string): Record<string, unknown> | null {
+  const cleaned = content
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim()
+
+  try {
+    return recordValue(JSON.parse(cleaned))
+  } catch {
+    return null
+  }
+}
+
+function compactToolSchema(schema: ToolSchema) {
+  return {
+    toolSlug: schema.toolSlug,
+    description: schema.description,
+    inputSchema: schema.inputSchema,
+  }
+}
+
+async function planComposioToolExecution(input: {
+  userRequest: string
+  app: GenericConnectedApp
+  schemas: ToolSchema[]
+}): Promise<ToolPlan> {
+  const response = await getOpenAIClient().chat.completions.create({
+    model: process.env.OPENAI_MODEL ?? "gpt-4o",
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: [
+          "You choose one connected-app tool and build JSON arguments from the user's request.",
+          "Return only JSON with this shape: {\"execute\":boolean,\"toolSlug\":string|null,\"arguments\":object,\"reason\":string,\"question\":string|null}.",
+          "Use only the provided tool schemas. Do not invent tool names or fields.",
+          "If a required target is missing, set execute=false and put a short question in question.",
+          "For destructive actions like delete, trash, revoke, remove, or permanent changes, execute only when the user explicitly names the target and asks for that destructive action.",
+          "For send/post/create/update/read/search/list actions, execute when the request contains enough required fields.",
+        ].join(" "),
+      },
+      {
+        role: "user",
+        content: JSON.stringify(
+          {
+            app: input.app.label,
+            toolkit: input.app.toolkit,
+            userRequest: input.userRequest,
+            toolSchemas: input.schemas.map(compactToolSchema),
+          },
+          null,
+          2
+        ),
+      },
+    ],
+  })
+
+  const content = response.choices[0]?.message?.content ?? "{}"
+  const parsed = parseJsonObject(content)
+  if (!parsed) {
+    return {
+      execute: false,
+      reason: "The tool planner returned invalid JSON.",
+      question: "Can you restate what you want me to do with this app?",
+    }
+  }
+
+  return {
+    execute: parsed.execute === true,
+    toolSlug: typeof parsed.toolSlug === "string" ? parsed.toolSlug : undefined,
+    arguments: recordValue(parsed.arguments) ?? {},
+    reason: typeof parsed.reason === "string" ? parsed.reason : undefined,
+    question: typeof parsed.question === "string" ? parsed.question : undefined,
+  }
+}
+
+async function runGenericComposioAppTool(input: {
+  workspaceId: string
+  userId: string
+  content: string
+  app: GenericConnectedApp
+}): Promise<ComposioChatToolResult> {
+  const connected = await getActiveComposioSession({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    toolkit: input.app.toolkit,
+  })
+
+  if (!connected.ok) {
+    return {
+      ok: false,
+      provider: input.app.provider,
+      operation: "connection",
+      summary: `${input.app.label} was mentioned, but there is no active ${input.app.label} connection for this workspace user yet.`,
+      error: connected.error,
+    }
+  }
+
+  const search = await connected.session.search({
+    query: input.content,
+    toolkits: [input.app.toolkit],
+  })
+  const schemas = Object.values((recordValue(search)?.toolSchemas ?? {}) as Record<string, ToolSchema>)
+    .filter((schema) => schema?.toolSlug && schema.hasFullSchema !== false && schema.inputSchema)
+    .slice(0, 6)
+
+  if (schemas.length === 0) {
+    return {
+      ok: false,
+      provider: input.app.provider,
+      operation: "tool-discovery",
+      summary: `Composio did not return an executable ${input.app.label} tool schema for this request.`,
+      error: "No full tool schemas were returned.",
+    }
+  }
+
+  const plan = await planComposioToolExecution({
+    userRequest: input.content,
+    app: input.app,
+    schemas,
+  })
+  const allowedToolSlugs = new Set(schemas.map((schema) => schema.toolSlug))
+
+  if (!plan.execute || !plan.toolSlug || !allowedToolSlugs.has(plan.toolSlug)) {
+    return {
+      ok: false,
+      provider: input.app.provider,
+      operation: "tool-planning",
+      summary: plan.reason ?? `Atmet needs more information before using ${input.app.label}.`,
+      error: plan.question ?? "The request did not include enough information to execute safely.",
+    }
+  }
+
+  const result = await connected.session.execute(plan.toolSlug, plan.arguments ?? {})
+
+  if (result.error) {
+    return {
+      ok: false,
+      provider: input.app.provider,
+      operation: plan.toolSlug,
+      summary: `${input.app.label} tool execution ran but Composio returned an error.`,
+      error: result.error,
+    }
+  }
+
+  return {
+    ok: true,
+    provider: input.app.provider,
+    operation: plan.toolSlug,
+    summary: `${input.app.label} tool execution completed through Composio.`,
+    data: {
+      tool: plan.toolSlug,
+      connectedAccountId: connected.activeAccount.id,
+      args: plan.arguments ?? {},
+      plannerReason: plan.reason ?? null,
+      result: result.data,
+    },
+  }
+}
+
 export async function runComposioChatTool(input: {
   workspaceId: string
   userId: string
@@ -216,12 +452,22 @@ export async function runComposioChatTool(input: {
 }): Promise<ComposioChatToolResult | null> {
   const shouldSearch = mentionsGoogleSheets(input.content) && asksToSearchOrList(input.content)
   const shouldAppend = asksToAppendRow(input.content)
+  const genericApp = detectGenericConnectedApp(input.content)
 
-  if (!shouldSearch && !shouldAppend) {
+  if (!shouldSearch && !shouldAppend && !genericApp) {
     return null
   }
 
   try {
+    if (!shouldSearch && !shouldAppend && genericApp) {
+      return await runGenericComposioAppTool({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        content: input.content,
+        app: genericApp,
+      })
+    }
+
     const sheets = await getActiveSheetsSession({
       workspaceId: input.workspaceId,
       userId: input.userId,
@@ -386,7 +632,7 @@ export function buildComposioToolContext(result: ComposioChatToolResult) {
       `Operation: ${result.operation}`,
       `Summary: ${result.summary}`,
       `Error: ${result.error}`,
-      "Tell the user the real issue briefly. Do not pretend you searched the app successfully.",
+      "Tell the user the real issue briefly. If the error is a question or missing-information request, ask that question. Do not pretend the app action succeeded.",
     ].join("\n")
   }
 
@@ -397,6 +643,6 @@ export function buildComposioToolContext(result: ComposioChatToolResult) {
     `Summary: ${result.summary}`,
     "Raw tool result:",
     stringifyForModel(result.data),
-    "Answer from the live tool result. Do not say you are unable to access Google Sheets.",
+    "Answer from the live tool result. Do not say you are unable to access the connected app.",
   ].join("\n")
 }
