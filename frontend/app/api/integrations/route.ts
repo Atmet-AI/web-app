@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
 
   const { data: connected } = await supabase
     .from("workspace_integration")
-    .select("id, status, connected_at, connected_account, connection_name, settings, integration_provider!inner(slug)")
+    .select(
+      "id, status, connected_at, connected_account, connection_name, settings, connector_provider, external_connection_id, external_user_id, external_metadata, integration_provider!inner(slug)"
+    )
     .eq("workspace_id", ws.workspaceId)
     .order("created_at", { ascending: true })
 
@@ -59,6 +61,10 @@ export async function GET(request: NextRequest) {
         status: connection.status,
         connected_at: connection.connected_at,
         settings: connection.settings,
+        connector_provider: connection.connector_provider,
+        external_connection_id: connection.external_connection_id,
+        external_user_id: connection.external_user_id,
+        external_metadata: connection.external_metadata,
       })),
     }
   })

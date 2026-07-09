@@ -121,7 +121,7 @@ CREATE TYPE automation_status     AS ENUM ('active', 'inactive', 'draft');
 CREATE TYPE schedule_status       AS ENUM ('active', 'paused', 'disabled');
 CREATE TYPE skill_status          AS ENUM ('active', 'inactive');
 CREATE TYPE skill_type            AS ENUM ('action', 'trigger', 'tool', 'agent');
-CREATE TYPE integration_status    AS ENUM ('active', 'expired', 'error');
+CREATE TYPE integration_status    AS ENUM ('pending', 'active', 'expired', 'error');
 CREATE TYPE integration_auth_type AS ENUM ('oauth', 'apikey');
 
 
@@ -264,6 +264,9 @@ CREATE TABLE integration_provider (
   logo_url    text,
   description text,
   status      text                     NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'beta', 'disabled')),
+  connector_provider text              NOT NULL DEFAULT 'native' CHECK (connector_provider IN ('native', 'composio', 'mcp', 'external_api')),
+  external_toolkit text,
+  external_config jsonb                NOT NULL DEFAULT '{}'::jsonb,
   config      jsonb                    NOT NULL DEFAULT '{}'::jsonb,
   created_at  timestamp with time zone NOT NULL DEFAULT now(),
   updated_at  timestamp with time zone NOT NULL DEFAULT now()
@@ -280,6 +283,11 @@ CREATE TABLE workspace_integration (
   connection_name   text,
   connected_account text,
   settings          jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  connector_provider text                    NOT NULL DEFAULT 'native' CHECK (connector_provider IN ('native', 'composio', 'mcp', 'external_api')),
+  external_connection_id text,
+  external_user_id text,
+  external_auth_config_id text,
+  external_metadata jsonb                    NOT NULL DEFAULT '{}'::jsonb,
   connected_at      timestamp with time zone,
   created_at        timestamp with time zone NOT NULL DEFAULT now(),
   updated_at        timestamp with time zone NOT NULL DEFAULT now()

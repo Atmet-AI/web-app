@@ -3,10 +3,11 @@ import { z } from "zod"
 const jsonObjectSchema = z.record(z.string(), z.unknown())
 
 export const workflowCapabilitySchema = z.object({
-  transport: z.enum(["native", "mcp", "system"]),
+  transport: z.enum(["native", "composio", "mcp", "system"]),
   provider: z.string().min(1).max(100),
   key: z.string().min(1).max(200),
   connectionId: z.string().uuid().optional(),
+  externalConnectionId: z.string().min(1).max(200).optional(),
   mcpServerId: z.string().uuid().optional(),
   risk: z.enum(["read", "write", "destructive", "spend"]).optional(),
 })
