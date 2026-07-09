@@ -162,15 +162,51 @@ function extractSpreadsheetId(content: string) {
   return idMatch?.[1] ?? null
 }
 
-function extractSpreadsheetName(content: string) {
-  const quoted = content.match(/["“”']([^"“”']{3,})["“”']/)
-  if (quoted?.[1]) return quoted[1].trim()
-
-  const target = content.match(/\b(?:in|into|to|inside)\s+(.+?)\s*[\?.!]*$/i)
-  return target?.[1]
-    ?.replace(/\b(?:google\s*sheets?|spreadsheet|sheet)\b/gi, "")
+function cleanSpreadsheetTargetName(value: string | null | undefined) {
+  const cleaned = (value ?? "")
+    .replace(/[“”]/g, "\"")
+    .replace(/[‘’]/g, "'")
+    .replace(/[*`]/g, "")
+    .replace(/^[\s"'.,:;-]+|[\s"'.,:;-]+$/g, "")
+    .replace(/^(?:try\s+(?:for\s+)?|for\s+)?(?:this\s+)?(?:one|sheet|spreadsheet)\s+/i, "")
     .replace(/^(?:the|a|an)\s+/i, "")
+    .replace(/\s+(?:google\s*)?(?:sheet|spreadsheet)$/i, "")
     .trim()
+
+  return cleaned.length >= 2 ? cleaned : null
+}
+
+function extractSpreadsheetName(content: string) {
+  const explicitQuoted = content.match(
+    /\b(?:try\s+for|in|into|to|inside|for)\s+(?:this\s+)?(?:one|sheet|spreadsheet)?\s*["“”']([^"“”']{2,})["“”']/i
+  )
+  if (explicitQuoted?.[1]) return cleanSpreadsheetTargetName(explicitQuoted[1])
+
+  const quotedMatches = Array.from(content.matchAll(/["“”']([^"“”']{2,})["“”']/g))
+    .filter((match) => !/\b(?:called|named|name)\s*$/i.test(content.slice(0, match.index).slice(-24)))
+  const quoted = quotedMatches[0]
+  if (quoted?.[1]) return cleanSpreadsheetTargetName(quoted[1])
+
+  const explicitTarget = content.match(
+    /\b(?:try\s+for|in|into|to|inside|for)\s+(?:this\s+)?(?:one|sheet|spreadsheet)?\s*([^?.!\n]+?)(?:\s+(?:can|please|add|append|insert|create|write|update|set)\b|$|[?.!])/i
+  )
+  if (explicitTarget?.[1]) return cleanSpreadsheetTargetName(explicitTarget[1])
+
+  return null
+}
+
+function extractRequestedColumnName(content: string) {
+  const named = content.match(
+    /\b(?:called|named|name(?:d)?\s+as|column\s+called|column\s+named)\s+["“”']?([^"“”'?.!\n]+)["“”']?/i
+  )
+  if (named?.[1]) return cleanSpreadsheetTargetName(named[1])
+
+  const column = content.match(/\bcolumn\s+["“”']?([A-Za-z0-9 _-]{2,})["“”']?\s*$/i)
+  return column?.[1] ? cleanSpreadsheetTargetName(column[1]) : null
+}
+
+function looksLikeSheetsFollowUp(content: string) {
+  return /\b(try|same|this\s+one|that\s+one|for\s+["“”']?|go\s+ahead|yes)\b/i.test(content)
 }
 
 function spreadsheetsFromSearch(value: unknown): SheetLookup[] {
@@ -265,12 +301,12 @@ function buildRandomRow(headers: string[]) {
   return headers.map((header, index) => valueForHeader(header, index))
 }
 
-function buildRandomColumn(existingRows: unknown[][]) {
+function buildRandomColumn(existingRows: unknown[][], requestedHeader?: string | null) {
   const maxUsedColumns = Math.max(0, ...existingRows.map((row) => row.length))
   const rowCount = Math.max(existingRows.length, 10)
   const nextColumnIndex = Math.max(maxUsedColumns + 1, 1)
   const nextColumn = columnName(nextColumnIndex)
-  const header = `Atmet Random ${randomSuffix()}`
+  const header = requestedHeader?.trim() || `Atmet Random ${randomSuffix()}`
   const values = Array.from({ length: rowCount }, (_, index) => [
     index === 0 ? header : randomColumnValue(index),
   ])
@@ -531,9 +567,19 @@ export async function runComposioChatTool(input: {
   contextMessages?: ContextMessage[]
 }): Promise<ComposioChatToolResult | null> {
   const toolRequestContent = buildToolRequestContent(input.content, input.contextMessages)
-  const shouldSearch = mentionsGoogleSheets(input.content) && asksToSearchOrList(input.content)
-  const shouldAppend = asksToAppendRow(input.content)
-  const shouldAddColumn = mentionsGoogleSheets(input.content) && asksToAddColumn(input.content)
+  const currentMentionsSheets = mentionsGoogleSheets(input.content)
+  const sheetsFollowUp =
+    !currentMentionsSheets &&
+    looksLikeSheetsFollowUp(input.content) &&
+    mentionsGoogleSheets(toolRequestContent)
+  const sheetsIntentContent = currentMentionsSheets ? input.content : toolRequestContent
+  const shouldSearch = currentMentionsSheets && asksToSearchOrList(input.content)
+  const shouldAppend =
+    (currentMentionsSheets && asksToAppendRow(input.content)) ||
+    (sheetsFollowUp && asksToAppendRow(toolRequestContent))
+  const shouldAddColumn =
+    (currentMentionsSheets && asksToAddColumn(input.content)) ||
+    (sheetsFollowUp && asksToAddColumn(toolRequestContent))
   const currentGenericApp = detectGenericConnectedApp(input.content)
   const genericApp = currentGenericApp ??
     (looksLikeConnectedAppFollowUp(input.content)
@@ -571,8 +617,14 @@ export async function runComposioChatTool(input: {
     }
 
     if (shouldAddColumn) {
-      const spreadsheetId = extractSpreadsheetId(input.content)
-      const spreadsheetName = extractSpreadsheetName(input.content)
+      const targetContent =
+        extractSpreadsheetId(input.content) || extractSpreadsheetName(input.content)
+          ? input.content
+          : sheetsIntentContent
+      const spreadsheetId = extractSpreadsheetId(targetContent)
+      const spreadsheetName = extractSpreadsheetName(targetContent)
+      const requestedColumnName =
+        extractRequestedColumnName(input.content) ?? extractRequestedColumnName(sheetsIntentContent)
 
       if (!spreadsheetId && !spreadsheetName) {
         return {
@@ -630,7 +682,7 @@ export async function runComposioChatTool(input: {
         range: `${firstSheetName}!A1:ZZ1000`,
       })
       const existingRows = valueRows(existingValuesResult)
-      const randomColumn = buildRandomColumn(existingRows)
+      const randomColumn = buildRandomColumn(existingRows, requestedColumnName)
       const range = `${firstSheetName}!${randomColumn.nextColumn}1:${randomColumn.nextColumn}${randomColumn.values.length}`
       const updateResult = await sheets.session.execute("GOOGLESHEETS_UPDATE_VALUES_BATCH", {
         spreadsheet_id: target.id,
@@ -659,7 +711,9 @@ export async function runComposioChatTool(input: {
         ok: true,
         provider: "google-sheets",
         operation: "add-column",
-        summary: "A random column was added to the target Google Sheet through Composio.",
+        summary: requestedColumnName
+          ? `A column named "${requestedColumnName}" was added to the target Google Sheet through Composio.`
+          : "A random column was added to the target Google Sheet through Composio.",
         data: {
           tool: "GOOGLESHEETS_UPDATE_VALUES_BATCH",
           connectedAccountId: sheets.activeAccount.id,
@@ -676,8 +730,12 @@ export async function runComposioChatTool(input: {
     }
 
     if (shouldAppend) {
-      const spreadsheetId = extractSpreadsheetId(input.content)
-      const spreadsheetName = extractSpreadsheetName(input.content)
+      const targetContent =
+        extractSpreadsheetId(input.content) || extractSpreadsheetName(input.content)
+          ? input.content
+          : sheetsIntentContent
+      const spreadsheetId = extractSpreadsheetId(targetContent)
+      const spreadsheetName = extractSpreadsheetName(targetContent)
 
       if (!spreadsheetId && !spreadsheetName) {
         return {
@@ -778,7 +836,7 @@ export async function runComposioChatTool(input: {
       }
     }
 
-    const args = buildSearchArgs(input.content)
+    const args = buildSearchArgs(sheetsIntentContent)
     const result = await sheets.session.execute("GOOGLESHEETS_SEARCH_SPREADSHEETS", args)
 
     if (result.error) {
