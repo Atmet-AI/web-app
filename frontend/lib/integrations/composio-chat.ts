@@ -414,9 +414,22 @@ function buildToolRequestContent(content: string, contextMessages?: ContextMessa
 
   if (!recentContext) return content
 
+  const gmailIds = Array.from(
+    new Set(
+      Array.from(
+        recentContext.matchAll(/mail\.google\.com\/mail\/[^\s)]*?#\w+\/([a-f0-9]{12,})/gi)
+      )
+        .map((match) => match[1])
+        .filter((id): id is string => Boolean(id))
+    )
+  )
+
   return [
     "Recent conversation context:",
     recentContext,
+    ...(gmailIds.length > 0
+      ? ["", `Detected recent Gmail message/thread ids: ${gmailIds.join(", ")}`]
+      : []),
     "",
     "Latest user message:",
     content,
@@ -463,6 +476,8 @@ async function planComposioToolExecution(input: {
           "If a required target is missing, set execute=false and put a short question in question.",
           "For destructive actions like delete, trash, revoke, remove, or permanent changes, execute only when the user explicitly names the target and asks for that destructive action.",
           "For send/post/create/update/read/search/list actions, execute when the request contains enough required fields.",
+          "For Gmail follow-up requests like 'reply to this email', use the most recent Gmail message, thread, or mail.google.com URL identifier from the conversation context as the target when the schema needs a message or thread id.",
+          "If the user asks to reply and the recent Gmail context contains an email subject, sender, Gmail URL, or message identifier, do not ask the user to provide the id again.",
         ].join(" "),
       },
       {

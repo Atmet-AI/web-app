@@ -1508,6 +1508,21 @@ export default function AI_Prompt({
     ]
   );
 
+  const isAppRequestResolved = useCallback(
+    (messageId: number, appName: string) => {
+      return messages.some(
+        (message) =>
+          message.id > messageId &&
+          ((message.role === "user" &&
+            message.content.toLowerCase().includes(`@${appName.toLowerCase()}`)) ||
+            (message.role === "assistant" &&
+              !parseAppApprovalRequest(message.content) &&
+              !parseAppMiniUiRequest(message.content)))
+      );
+    },
+    [messages]
+  );
+
   const uploadMessageAttachments = useCallback(
     async (attachments: AttachmentDraft[]) => {
       const uploaded: MessageAttachment[] = [];
@@ -2279,56 +2294,38 @@ export default function AI_Prompt({
   };
 
   const renderAppApprovalCard = (approval: AppApprovalRequest, messageId: number) => {
-    const approvedLater = messages.some(
-      (message) =>
-        message.id > messageId &&
-        message.role === "user" &&
-        message.content.toLowerCase().includes(`@${approval.appName.toLowerCase()}`)
-    );
-
-    if (approvedLater) {
-      return (
-        <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-0.5 py-1 text-sm text-muted-foreground">
-          {approval.appName} was added to this chat.
-        </p>
-      );
-    }
-
     return (
-      <div className="w-full max-w-md rounded-lg border border-border/70 bg-background/90 p-3 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40">
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
+        <div className="flex items-start gap-3 px-4 py-4">
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
             {renderAppLogo(approval.appName, "md")}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-foreground">
-              Add {approval.appName} to this chat?
+            <div className="text-base font-medium leading-6 text-foreground">
+              Add {approval.appName}?
             </div>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {approval.reason} Approve to let Atmet use this app for the request.
-            </p>
-            <p className="mt-2 line-clamp-3 rounded-md bg-muted/45 px-2 py-1.5 text-xs text-muted-foreground">
-              {approval.originalRequest}
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {approval.reason}
             </p>
           </div>
         </div>
-        <div className="mt-3 flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2 border-t border-border/60 px-4 py-3">
           <Button
             type="button"
             variant="ghost"
-            className="h-8 px-2.5 text-xs"
+            className="h-9 px-3 text-sm text-muted-foreground active:scale-[0.96] transition-transform"
             onClick={() => rejectAppRequest(approval, messageId)}
           >
-            Reject
+            Not now
           </Button>
           <Button
             type="button"
-            className="h-8 gap-1.5 px-2.5 text-xs"
+            className="h-9 gap-1.5 px-3 text-sm active:scale-[0.96] transition-transform"
             onClick={() => void approveAppRequest(approval, messageId)}
             disabled={isResponding}
           >
             <Check className="h-3.5 w-3.5" />
-            Approve
+            Add
           </Button>
         </div>
       </div>
@@ -2342,26 +2339,26 @@ export default function AI_Prompt({
     );
 
     return (
-      <div className="w-full max-w-md rounded-lg border border-border/70 bg-background/90 p-3 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40">
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
+        <div className="flex items-start gap-3 px-4 py-4">
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
             {renderAppLogo(request.appName, "md")}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium leading-5 text-foreground">
+            <div className="text-base font-medium leading-6 text-foreground">
               {request.title}
             </div>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
               {request.description}
             </p>
           </div>
         </div>
 
-        <div className="mt-3 space-y-2.5">
+        <div className="space-y-3 px-4 pb-4">
           {request.fields.map((field) => {
             const fieldValue = values[field.id] ?? "";
             const commonClassName =
-              "mt-1 border-border/70 bg-background/80 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0";
+              "mt-1.5 border-border/70 bg-background text-sm shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0";
 
             return (
               <label key={field.id} className="block text-xs font-medium text-muted-foreground">
@@ -2373,7 +2370,7 @@ export default function AI_Prompt({
                     onChange={(event) =>
                       updateAppMiniUiValue(messageId, field.id, event.target.value)
                     }
-                    className={cn(commonClassName, "min-h-24 resize-none rounded-md")}
+                    className={cn(commonClassName, "min-h-24 resize-none rounded-lg")}
                   />
                 ) : field.type === "select" ? (
                   <select
@@ -2383,7 +2380,7 @@ export default function AI_Prompt({
                     }
                     className={cn(
                       commonClassName,
-                      "h-9 w-full rounded-md px-3 outline-none"
+                      "h-9 w-full rounded-lg px-3 outline-none"
                     )}
                   >
                     {(field.options ?? []).map((option) => (
@@ -2399,7 +2396,7 @@ export default function AI_Prompt({
                     onChange={(event) =>
                       updateAppMiniUiValue(messageId, field.id, event.target.value)
                     }
-                    className={cn(commonClassName, "h-9 rounded-md")}
+                    className={cn(commonClassName, "h-9 rounded-lg")}
                   />
                 )}
               </label>
@@ -2407,10 +2404,10 @@ export default function AI_Prompt({
           })}
         </div>
 
-        <div className="mt-3 flex justify-end">
+        <div className="flex justify-end border-t border-border/60 px-4 py-3">
           <Button
             type="button"
-            className="h-8 gap-1.5 px-2.5 text-xs active:scale-[0.96] transition-transform"
+            className="h-9 gap-1.5 px-3 text-sm active:scale-[0.96] transition-transform"
             onClick={() => void submitAppMiniUiRequest(request, messageId)}
             disabled={isResponding || !isComplete}
           >
@@ -2424,10 +2421,36 @@ export default function AI_Prompt({
 
   const renderAssistantContent = (content: string, messageId: number) => {
     const appApproval = parseAppApprovalRequest(content);
-    if (appApproval) return renderAppApprovalCard(appApproval, messageId);
+    if (appApproval) {
+      return (
+        <div className="flex items-center gap-2 px-0.5 py-1 text-sm text-muted-foreground">
+          <span className="inline-flex h-5 w-5 items-center justify-center">
+            {renderAppLogo(appApproval.appName)}
+          </span>
+          <span>
+            {isAppRequestResolved(messageId, appApproval.appName)
+              ? `${appApproval.appName} was added to this chat.`
+              : "Awaiting app approval"}
+          </span>
+        </div>
+      );
+    }
 
     const appMiniUi = parseAppMiniUiRequest(content);
-    if (appMiniUi) return renderAppMiniUiCard(appMiniUi, messageId);
+    if (appMiniUi) {
+      return (
+        <div className="flex items-center gap-2 px-0.5 py-1 text-sm text-muted-foreground">
+          <span className="inline-flex h-5 w-5 items-center justify-center">
+            {renderAppLogo(appMiniUi.appName)}
+          </span>
+          <span>
+            {isAppRequestResolved(messageId, appMiniUi.appName)
+              ? `${appMiniUi.appName} details submitted.`
+              : "Awaiting details"}
+          </span>
+        </div>
+      );
+    }
 
     const segments = parseAssistantContent(content);
     const hasCodeSegment = segments.some((segment) => segment.type === "code");
@@ -2755,6 +2778,24 @@ export default function AI_Prompt({
     }
     return null;
   }, [messages]);
+  const pendingAppAction = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (!message || message.role !== "assistant") continue;
+
+      const approval = parseAppApprovalRequest(message.content);
+      if (approval && !isAppRequestResolved(message.id, approval.appName)) {
+        return { messageId: message.id, approval, miniUi: null };
+      }
+
+      const miniUi = parseAppMiniUiRequest(message.content);
+      if (miniUi && !isAppRequestResolved(message.id, miniUi.appName)) {
+        return { messageId: message.id, approval: null, miniUi };
+      }
+    }
+
+    return null;
+  }, [isAppRequestResolved, messages]);
   const glassLayerBack =
     "bg-background/20 backdrop-blur-xl supports-[backdrop-filter]:bg-background/15";
   const glassLayerFront =
@@ -3072,6 +3113,8 @@ export default function AI_Prompt({
                       {enableCreateAgent &&
                       message.id === lastAssistantMessageId &&
                       message.content.trim().length > 0 &&
+                      !parseAppApprovalRequest(message.content) &&
+                      !parseAppMiniUiRequest(message.content) &&
                       !isResponding ? (
                         <button
                           type="button"
@@ -3337,6 +3380,15 @@ export default function AI_Prompt({
           hasConversation && "sticky bottom-4 z-20"
         )}
       >
+        {pendingAppAction ? (
+          <div className="mb-2 px-0.5">
+            {pendingAppAction.approval
+              ? renderAppApprovalCard(pendingAppAction.approval, pendingAppAction.messageId)
+              : pendingAppAction.miniUi
+                ? renderAppMiniUiCard(pendingAppAction.miniUi, pendingAppAction.messageId)
+                : null}
+          </div>
+        ) : null}
         {connectedApps.length > 0 && (
           <div className="mb-1 flex min-h-8 items-center justify-start gap-2 px-1.5">
             <div className="flex items-center gap-1">
