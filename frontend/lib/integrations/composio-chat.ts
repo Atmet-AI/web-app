@@ -58,6 +58,11 @@ type ToolPlan = {
   question?: string
 }
 
+type ContextMessage = {
+  role: "system" | "user" | "assistant"
+  content: string
+}
+
 const GENERIC_CONNECTED_APPS: GenericConnectedApp[] = [
   {
     provider: "gmail",
@@ -337,6 +342,27 @@ function detectGenericConnectedApp(content: string) {
   ) ?? null
 }
 
+function looksLikeConnectedAppFollowUp(content: string) {
+  return /\b(subject|body|to|recipient|message|send it|go ahead|yes|chat id|chat_id|file|folder|label|thread|reply)\b/i.test(content)
+}
+
+function buildToolRequestContent(content: string, contextMessages?: ContextMessage[]) {
+  const recentContext = (contextMessages ?? [])
+    .slice(-8)
+    .map((message) => `${message.role}: ${message.content}`)
+    .join("\n")
+
+  if (!recentContext) return content
+
+  return [
+    "Recent conversation context:",
+    recentContext,
+    "",
+    "Latest user message:",
+    content,
+  ].join("\n")
+}
+
 function parseJsonObject(content: string): Record<string, unknown> | null {
   const cleaned = content
     .trim()
@@ -502,11 +528,17 @@ export async function runComposioChatTool(input: {
   workspaceId: string
   userId: string
   content: string
+  contextMessages?: ContextMessage[]
 }): Promise<ComposioChatToolResult | null> {
+  const toolRequestContent = buildToolRequestContent(input.content, input.contextMessages)
   const shouldSearch = mentionsGoogleSheets(input.content) && asksToSearchOrList(input.content)
   const shouldAppend = asksToAppendRow(input.content)
   const shouldAddColumn = mentionsGoogleSheets(input.content) && asksToAddColumn(input.content)
-  const genericApp = detectGenericConnectedApp(input.content)
+  const currentGenericApp = detectGenericConnectedApp(input.content)
+  const genericApp = currentGenericApp ??
+    (looksLikeConnectedAppFollowUp(input.content)
+      ? detectGenericConnectedApp(toolRequestContent)
+      : null)
 
   if (!shouldSearch && !shouldAppend && !shouldAddColumn && !genericApp) {
     return null
@@ -517,7 +549,7 @@ export async function runComposioChatTool(input: {
       return await runGenericComposioAppTool({
         workspaceId: input.workspaceId,
         userId: input.userId,
-        content: input.content,
+        content: toolRequestContent,
         app: genericApp,
       })
     }
@@ -773,11 +805,20 @@ export async function runComposioChatTool(input: {
       },
     }
   } catch (error) {
+    const provider = genericApp?.provider ?? "google-sheets"
     return {
       ok: false,
-      provider: "google-sheets",
-      operation: asksToAddColumn(input.content) ? "add-column" : asksToAppendRow(input.content) ? "append-row" : "search",
-      summary: "Google Sheets request could not be completed through Composio.",
+      provider,
+      operation: genericApp
+        ? "connected-app"
+        : asksToAddColumn(input.content)
+          ? "add-column"
+          : asksToAppendRow(input.content)
+            ? "append-row"
+            : "search",
+      summary: genericApp
+        ? `${genericApp.label} request could not be completed through Composio.`
+        : "Google Sheets request could not be completed through Composio.",
       error: error instanceof Error ? error.message : "Unknown Composio error",
     }
   }
