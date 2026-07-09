@@ -5,6 +5,16 @@ import { sendMessageSchema } from "@/lib/validations/chat"
 import { getOpenAIClient } from "@/lib/openai"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { buildComposioToolContext, runComposioChatTool } from "@/lib/integrations/composio-chat"
+import {
+  detectAppApprovalRequest,
+  parseAppApprovalRequest,
+  serializeAppApprovalRequest,
+} from "@/lib/integrations/app-approval"
+import {
+  detectAppMiniUiRequest,
+  parseAppMiniUiRequest,
+  serializeAppMiniUiRequest,
+} from "@/lib/integrations/app-mini-ui"
 
 const FILE_BUCKET = "workspace-files"
 
@@ -14,6 +24,45 @@ type StoredAttachment = {
   name: string
   kind: "image" | "excel" | "pdf" | "document" | "archive" | "text" | "other"
   previewUrl?: string
+}
+
+function streamAssistantText(input: {
+  chatId: string
+  content: string
+  metadata?: Record<string, unknown>
+}) {
+  const readable = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder()
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: input.content })}\n\n`))
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+      controller.close()
+
+      await supabaseAdmin.from("message").insert({
+        chat_id: input.chatId,
+        role: "assistant",
+        content: input.content,
+        metadata: {
+          model: "atmet-app-approval",
+          finish_reason: "app_approval_required",
+          ...(input.metadata ?? {}),
+        },
+      })
+
+      await supabaseAdmin
+        .from("chat")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", input.chatId)
+    },
+  })
+
+  return new Response(readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  })
 }
 
 function attachmentRecord(value: unknown): StoredAttachment[] {
@@ -169,8 +218,38 @@ export async function POST(
 
   const messages = (history ?? []).map((m) => ({
     role: m.role as "system" | "user" | "assistant",
-    content: m.content,
+    content: parseAppApprovalRequest(m.content)
+      ? "Atmet asked the user to approve adding a connected app to this chat."
+      : parseAppMiniUiRequest(m.content)
+        ? "Atmet showed a connected app mini form for the user to complete."
+        : m.content,
   }))
+
+  const appApprovalRequest = detectAppApprovalRequest({
+    content: parsed.data.content,
+    conversationMessages: messages,
+  })
+
+  if (appApprovalRequest) {
+    return streamAssistantText({
+      chatId,
+      content: serializeAppApprovalRequest(appApprovalRequest),
+      metadata: { appApprovalRequest },
+    })
+  }
+
+  const appMiniUiRequest = detectAppMiniUiRequest({
+    content: parsed.data.content,
+    conversationMessages: messages,
+  })
+
+  if (appMiniUiRequest) {
+    return streamAssistantText({
+      chatId,
+      content: serializeAppMiniUiRequest(appMiniUiRequest),
+      metadata: { appMiniUiRequest },
+    })
+  }
 
   const composioToolResult = await runComposioChatTool({
     workspaceId: chat.workspace_id,

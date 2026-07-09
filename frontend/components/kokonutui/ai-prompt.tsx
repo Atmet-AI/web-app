@@ -52,6 +52,14 @@ import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
+  parseAppApprovalRequest,
+  type AppApprovalRequest,
+} from "@/lib/integrations/app-approval";
+import {
+  parseAppMiniUiRequest,
+  type AppMiniUiRequest,
+} from "@/lib/integrations/app-mini-ui";
+import {
   Artifact,
   ArtifactAction,
   ArtifactActions,
@@ -293,6 +301,7 @@ export default function AI_Prompt({
   const [assistantFeedback, setAssistantFeedback] = useState<
     Record<number, "like" | "dislike">
   >({});
+  const [appMiniUiValues, setAppMiniUiValues] = useState<Record<number, Record<string, string>>>({});
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
   const [codeRunOutput, setCodeRunOutput] = useState<
     Record<string, { status: "success" | "error" | "info"; output: string }>
@@ -1338,6 +1347,167 @@ export default function AI_Prompt({
     }
   }, [apiFetch, createClientMessageId]);
 
+  const approveAppRequest = useCallback(
+    async (approval: AppApprovalRequest, sourceMessageId: number) => {
+      const chatId = activeChatIdRef.current ?? resolvedChatId;
+      if (!chatId) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === sourceMessageId
+              ? {
+                  ...message,
+                  content: `Start a saved chat before adding ${approval.appName}.`,
+                }
+              : message
+          )
+        );
+        return;
+      }
+
+      const approvedContent = `@${approval.appName} ${approval.originalRequest}`;
+      setConnectedApps((prev) =>
+        prev.some((app) => app.toLowerCase() === approval.appName.toLowerCase())
+          ? prev
+          : [...prev, approval.appName]
+      );
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === sourceMessageId
+            ? {
+                ...message,
+                content: `${approval.appName} added to this chat. Running the request now.`,
+              }
+            : message
+        )
+      );
+      setMessages((prev) => [
+        ...prev,
+        { id: createClientMessageId(), role: "user", content: approvedContent },
+      ]);
+      setIsResponding(true);
+      await streamReply(chatId, approvedContent);
+    },
+    [createClientMessageId, resolvedChatId, streamReply]
+  );
+
+  const rejectAppRequest = useCallback((approval: AppApprovalRequest, sourceMessageId: number) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === sourceMessageId
+          ? {
+              ...message,
+              content: `Okay, I will not add ${approval.appName} to this chat.`,
+            }
+          : message
+      )
+    );
+  }, []);
+
+  const getAppMiniUiValues = useCallback(
+    (request: AppMiniUiRequest, messageId: number) => {
+      const storedValues = appMiniUiValues[messageId] ?? {};
+      return request.fields.reduce<Record<string, string>>((values, field) => {
+        values[field.id] = storedValues[field.id] ?? field.value ?? "";
+        return values;
+      }, {});
+    },
+    [appMiniUiValues]
+  );
+
+  const updateAppMiniUiValue = useCallback(
+    (messageId: number, fieldId: string, nextValue: string) => {
+      setAppMiniUiValues((prev) => ({
+        ...prev,
+        [messageId]: {
+          ...(prev[messageId] ?? {}),
+          [fieldId]: nextValue,
+        },
+      }));
+    },
+    []
+  );
+
+  const buildAppMiniUiSubmission = useCallback(
+    (request: AppMiniUiRequest, values: Record<string, string>) => {
+      if (request.variant === "gmail-compose") {
+        return [
+          `@${request.appName} Send an email to ${values.to?.trim() ?? ""}.`,
+          `Subject: ${values.subject?.trim() ?? ""}`,
+          `Body: ${values.body?.trim() ?? ""}`,
+        ].join("\n");
+      }
+
+      if (request.variant === "google-sheets-create") {
+        return `@${request.appName} Create a new spreadsheet titled "${values.title?.trim() ?? ""}" with headers: ${values.headers?.trim() ?? ""}`;
+      }
+
+      if (request.variant === "google-drive-search") {
+        const itemType = values.itemType?.trim() || "files and folders";
+        return `@${request.appName} Search ${itemType} for "${values.query?.trim() ?? ""}"`;
+      }
+
+      return `@${request.appName} ${request.originalRequest}`;
+    },
+    []
+  );
+
+  const submitAppMiniUiRequest = useCallback(
+    async (request: AppMiniUiRequest, sourceMessageId: number) => {
+      const chatId = activeChatIdRef.current ?? resolvedChatId;
+      if (!chatId) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === sourceMessageId
+              ? {
+                  ...message,
+                  content: `Start a saved chat before using ${request.appName}.`,
+                }
+              : message
+          )
+        );
+        return;
+      }
+
+      const values = getAppMiniUiValues(request, sourceMessageId);
+      const missingField = request.fields.find(
+        (field) => field.required && !values[field.id]?.trim()
+      );
+
+      if (missingField) {
+        setAppMiniUiValues((prev) => ({
+          ...prev,
+          [sourceMessageId]: values,
+        }));
+        return;
+      }
+
+      const submittedContent = buildAppMiniUiSubmission(request, values);
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === sourceMessageId
+            ? {
+                ...message,
+                content: `${request.appName} details submitted. Running the request now.`,
+              }
+            : message
+        )
+      );
+      setMessages((prev) => [
+        ...prev,
+        { id: createClientMessageId(), role: "user", content: submittedContent },
+      ]);
+      setIsResponding(true);
+      await streamReply(chatId, submittedContent);
+    },
+    [
+      buildAppMiniUiSubmission,
+      createClientMessageId,
+      getAppMiniUiValues,
+      resolvedChatId,
+      streamReply,
+    ]
+  );
+
   const uploadMessageAttachments = useCallback(
     async (attachments: AttachmentDraft[]) => {
       const uploaded: MessageAttachment[] = [];
@@ -2108,7 +2278,157 @@ export default function AI_Prompt({
     });
   };
 
+  const renderAppApprovalCard = (approval: AppApprovalRequest, messageId: number) => {
+    const approvedLater = messages.some(
+      (message) =>
+        message.id > messageId &&
+        message.role === "user" &&
+        message.content.toLowerCase().includes(`@${approval.appName.toLowerCase()}`)
+    );
+
+    if (approvedLater) {
+      return (
+        <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-0.5 py-1 text-sm text-muted-foreground">
+          {approval.appName} was added to this chat.
+        </p>
+      );
+    }
+
+    return (
+      <div className="w-full max-w-md rounded-lg border border-border/70 bg-background/90 p-3 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40">
+            {renderAppLogo(approval.appName, "md")}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-foreground">
+              Add {approval.appName} to this chat?
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {approval.reason} Approve to let Atmet use this app for the request.
+            </p>
+            <p className="mt-2 line-clamp-3 rounded-md bg-muted/45 px-2 py-1.5 text-xs text-muted-foreground">
+              {approval.originalRequest}
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 px-2.5 text-xs"
+            onClick={() => rejectAppRequest(approval, messageId)}
+          >
+            Reject
+          </Button>
+          <Button
+            type="button"
+            className="h-8 gap-1.5 px-2.5 text-xs"
+            onClick={() => void approveAppRequest(approval, messageId)}
+            disabled={isResponding}
+          >
+            <Check className="h-3.5 w-3.5" />
+            Approve
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAppMiniUiCard = (request: AppMiniUiRequest, messageId: number) => {
+    const values = getAppMiniUiValues(request, messageId);
+    const isComplete = request.fields.every(
+      (field) => !field.required || values[field.id]?.trim()
+    );
+
+    return (
+      <div className="w-full max-w-md rounded-lg border border-border/70 bg-background/90 p-3 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40">
+            {renderAppLogo(request.appName, "md")}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium leading-5 text-foreground">
+              {request.title}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {request.description}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-2.5">
+          {request.fields.map((field) => {
+            const fieldValue = values[field.id] ?? "";
+            const commonClassName =
+              "mt-1 border-border/70 bg-background/80 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0";
+
+            return (
+              <label key={field.id} className="block text-xs font-medium text-muted-foreground">
+                {field.label}
+                {field.type === "textarea" ? (
+                  <Textarea
+                    value={fieldValue}
+                    placeholder={field.placeholder}
+                    onChange={(event) =>
+                      updateAppMiniUiValue(messageId, field.id, event.target.value)
+                    }
+                    className={cn(commonClassName, "min-h-24 resize-none rounded-md")}
+                  />
+                ) : field.type === "select" ? (
+                  <select
+                    value={fieldValue}
+                    onChange={(event) =>
+                      updateAppMiniUiValue(messageId, field.id, event.target.value)
+                    }
+                    className={cn(
+                      commonClassName,
+                      "h-9 w-full rounded-md px-3 outline-none"
+                    )}
+                  >
+                    {(field.options ?? []).map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    value={fieldValue}
+                    placeholder={field.placeholder}
+                    onChange={(event) =>
+                      updateAppMiniUiValue(messageId, field.id, event.target.value)
+                    }
+                    className={cn(commonClassName, "h-9 rounded-md")}
+                  />
+                )}
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 flex justify-end">
+          <Button
+            type="button"
+            className="h-8 gap-1.5 px-2.5 text-xs active:scale-[0.96] transition-transform"
+            onClick={() => void submitAppMiniUiRequest(request, messageId)}
+            disabled={isResponding || !isComplete}
+          >
+            <Check className="h-3.5 w-3.5" />
+            {request.submitLabel}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   const renderAssistantContent = (content: string, messageId: number) => {
+    const appApproval = parseAppApprovalRequest(content);
+    if (appApproval) return renderAppApprovalCard(appApproval, messageId);
+
+    const appMiniUi = parseAppMiniUiRequest(content);
+    if (appMiniUi) return renderAppMiniUiCard(appMiniUi, messageId);
+
     const segments = parseAssistantContent(content);
     const hasCodeSegment = segments.some((segment) => segment.type === "code");
 
