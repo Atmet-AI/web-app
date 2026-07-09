@@ -21,6 +21,19 @@ export type ComposioMcpSession = {
   }
 }
 
+export type ComposioConnectedAccount = {
+  id: string
+  toolkit: string
+  status: string
+  statusReason: string | null
+  authConfigId: string | null
+  alias: string | null
+  wordId: string | null
+  isDisabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 function getComposioApiKey() {
   const apiKey = process.env.COMPOSIO_API_KEY
   if (!apiKey) {
@@ -59,6 +72,50 @@ export function getComposioClient() {
 
 export function normalizeComposioToolkit(toolkit: string) {
   return toolkit.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_")
+}
+
+export function toWorkspaceIntegrationStatus(status: string) {
+  switch (status) {
+    case "ACTIVE":
+      return "active"
+    case "EXPIRED":
+    case "REVOKED":
+    case "INACTIVE":
+      return "expired"
+    case "FAILED":
+      return "error"
+    default:
+      return "pending"
+  }
+}
+
+export async function listComposioConnectedAccounts(input: {
+  workspaceId: string
+  userId: string
+  toolkit: string
+}): Promise<ComposioConnectedAccount[]> {
+  const composio = getComposioClient()
+  const toolkit = normalizeComposioToolkit(input.toolkit)
+  const composioUserId = getComposioUserId(input.workspaceId, input.userId)
+  const accounts = await composio.connectedAccounts.list({
+    userIds: [composioUserId],
+    toolkitSlugs: [toolkit],
+    accountType: "ALL",
+    limit: 100,
+  })
+
+  return accounts.items.map((account) => ({
+    id: account.id,
+    toolkit: account.toolkit.slug,
+    status: account.status,
+    statusReason: account.statusReason,
+    authConfigId: account.authConfig?.id ?? null,
+    alias: account.alias ?? null,
+    wordId: account.wordId ?? null,
+    isDisabled: account.isDisabled,
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt,
+  }))
 }
 
 async function getOrCreateManagedAuthConfig(toolkit: string) {

@@ -46,14 +46,16 @@ export async function GET(request: NextRequest) {
   // Merge catalog with DB connection state
   const integrations = INTEGRATIONS_CATALOG.map((entry) => {
     const connections = connectedMap.get(entry.slug) ?? []
-    const db = connections[0]
+    const activeConnections =
+      connections.filter((connection) => connection.status === "active")
+    const db = activeConnections[0] ?? connections[0]
     return {
       ...entry,
-      connected: connections.length > 0,
+      connected: activeConnections.length > 0,
       status: db?.status ?? undefined,
       connected_at: db?.connected_at ?? undefined,
       connected_account: db?.connected_account ?? undefined,
-      connection_count: connections.length,
+      connection_count: activeConnections.length,
       connections: connections.map((connection) => ({
         id: connection.id,
         connection_name: connection.connection_name,

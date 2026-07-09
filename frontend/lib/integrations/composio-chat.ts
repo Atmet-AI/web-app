@@ -1,6 +1,10 @@
 import "server-only"
 
-import { getComposioClient, getComposioUserId } from "@/lib/integrations/composio"
+import {
+  getComposioClient,
+  getComposioUserId,
+  listComposioConnectedAccounts,
+} from "@/lib/integrations/composio"
 
 type ComposioChatToolResult =
   | {
@@ -68,26 +72,37 @@ export async function runComposioChatTool(input: {
   try {
     const composio = getComposioClient()
     const composioUserId = getComposioUserId(input.workspaceId, input.userId)
-    const session = await composio.sessions.create(composioUserId, {
-      toolkits: ["googlesheets"],
-      manageConnections: true,
+    const connectedAccounts = await listComposioConnectedAccounts({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      toolkit: "googlesheets",
     })
+    const activeAccount = connectedAccounts.find(
+      (account) => account.status === "ACTIVE" && !account.isDisabled
+    )
 
-    const connectionState = await session.toolkits({
-      toolkits: ["googlesheets"],
-      limit: 1,
-    })
-    const sheetsState = connectionState.items[0]
+    if (!activeAccount) {
+      const statusList = connectedAccounts
+        .map((account) => account.status)
+        .filter(Boolean)
+        .join(", ")
 
-    if (!sheetsState?.connection?.isActive) {
       return {
         ok: false,
         provider: "google-sheets",
         summary:
           "Google Sheets is mentioned, but Composio does not report an active Google Sheets connection for this workspace user yet.",
-        error: sheetsState?.connection?.connectedAccount?.status ?? "No active connection",
+        error: statusList ? `Composio account status: ${statusList}` : "No active connection",
       }
     }
+
+    const session = await composio.sessions.create(composioUserId, {
+      toolkits: ["googlesheets"],
+      connectedAccounts: {
+        googlesheets: activeAccount.id,
+      },
+      manageConnections: false,
+    })
 
     const args = buildSearchArgs(input.content)
     const result = await session.execute("GOOGLESHEETS_SEARCH_SPREADSHEETS", args)
@@ -108,6 +123,7 @@ export async function runComposioChatTool(input: {
         "Live Google Sheets search completed through the user's connected Composio account.",
       data: {
         tool: "GOOGLESHEETS_SEARCH_SPREADSHEETS",
+        connectedAccountId: activeAccount.id,
         args,
         result: result.data,
       },
