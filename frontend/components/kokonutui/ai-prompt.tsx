@@ -52,6 +52,10 @@ import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
+  parseAppApprovalRequest,
+  type AppApprovalRequest,
+} from "@/lib/integrations/app-approval";
+import {
   Artifact,
   ArtifactAction,
   ArtifactActions,
@@ -1338,6 +1342,62 @@ export default function AI_Prompt({
     }
   }, [apiFetch, createClientMessageId]);
 
+  const approveAppRequest = useCallback(
+    async (approval: AppApprovalRequest, sourceMessageId: number) => {
+      const chatId = activeChatIdRef.current ?? resolvedChatId;
+      if (!chatId) {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === sourceMessageId
+              ? {
+                  ...message,
+                  content: `Start a saved chat before adding ${approval.appName}.`,
+                }
+              : message
+          )
+        );
+        return;
+      }
+
+      const approvedContent = `@${approval.appName} ${approval.originalRequest}`;
+      setConnectedApps((prev) =>
+        prev.some((app) => app.toLowerCase() === approval.appName.toLowerCase())
+          ? prev
+          : [...prev, approval.appName]
+      );
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === sourceMessageId
+            ? {
+                ...message,
+                content: `${approval.appName} added to this chat. Running the request now.`,
+              }
+            : message
+        )
+      );
+      setMessages((prev) => [
+        ...prev,
+        { id: createClientMessageId(), role: "user", content: approvedContent },
+      ]);
+      setIsResponding(true);
+      await streamReply(chatId, approvedContent);
+    },
+    [createClientMessageId, resolvedChatId, streamReply]
+  );
+
+  const rejectAppRequest = useCallback((approval: AppApprovalRequest, sourceMessageId: number) => {
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === sourceMessageId
+          ? {
+              ...message,
+              content: `Okay, I will not add ${approval.appName} to this chat.`,
+            }
+          : message
+      )
+    );
+  }, []);
+
   const uploadMessageAttachments = useCallback(
     async (attachments: AttachmentDraft[]) => {
       const uploaded: MessageAttachment[] = [];
@@ -2108,7 +2168,67 @@ export default function AI_Prompt({
     });
   };
 
+  const renderAppApprovalCard = (approval: AppApprovalRequest, messageId: number) => {
+    const approvedLater = messages.some(
+      (message) =>
+        message.id > messageId &&
+        message.role === "user" &&
+        message.content.toLowerCase().includes(`@${approval.appName.toLowerCase()}`)
+    );
+
+    if (approvedLater) {
+      return (
+        <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-0.5 py-1 text-sm text-muted-foreground">
+          {approval.appName} was added to this chat.
+        </p>
+      );
+    }
+
+    return (
+      <div className="w-full max-w-md rounded-lg border border-border/70 bg-background/90 p-3 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40">
+            {renderAppLogo(approval.appName, "md")}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-foreground">
+              Add {approval.appName} to this chat?
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {approval.reason} Approve to let Atmet use this app for the request.
+            </p>
+            <p className="mt-2 line-clamp-3 rounded-md bg-muted/45 px-2 py-1.5 text-xs text-muted-foreground">
+              {approval.originalRequest}
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 px-2.5 text-xs"
+            onClick={() => rejectAppRequest(approval, messageId)}
+          >
+            Reject
+          </Button>
+          <Button
+            type="button"
+            className="h-8 gap-1.5 px-2.5 text-xs"
+            onClick={() => void approveAppRequest(approval, messageId)}
+            disabled={isResponding}
+          >
+            <Check className="h-3.5 w-3.5" />
+            Approve
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   const renderAssistantContent = (content: string, messageId: number) => {
+    const appApproval = parseAppApprovalRequest(content);
+    if (appApproval) return renderAppApprovalCard(appApproval, messageId);
+
     const segments = parseAssistantContent(content);
     const hasCodeSegment = segments.some((segment) => segment.type === "code");
 
