@@ -4,8 +4,6 @@ import { createHmac, timingSafeEqual } from "crypto"
 
 import { Composio } from "@composio/core"
 
-const DEFAULT_COMPOSIO_BASE_URL = "https://backend.composio.dev/api/v3.1"
-
 type JsonRecord = Record<string, unknown>
 
 export type ComposioConnectLink = {
@@ -36,16 +34,56 @@ export function getComposioUserId(workspaceId: string, userId: string) {
   return `workspace:${workspaceId}:user:${userId}`
 }
 
+function getComposioBaseUrl() {
+  const value = process.env.COMPOSIO_BASE_URL?.trim().replace(/\/+$/, "")
+  if (!value) return undefined
+
+  try {
+    const url = new URL(value)
+    if (url.hostname === "backend.composio.dev" && url.pathname.startsWith("/api/")) {
+      return url.origin
+    }
+    return value
+  } catch {
+    return undefined
+  }
+}
+
 export function getComposioClient() {
   return new Composio({
     apiKey: getComposioApiKey(),
-    baseURL: process.env.COMPOSIO_BASE_URL ?? DEFAULT_COMPOSIO_BASE_URL,
+    baseURL: getComposioBaseUrl(),
     allowTracking: false,
   })
 }
 
 export function normalizeComposioToolkit(toolkit: string) {
   return toolkit.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_")
+}
+
+async function getOrCreateManagedAuthConfig(toolkit: string) {
+  const composio = getComposioClient()
+  const existing = await composio.authConfigs.list({
+    toolkit,
+    limit: 10,
+  })
+
+  const existingConfig =
+    existing.items.find((config) => config.status === "ENABLED") ?? existing.items[0]
+  if (existingConfig?.id) return existingConfig.id
+
+  const name = toolkit
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+
+  const created = await composio.authConfigs.create(toolkit, {
+    type: "use_composio_managed_auth",
+    name: `${name} Auth Config`,
+  })
+
+  return created.id
 }
 
 export async function createComposioConnectLink(input: {
@@ -59,10 +97,13 @@ export async function createComposioConnectLink(input: {
   const composio = getComposioClient()
   const composioUserId = getComposioUserId(input.workspaceId, input.userId)
   const toolkit = normalizeComposioToolkit(input.toolkit)
+  const authConfigId = input.authConfigId ?? (await getOrCreateManagedAuthConfig(toolkit))
 
-  const request = input.authConfigId
-    ? await composio.toolkits.authorize(composioUserId, toolkit, input.authConfigId)
-    : await composio.toolkits.authorize(composioUserId, toolkit)
+  const request = await composio.connectedAccounts.link(composioUserId, authConfigId, {
+    callbackUrl: input.callbackUrl,
+    alias: input.alias,
+    allowMultiple: true,
+  })
 
   if (!request.redirectUrl) {
     throw new Error("Composio did not return a connect link.")

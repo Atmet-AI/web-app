@@ -187,15 +187,17 @@ export default function AppDetailsPage() {
         }
       )
 
+      const result = (await response.json()) as ApiResponse<{ redirectUrl: string }>
+
       if (!response.ok) {
         throw new Error(
-          isComposioConnection
-            ? "Unable to start Composio connection."
-            : "Unable to start OAuth connection."
+          result.error?.message ??
+            (isComposioConnection
+              ? "Unable to start Composio connection."
+              : "Unable to start OAuth connection.")
         )
       }
 
-      const result = (await response.json()) as ApiResponse<{ redirectUrl: string }>
       const redirectUrl = result.data?.redirectUrl
 
       if (!redirectUrl) {
