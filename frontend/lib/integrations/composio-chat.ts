@@ -69,6 +69,7 @@ type ContextMessage = {
 }
 
 const COMPOSIO_TOOL_SEARCH_QUERY_MAX_LENGTH = 900
+const DEFAULT_TIME_ZONE = process.env.ATMET_DEFAULT_TIME_ZONE ?? "Asia/Amman"
 
 const GENERIC_CONNECTED_APPS: GenericConnectedApp[] = [
   {
@@ -534,8 +535,11 @@ function detectGenericConnectedApp(content: string) {
 }
 
 function looksLikeConnectedAppFollowUp(content: string) {
-  return /\b(subject|body|to|recipient|message|send it|go ahead|yes|chat id|chat_id|file|folder|label|thread|reply)\b/i.test(
-    content
+  return (
+    /\b(subject|body|to|recipient|message|send it|go ahead|yes|default|timezone|time\s*zone|chat id|chat_id|file|folder|label|thread|reply|duration|calendar|meeting|event|attendee|invitee|today|tomorrow)\b/i.test(
+      content
+    ) ||
+    /^\s*(?:\d+\s*[-.)]\s*.+){2,}/m.test(content)
   )
 }
 
@@ -559,8 +563,6 @@ function buildToolRequestContent(
     .map((message) => `${message.role}: ${message.content}`)
     .join("\n")
 
-  if (!recentContext) return content
-
   const gmailIds = Array.from(
     new Set(
       Array.from(
@@ -573,7 +575,20 @@ function buildToolRequestContent(
     )
   )
 
+  if (!recentContext) {
+    return [
+      `Current date/time: ${new Date().toISOString()}`,
+      `Default workspace timezone when the user does not specify one: ${DEFAULT_TIME_ZONE}`,
+      "",
+      "Latest user message:",
+      content,
+    ].join("\n")
+  }
+
   return [
+    `Current date/time: ${new Date().toISOString()}`,
+    `Default workspace timezone when the user does not specify one: ${DEFAULT_TIME_ZONE}`,
+    "",
     "Recent conversation context:",
     recentContext,
     ...(gmailIds.length > 0
@@ -642,6 +657,32 @@ function compactToolSchema(schema: ToolSchema) {
   }
 }
 
+function rankToolSchemaForRequest(schema: ToolSchema, content: string) {
+  const slug = schema.toolSlug ?? ""
+  const text = `${slug} ${schema.description ?? ""}`.toLowerCase()
+  const request = content.toLowerCase()
+  let score = 0
+
+  if (/\b(calendar|meeting|event|schedule|appointment)\b/.test(request)) {
+    if (/googlecalendar/.test(text)) score += 3
+    if (/\b(create|quick_add|insert)\b/.test(text)) score += 5
+    if (/\b(list|find|search|get)\b/.test(text)) score += 4
+    if (/\b(free|busy|slots)\b/.test(text)) score += 3
+    if (/\bwatch|acl|delete|clear|remove\b/.test(text)) score -= 4
+  }
+
+  if (/\b(send|compose|reply|email)\b/.test(request) && /\bgmail\b/.test(text)) {
+    if (/\b(send|reply|draft)\b/.test(text)) score += 5
+    if (/\bdelete|trash\b/.test(text)) score -= 4
+  }
+
+  if (/\b(file|folder|drive|document)\b/.test(request)) {
+    if (/\b(search|list|find|get)\b/.test(text)) score += 4
+  }
+
+  return score
+}
+
 async function planComposioToolExecution(input: {
   userRequest: string
   app: GenericConnectedApp
@@ -665,6 +706,10 @@ async function planComposioToolExecution(input: {
           "Gmail is for email messages. Google Contacts is for saved contacts and address book requests.",
           "For Gmail follow-up requests like 'reply to this email', use the most recent Gmail message, thread, or mail.google.com URL identifier from the conversation context as the target when the schema needs a message or thread id.",
           "If the user asks to reply and the recent Gmail context contains an email subject, sender, Gmail URL, or message identifier, do not ask the user to provide the id again.",
+          `For Google Calendar, use calendar_id or calendarId "primary" when the user says primary/default calendar. Use timezone "${DEFAULT_TIME_ZONE}" unless the user specifies another timezone.`,
+          "For Google Calendar event creation, prefer QUICK_ADD when the schema is available and the user gave a natural-language meeting request. Include attendee email, date/time, duration, title, and timezone in the quick-add text.",
+          "For Google Calendar list/search requests like today's meetings, use the current date/time from context to build time_min/time_max or timeMin/timeMax for that day.",
+          "For Google Calendar follow-up answers with numbered fields, combine them with the earlier calendar request in the conversation context and execute when title, date/time, attendee, duration, and calendar are known.",
         ].join(" "),
       },
       {
@@ -736,7 +781,12 @@ async function runGenericComposioAppTool(input: {
       (schema) =>
         schema?.toolSlug && schema.hasFullSchema !== false && schema.inputSchema
     )
-    .slice(0, 6)
+    .sort(
+      (left, right) =>
+        rankToolSchemaForRequest(right, input.content) -
+        rankToolSchemaForRequest(left, input.content)
+    )
+    .slice(0, 10)
 
   if (schemas.length === 0) {
     return {
