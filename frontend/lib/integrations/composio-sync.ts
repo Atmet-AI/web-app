@@ -47,6 +47,7 @@ export async function syncComposioWorkspaceConnections(input: {
         .select("id")
         .eq("workspace_id", input.workspaceId)
         .eq("provider_id", input.providerId)
+        .eq("created_by", input.userId)
         .eq("connector_provider", "composio")
         .eq("external_connection_id", account.id)
         .maybeSingle()

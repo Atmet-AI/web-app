@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { Check, Code2, FileText } from "lucide-react"
+import { Check, Code2, FileText, X } from "lucide-react"
 
 import {
   ChartContainer,
@@ -38,8 +38,100 @@ type AtmetGenerativeUiProps = {
   logo?: ReactNode
   values?: Record<string, string>
   disabled?: boolean
+  compact?: boolean
   onFieldChange?: (fieldId: string, value: string) => void
   onAction?: (action: AtmetUiAction, values?: Record<string, string>) => void
+}
+
+function parseEmailTags(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\s,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  )
+}
+
+function EmailTagInput({
+  value,
+  placeholder,
+  compact = false,
+  onChange,
+}: {
+  value: string
+  placeholder?: string
+  compact?: boolean
+  onChange: (value: string) => void
+}) {
+  const tags = parseEmailTags(value)
+  const [draft, setDraft] = useState("")
+
+  function commitDraft(nextDraft = draft) {
+    const nextTags = parseEmailTags(nextDraft)
+    if (nextTags.length === 0) return
+
+    onChange([...tags, ...nextTags].filter((tag, index, all) => all.indexOf(tag) === index).join(", "))
+    setDraft("")
+  }
+
+  function removeTag(target: string) {
+    onChange(tags.filter((tag) => tag !== target).join(", "))
+  }
+
+  return (
+    <div
+      className={cn(
+        "mt-1.5 flex w-full flex-wrap items-center gap-1.5 rounded-lg border border-black/10 bg-transparent px-2 py-1 shadow-none backdrop-blur-xl focus-within:ring-1 focus-within:ring-ring dark:border-white/10",
+        compact ? "min-h-8" : "min-h-9"
+      )}
+    >
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className={cn(
+            "inline-flex max-w-full items-center gap-1 rounded-md bg-sky-500/10 px-2 font-medium text-sky-700 dark:bg-sky-400/15 dark:text-sky-200",
+            compact ? "h-5 text-[11px]" : "h-6 text-xs"
+          )}
+        >
+          <span className="max-w-48 truncate">{tag}</span>
+          <button
+            type="button"
+            aria-label={`Remove ${tag}`}
+            onClick={() => removeTag(tag)}
+            className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded-sm text-sky-700/70 transition-colors hover:bg-sky-500/15 hover:text-sky-900 dark:text-sky-100/70 dark:hover:text-white"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </span>
+      ))}
+      <input
+        value={draft}
+        type="email"
+        inputMode="email"
+        placeholder={tags.length === 0 ? placeholder : "Add another email"}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => commitDraft()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === "," || event.key === "Tab") {
+            if (draft.trim()) {
+              event.preventDefault()
+              commitDraft()
+            }
+          }
+
+          if (event.key === "Backspace" && !draft && tags.length > 0) {
+            removeTag(tags[tags.length - 1])
+          }
+        }}
+        className={cn(
+          "flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground",
+          compact ? "h-5 min-w-36 text-xs" : "h-6 min-w-44 text-sm"
+        )}
+      />
+    </div>
+  )
 }
 
 export function AtmetGenerativeUi({
@@ -47,6 +139,7 @@ export function AtmetGenerativeUi({
   logo,
   values,
   disabled = false,
+  compact = false,
   onFieldChange,
   onAction,
 }: AtmetGenerativeUiProps) {
@@ -63,6 +156,7 @@ export function AtmetGenerativeUi({
         logo={logo}
         values={values}
         disabled={disabled}
+        compact={compact}
         onFieldChange={onFieldChange}
         onAction={onAction}
       />
@@ -70,16 +164,16 @@ export function AtmetGenerativeUi({
   }
 
   if (component.kind === "table") {
-    return <AtmetUiTable payload={ui as PayloadWith<"table">} logo={logo} />
+    return <AtmetUiTable payload={ui as PayloadWith<"table">} logo={logo} compact={compact} />
   }
   if (component.kind === "chart") {
-    return <AtmetUiChart payload={ui as PayloadWith<"chart">} logo={logo} />
+    return <AtmetUiChart payload={ui as PayloadWith<"chart">} logo={logo} compact={compact} />
   }
   if (component.kind === "code") {
-    return <AtmetUiCode payload={ui as PayloadWith<"code">} logo={logo} />
+    return <AtmetUiCode payload={ui as PayloadWith<"code">} logo={logo} compact={compact} />
   }
   if (component.kind === "file_list") {
-    return <AtmetUiFileList payload={ui as PayloadWith<"file_list">} logo={logo} />
+    return <AtmetUiFileList payload={ui as PayloadWith<"file_list">} logo={logo} compact={compact} />
   }
 
   return null
@@ -91,39 +185,48 @@ function AtmetUiShell({
   logo,
   children,
   footer,
+  compact = false,
 }: {
   title?: string
   description?: string
   logo?: ReactNode
   children: ReactNode
   footer?: ReactNode
+  compact?: boolean
 }) {
   return (
-    <section className="overflow-hidden rounded-xl bg-background/95 shadow-[0_0_0_1px_hsl(var(--border)/0.7),0_18px_60px_hsl(var(--foreground)/0.08)]">
+    <section
+      className={cn(
+        "overflow-hidden rounded-2xl bg-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.07),0_0_0_1px_rgba(255,255,255,0.18)_inset,0_20px_70px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_20px_70px_rgba(0,0,0,0.22)]",
+        compact
+          ? "supports-[backdrop-filter]:bg-transparent"
+          : "supports-[backdrop-filter]:bg-transparent"
+      )}
+    >
       {(title || description || logo) && (
-        <div className="flex items-start gap-3 px-4 py-4">
+        <div className={cn("flex items-start", compact ? "gap-2.5 px-3 py-3" : "gap-3 px-4 py-4")}>
           {logo ? (
-            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+            <div className={cn("mt-0.5 flex shrink-0 items-center justify-center rounded-lg", compact ? "h-6 w-6" : "h-8 w-8")}>
               {logo}
             </div>
           ) : null}
           <div className="min-w-0 flex-1">
             {title ? (
-              <h3 className="truncate text-base font-medium leading-6 text-foreground">
+              <h3 className={cn("truncate font-medium text-foreground", compact ? "text-sm leading-5" : "text-base leading-6")}>
                 {title}
               </h3>
             ) : null}
             {description ? (
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              <p className={cn("text-muted-foreground", compact ? "mt-0.5 text-xs leading-5" : "mt-1 text-sm leading-6")}>
                 {description}
               </p>
             ) : null}
           </div>
         </div>
       )}
-      <div className="px-4 pb-4">{children}</div>
+      <div className={compact ? "px-3 pb-3" : "px-4 pb-4"}>{children}</div>
       {footer ? (
-        <div className="flex justify-end px-4 pb-4 pt-0">{footer}</div>
+        <div className={cn("flex justify-end pt-0", compact ? "px-3 pb-3" : "px-4 pb-4")}>{footer}</div>
       ) : null}
     </section>
   )
@@ -134,6 +237,7 @@ function AtmetUiForm({
   logo,
   values,
   disabled,
+  compact,
   onFieldChange,
   onAction,
 }: {
@@ -141,6 +245,7 @@ function AtmetUiForm({
   logo?: ReactNode
   values?: Record<string, string>
   disabled?: boolean
+  compact?: boolean
   onFieldChange?: (fieldId: string, value: string) => void
   onAction?: (action: AtmetUiAction, values?: Record<string, string>) => void
 }) {
@@ -169,10 +274,13 @@ function AtmetUiForm({
       title={component.title}
       description={component.description}
       logo={logo}
+      compact={compact}
       footer={
         <Button
           type="button"
-          className="h-9 gap-1.5 px-3 text-sm active:scale-[0.96] transition-transform"
+          className={cn(
+            "h-7 gap-1.5 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] active:scale-[0.96] transition-transform"
+          )}
           disabled={disabled || !isComplete}
           onClick={() => onAction?.(component.submit.action, currentValues)}
         >
@@ -181,12 +289,12 @@ function AtmetUiForm({
         </Button>
       }
     >
-      <div className="space-y-3">
+      <div className={compact ? "space-y-2" : "space-y-3"}>
         {component.fields.map((field) => {
           const fieldValue = currentValues[field.id] ?? ""
           const hasValue = fieldValue.trim().length > 0
           const controlClassName =
-            "mt-1.5 border-border/70 bg-background text-sm shadow-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
+            "mt-1.5 border-black/10 bg-transparent shadow-none backdrop-blur-xl placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 dark:border-white/10"
           const valueToneClassName = hasValue
             ? "text-foreground"
             : "text-muted-foreground"
@@ -204,10 +312,17 @@ function AtmetUiForm({
           return (
             <label
               key={field.id}
-              className="block text-xs font-medium text-muted-foreground"
+              className={cn("block font-medium text-muted-foreground", compact ? "text-[11px]" : "text-xs")}
             >
               {field.label}
-              {field.type === "textarea" ? (
+              {field.id === "invitees" && field.type === "email" ? (
+                <EmailTagInput
+                  value={fieldValue}
+                  placeholder={field.placeholder}
+                  compact={compact}
+                  onChange={(nextValue) => updateField(field.id, nextValue)}
+                />
+              ) : field.type === "textarea" ? (
                 <Textarea
                   value={fieldValue}
                   placeholder={field.placeholder}
@@ -215,7 +330,7 @@ function AtmetUiForm({
                   className={cn(
                     controlClassName,
                     valueToneClassName,
-                    "min-h-24 resize-none rounded-lg"
+                    compact ? "min-h-16 resize-none rounded-lg text-xs" : "min-h-24 resize-none rounded-lg text-sm"
                   )}
                 />
               ) : field.type === "select" ? (
@@ -225,7 +340,7 @@ function AtmetUiForm({
                   className={cn(
                     controlClassName,
                     valueToneClassName,
-                    "h-9 w-full rounded-lg px-3 outline-none"
+                    compact ? "h-8 w-full rounded-lg px-2.5 text-xs outline-none" : "h-9 w-full rounded-lg px-3 text-sm outline-none"
                   )}
                 >
                   {field.placeholder ? (
@@ -246,7 +361,7 @@ function AtmetUiForm({
                   inputMode={field.type === "number" ? "numeric" : undefined}
                   placeholder={field.placeholder}
                   onChange={(event) => updateField(field.id, event.target.value)}
-                  className={cn(controlClassName, valueToneClassName, "h-9 rounded-lg")}
+                  className={cn(controlClassName, valueToneClassName, compact ? "h-8 rounded-lg text-xs" : "h-9 rounded-lg text-sm")}
                 />
               )}
             </label>
@@ -260,9 +375,11 @@ function AtmetUiForm({
 function AtmetUiTable({
   payload,
   logo,
+  compact,
 }: {
   payload: PayloadWith<"table">
   logo?: ReactNode
+  compact?: boolean
 }) {
   const component = payload.component
 
@@ -271,10 +388,11 @@ function AtmetUiTable({
       title={component.title}
       description={component.description}
       logo={logo}
+      compact={compact}
     >
-      <div className="max-h-[360px] overflow-auto rounded-lg bg-muted/25">
-        <table className="w-full min-w-[560px] text-sm">
-          <thead className="sticky top-0 bg-background/95 text-muted-foreground">
+      <div className={cn("overflow-auto rounded-lg bg-transparent backdrop-blur-xl", compact ? "max-h-[260px]" : "max-h-[360px]")}>
+        <table className={cn("w-full min-w-[560px]", compact ? "text-xs" : "text-sm")}>
+          <thead className="sticky top-0 bg-transparent text-muted-foreground backdrop-blur-xl">
             <tr>
               {component.columns.map((column) => (
                 <th key={column.key} className="px-3 py-2 text-left font-medium">
@@ -306,9 +424,11 @@ function AtmetUiTable({
 function AtmetUiChart({
   payload,
   logo,
+  compact,
 }: {
   payload: PayloadWith<"chart">
   logo?: ReactNode
+  compact?: boolean
 }) {
   const component = payload.component
   const config = useMemo<ChartConfig>(
@@ -330,8 +450,9 @@ function AtmetUiChart({
       title={component.title}
       description={component.description}
       logo={logo}
+      compact={compact}
     >
-      <ChartContainer config={config} className="h-[240px] w-full">
+      <ChartContainer config={config} className={cn("w-full", compact ? "h-[180px]" : "h-[240px]")}>
         {component.chartType === "line" ? (
           <LineChart data={component.data}>
             <CartesianGrid vertical={false} />
@@ -368,9 +489,11 @@ function AtmetUiChart({
 function AtmetUiCode({
   payload,
   logo,
+  compact,
 }: {
   payload: PayloadWith<"code">
   logo?: ReactNode
+  compact?: boolean
 }) {
   const component = payload.component
 
@@ -379,8 +502,9 @@ function AtmetUiCode({
       title={component.title ?? component.filename}
       description={component.language}
       logo={logo ?? <Code2 className="h-4 w-4" />}
+      compact={compact}
     >
-      <pre className="max-h-[420px] overflow-auto rounded-lg bg-muted p-3 text-xs leading-5 text-foreground">
+      <pre className={cn("overflow-auto rounded-lg bg-transparent text-xs text-foreground backdrop-blur-xl", compact ? "max-h-[280px] p-2 leading-4" : "max-h-[420px] p-3 leading-5")}>
         <code>{component.code}</code>
       </pre>
     </AtmetUiShell>
@@ -390,9 +514,11 @@ function AtmetUiCode({
 function AtmetUiFileList({
   payload,
   logo,
+  compact,
 }: {
   payload: PayloadWith<"file_list">
   logo?: ReactNode
+  compact?: boolean
 }) {
   const component = payload.component
 
@@ -401,15 +527,19 @@ function AtmetUiFileList({
       title={component.title}
       description={component.description}
       logo={logo}
+      compact={compact}
     >
-      <div className="max-h-[360px] overflow-auto rounded-lg bg-muted/25">
+      <div className={cn("overflow-auto rounded-lg bg-transparent backdrop-blur-xl", compact ? "max-h-[260px]" : "max-h-[360px]")}>
         {component.files.map((file) => (
           <a
             key={file.id ?? file.url ?? file.name}
             href={file.url}
             target={file.url ? "_blank" : undefined}
             rel="noreferrer"
-            className="flex min-h-11 items-center gap-3 px-3 py-2 text-sm shadow-[inset_0_1px_hsl(var(--border)/0.5)] transition-colors hover:bg-muted/50"
+            className={cn(
+              "flex items-center gap-3 shadow-[inset_0_1px_rgba(255,255,255,0.08)] transition-colors hover:bg-white/30 dark:hover:bg-white/[0.07]",
+              compact ? "min-h-9 px-2.5 py-1.5 text-xs" : "min-h-11 px-3 py-2 text-sm"
+            )}
           >
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate text-foreground">

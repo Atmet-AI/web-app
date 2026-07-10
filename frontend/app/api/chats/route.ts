@@ -13,10 +13,21 @@ export async function GET(request: NextRequest) {
 
   const { supabase } = auth
 
+  const { data: participations, error: participationsError } = await supabase
+    .from("chats_users")
+    .select("chat_id")
+    .eq("user_id", auth.user.id)
+
+  if (participationsError) return Errors.internal()
+
+  const chatIds = (participations ?? []).map((row) => row.chat_id)
+  if (chatIds.length === 0) return ok({ chats: [] })
+
   const { data, error } = await supabase
     .from("chat")
     .select("id, title, status, created_by, created_at, updated_at")
     .eq("workspace_id", ws.workspaceId)
+    .in("id", chatIds)
     .order("updated_at", { ascending: false })
 
   if (error) return Errors.internal()

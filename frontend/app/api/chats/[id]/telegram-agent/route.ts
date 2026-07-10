@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto"
 import { type NextRequest } from "next/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { z } from "zod"
 
 import { getUser } from "@/lib/api/auth"
@@ -28,6 +29,22 @@ function getConnectionSetting(settings: unknown, key: string) {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) return null
   const value = (settings as Record<string, unknown>)[key]
   return typeof value === "string" && value.trim() ? value : null
+}
+
+async function isChatParticipant(
+  supabase: SupabaseClient,
+  chatId: string,
+  userId: string
+) {
+  const { data, error } = await supabase
+    .from("chats_users")
+    .select("chat_id")
+    .eq("chat_id", chatId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) return null
+  return Boolean(data)
 }
 
 export async function POST(
@@ -64,6 +81,10 @@ export async function POST(
     }
   }
 
+  const canAccessChat = await isChatParticipant(supabase, chatId, user.id)
+  if (canAccessChat === null) return Errors.internal()
+  if (!canAccessChat) return Errors.notFound("Chat")
+
   const { data: chat, error: chatError } = await supabase
     .from("chat")
     .select("id, workspace_id, title")
@@ -82,6 +103,7 @@ export async function POST(
     .select("id, connected_account, connection_name, settings")
     .eq("workspace_id", chat.workspace_id)
     .eq("provider_id", telegramProvider.id)
+    .eq("created_by", user.id)
     .eq("status", "active")
 
   if (parsed.data.workspaceIntegrationId) {

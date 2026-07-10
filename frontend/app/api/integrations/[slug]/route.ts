@@ -52,6 +52,7 @@ export async function GET(
     )
     .eq("workspace_id", ws.workspaceId)
     .eq("provider_id", provider.id)
+    .eq("created_by", auth.user.id)
     .order("created_at", { ascending: true })
 
   const activeConnections =
@@ -107,6 +108,7 @@ export async function DELETE(
     .delete()
     .eq("workspace_id", ws.workspaceId)
     .eq("provider_id", provider.id)
+    .eq("created_by", auth.user.id)
 
   if (error) return Errors.internal()
 

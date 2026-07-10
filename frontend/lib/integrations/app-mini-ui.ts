@@ -182,7 +182,7 @@ function dateInputValueFor(content: string) {
 
 function timeInputValueFor(content: string) {
   const timeMatch = content.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i)
-  if (!timeMatch) return ""
+  if (!timeMatch) return "12:30"
 
   let hour = Number(timeMatch[1])
   const minute = Number(timeMatch[2] ?? "0")
@@ -284,7 +284,13 @@ export function detectAppMiniUiRequest(input: {
 }): AppMiniUiRequest | null {
   const content = input.content.trim()
   const normalized = stripAppMentions(content)
-  if (/\bwith\s+these\s+exact\s+fields\s*:/i.test(normalized)) return null
+  if (
+    /\bwith\s+these\s+exact\s+fields\s*:/i.test(normalized) ||
+    /\bapproved\s+these\s+exact\b/i.test(normalized) ||
+    /\bwithout\s+asking\s+for\s+another\s+confirmation\b/i.test(normalized)
+  ) {
+    return null
+  }
 
   const calendar = connectedCatalogApp("google-calendar")
   if (
@@ -394,7 +400,7 @@ export function detectAppMiniUiRequest(input: {
           ? "Approve these details and Atmet will send from Gmail."
           : "Fill the missing fields before Atmet sends from Gmail.",
       originalRequest: content,
-      submitLabel: "Approve and send",
+      submitLabel: "Approve",
       fields: [
         {
           id: "to",

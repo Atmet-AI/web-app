@@ -1,4 +1,5 @@
 import { type NextRequest } from "next/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { z } from "zod"
 
 import { getUser } from "@/lib/api/auth"
@@ -13,6 +14,22 @@ const createAgentSchema = z.object({
   sourceMessageId: z.number().optional(),
   messages: z.array(chatMessageSchema).min(1).max(80).optional(),
 })
+
+async function isChatParticipant(
+  supabase: SupabaseClient,
+  chatId: string,
+  userId: string
+) {
+  const { data, error } = await supabase
+    .from("chats_users")
+    .select("chat_id")
+    .eq("chat_id", chatId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) return null
+  return Boolean(data)
+}
 
 function compactTitle(value: string, fallback: string) {
   const normalized = value.replace(/\s+/g, " ").trim()
@@ -333,6 +350,10 @@ export async function POST(
   const parsed = createAgentSchema.safeParse(body)
   if (!parsed.success)
     return Errors.validationError(parsed.error.issues[0].message)
+
+  const canAccessChat = await isChatParticipant(supabase, chatId, user.id)
+  if (canAccessChat === null) return Errors.internal()
+  if (!canAccessChat) return Errors.notFound("Chat")
 
   const { data: chat, error: chatError } = await supabase
     .from("chat")
