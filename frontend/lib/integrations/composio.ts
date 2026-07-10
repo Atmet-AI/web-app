@@ -40,6 +40,10 @@ export type ComposioApiKeyAccount = {
   status: string | null
 }
 
+export type ComposioTriggerInstance = {
+  triggerId: string
+}
+
 function getComposioApiKey() {
   const apiKey = process.env.COMPOSIO_API_KEY
   if (!apiKey) {
@@ -257,6 +261,32 @@ export async function createComposioMcpSession(input: {
   }
 }
 
+export async function createComposioTriggerInstance(input: {
+  workspaceId: string
+  userId: string
+  triggerSlug: string
+  connectedAccountId?: string | null
+  triggerConfig?: Record<string, unknown>
+}): Promise<ComposioTriggerInstance> {
+  const composio = getComposioClient()
+  const composioUserId = getComposioUserId(input.workspaceId, input.userId)
+  const trigger = await composio.triggers.create(composioUserId, input.triggerSlug, {
+    connectedAccountId: input.connectedAccountId ?? undefined,
+    triggerConfig: input.triggerConfig ?? {},
+  })
+
+  return { triggerId: trigger.triggerId }
+}
+
+export async function setComposioWebhookSubscription(webhookUrl: string) {
+  const composio = getComposioClient()
+  return composio.triggers.setWebhookSubscription({
+    webhookUrl,
+    enabledEvents: ["composio.trigger.message"],
+    version: "V3",
+  })
+}
+
 export function verifyComposioWebhookSignature(rawBody: string, headers: Headers) {
   const secret = process.env.COMPOSIO_WEBHOOK_SECRET
   if (!secret) return true
@@ -282,6 +312,13 @@ export function getComposioEventId(payload: JsonRecord) {
   const directId = payload.id ?? payload.event_id ?? payload.eventId
   if (typeof directId === "string" && directId.trim()) return directId
 
+  const metadata = payload.metadata
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    const metadataRecord = metadata as JsonRecord
+    const metadataId = metadataRecord.log_id ?? metadataRecord.logId ?? metadataRecord.id
+    if (typeof metadataId === "string" && metadataId.trim()) return metadataId
+  }
+
   const data = payload.data
   if (data && typeof data === "object" && !Array.isArray(data)) {
     const nested = data as JsonRecord
@@ -295,6 +332,24 @@ export function getComposioEventId(payload: JsonRecord) {
 export function getComposioTriggerId(payload: JsonRecord) {
   const directId = payload.trigger_id ?? payload.triggerId ?? payload.trigger_instance_id ?? payload.triggerInstanceId
   if (typeof directId === "string" && directId.trim()) return directId
+
+  const metadata = payload.metadata
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    const metadataRecord = metadata as JsonRecord
+    const metadataId =
+      metadataRecord.trigger_id ??
+      metadataRecord.triggerId ??
+      metadataRecord.trigger_instance_id ??
+      metadataRecord.triggerInstanceId
+    if (typeof metadataId === "string" && metadataId.trim()) return metadataId
+  }
+
+  const data = payload.data
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const nested = data as JsonRecord
+    const nestedId = nested.trigger_id ?? nested.triggerId ?? nested.trigger_instance_id ?? nested.triggerInstanceId
+    if (typeof nestedId === "string" && nestedId.trim()) return nestedId
+  }
 
   const trigger = payload.trigger
   if (trigger && typeof trigger === "object" && !Array.isArray(trigger)) {

@@ -12,15 +12,43 @@ const APPROVAL_PREFIX = "::ATMET_APP_APPROVAL::"
 
 const ACTION_INTENT =
   /\b(add|append|archive|check|create|delete|download|edit|fetch|find|forward|get|label|list|move|post|publish|read|reply|search|send|share|summari[sz]e|sync|update|upload|write)\b/i
-const TRIGGER_INTENT = /\b(when|whenever|if|every\s+time|anyone|someone|trigger|watch|listen)\b/i
+const TRIGGER_INTENT =
+  /\b(when|whenever|if|every\s+time|anyone|someone|trigger|watch|listen)\b/i
 
 const APP_ALIASES: Record<string, RegExp[]> = {
   gmail: [/\bgmail\b/i, /\bemail(s)?\b/i, /\bmailbox\b/i, /\binbox\b/i],
-  "google-contacts": [/\bgoogle\s*contacts?\b/i, /\bgmail\s*contacts?\b/i, /\bcontacts?\b/i, /\baddress\s*book\b/i],
-  "google-sheets": [/\bgoogle\s*sheets?\b/i, /\bsheets?\b/i, /\bspreadsheet(s)?\b/i, /\bworksheet(s)?\b/i],
-  "google-drive": [/\bgoogle\s*drive\b/i, /\bgdrive\b/i, /\bdrive\s+file(s)?\b/i, /\bgoogle\s*doc(s)?\b/i],
-  chatgpt: [/\bchatgpt\b/i, /\bopenai\b/i, /\bgpt\b/i, /\bvector\s*store(s)?\b/i],
+  "google-contacts": [
+    /\bgoogle\s*contacts?\b/i,
+    /\bgmail\s*contacts?\b/i,
+    /\bcontacts?\b/i,
+    /\baddress\s*book\b/i,
+  ],
+  "google-sheets": [
+    /\bgoogle\s*sheets?\b/i,
+    /\bsheets?\b/i,
+    /\bspreadsheet(s)?\b/i,
+    /\bworksheet(s)?\b/i,
+  ],
+  "google-drive": [
+    /\bgoogle\s*drive\b/i,
+    /\bgdrive\b/i,
+    /\bdrive\s+file(s)?\b/i,
+    /\bgoogle\s*doc(s)?\b/i,
+  ],
+  chatgpt: [
+    /\bchatgpt\b/i,
+    /\bopenai\b/i,
+    /\bgpt\b/i,
+    /\bvector\s*store(s)?\b/i,
+  ],
   telegram: [/\btelegram\b/i],
+  instagram: [
+    /\binstagram\b/i,
+    /\big\b/i,
+    /\breels?\b/i,
+    /\bstor(y|ies)\b/i,
+    /\binstagram\s*messages?\b/i,
+  ],
   slack: [/\bslack\b/i],
   notion: [/\bnotion\b/i],
   hubspot: [/\bhubspot\b/i],
@@ -41,14 +69,19 @@ function hasActionIntent(content: string) {
 }
 
 function prioritizeCatalogForContent(content: string) {
-  if (!/\b(contacts?|address\s*book)\b/i.test(content)) return INTEGRATIONS_CATALOG
+  if (!/\b(contacts?|address\s*book)\b/i.test(content))
+    return INTEGRATIONS_CATALOG
 
-  const contacts = INTEGRATIONS_CATALOG.find((integration) => integration.slug === "google-contacts")
+  const contacts = INTEGRATIONS_CATALOG.find(
+    (integration) => integration.slug === "google-contacts"
+  )
   if (!contacts) return INTEGRATIONS_CATALOG
 
   return [
     contacts,
-    ...INTEGRATIONS_CATALOG.filter((integration) => integration.slug !== contacts.slug),
+    ...INTEGRATIONS_CATALOG.filter(
+      (integration) => integration.slug !== contacts.slug
+    ),
   ]
 }
 
@@ -60,19 +93,28 @@ export function hasExplicitAppMention(content: string, appName: string) {
   return appMentionPattern(appName).test(content)
 }
 
-export function hasAppInConversation(messages: Array<{ content: string }>, appName: string) {
-  return messages.some((message) => hasExplicitAppMention(message.content, appName))
+export function hasAppInConversation(
+  messages: Array<{ content: string }>,
+  appName: string
+) {
+  return messages.some((message) =>
+    hasExplicitAppMention(message.content, appName)
+  )
 }
 
 export function serializeAppApprovalRequest(request: AppApprovalRequest) {
   return `${APPROVAL_PREFIX}${JSON.stringify(request)}`
 }
 
-export function parseAppApprovalRequest(content: string): AppApprovalRequest | null {
+export function parseAppApprovalRequest(
+  content: string
+): AppApprovalRequest | null {
   if (!content.startsWith(APPROVAL_PREFIX)) return null
 
   try {
-    const parsed = JSON.parse(content.slice(APPROVAL_PREFIX.length)) as Partial<AppApprovalRequest>
+    const parsed = JSON.parse(
+      content.slice(APPROVAL_PREFIX.length)
+    ) as Partial<AppApprovalRequest>
     if (
       parsed.type !== "app_approval" ||
       typeof parsed.appName !== "string" ||
@@ -109,7 +151,8 @@ export function detectAppApprovalRequest(input: {
     const isMentioned = aliases.some((alias) => alias.test(content))
 
     if (!isMentioned) continue
-    if (hasAppInConversation(input.conversationMessages, integration.name)) continue
+    if (hasAppInConversation(input.conversationMessages, integration.name))
+      continue
 
     return {
       type: "app_approval",

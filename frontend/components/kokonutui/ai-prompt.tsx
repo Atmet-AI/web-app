@@ -1446,6 +1446,15 @@ export default function AI_Prompt({
         return `@${request.appName} Search ${itemType} for "${values.query?.trim() ?? ""}"`;
       }
 
+      if (request.variant === "telegram-send-message") {
+        return [
+          `@${request.appName} Send a Telegram message with these exact fields:`,
+          `Chat ID: ${values.chat_id?.trim() ?? ""}`,
+          "Text:",
+          values.text?.trim() ?? "",
+        ].join("\n");
+      }
+
       return `@${request.appName} ${request.originalRequest}`;
     },
     []

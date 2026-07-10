@@ -31,9 +31,6 @@ export function ConnectOAuthModal({
   isSubmitting,
   errorMessage,
 }: ConnectOAuthModalProps) {
-  const isComposio = integration.connectorProvider === "composio"
-  const authProviderName = isComposio ? "Composio" : integration.name
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -55,7 +52,7 @@ export function ConnectOAuthModal({
             <div>
               <DialogTitle>Connect {integration.name} to Atmet</DialogTitle>
               <DialogDescription>
-                Review permissions before continuing to {authProviderName}.
+                Review permissions before authorizing access.
               </DialogDescription>
             </div>
           </div>
@@ -63,16 +60,23 @@ export function ConnectOAuthModal({
 
         <div className="space-y-4 px-5 py-4">
           <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">Permissions requested</h3>
+            <h3 className="text-sm font-semibold text-foreground">
+              Permissions requested
+            </h3>
             <ul className="space-y-2">
               {integration.scopes.map((scope) => (
-                <li key={scope.name} className="rounded-lg border border-border bg-background px-3 py-2">
+                <li
+                  key={scope.name}
+                  className="rounded-lg border border-border bg-background px-3 py-2"
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="neutral" size="sm">
                       {scope.name}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{scope.description}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {scope.description}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -82,8 +86,8 @@ export function ConnectOAuthModal({
             <div className="inline-flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5" />
               <p>
-                You will be redirected to {authProviderName} to authorize access. Atmet never
-                stores your password.
+                You will be redirected to authorize access. Atmet never stores
+                your password.
               </p>
             </div>
           </div>
@@ -105,7 +109,7 @@ export function ConnectOAuthModal({
             Cancel
           </Button>
           <Button type="button" onClick={onContinue} disabled={isSubmitting}>
-            Continue to {authProviderName}
+            Continue
           </Button>
         </div>
       </DialogContent>

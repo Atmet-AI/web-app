@@ -16,7 +16,11 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { CatalogIntegration, IntegrationCategory } from "@/lib/integrations-catalog"
+import { isIntegrationAvailable } from "@/lib/integrations/availability"
+import type {
+  CatalogIntegration,
+  IntegrationCategory,
+} from "@/lib/integrations-catalog"
 import { useWorkspace } from "@/lib/workspace-context"
 
 type Integration = CatalogIntegration & {
@@ -34,23 +38,17 @@ const categoryLabels: Record<IntegrationCategory, string> = {
   generic: "Generic",
 }
 
-function getAuthTypeLabel(authType: Integration["authType"]) {
-  return authType === "oauth" ? "OAuth 2.0" : "API Key"
-}
-
-function getConnectorLabel(integration: Integration) {
-  if (integration.connectorProvider === "composio") return "Composio"
-  return getAuthTypeLabel(integration.authType)
-}
-
 export default function AppsPage() {
   const { apiFetch } = useWorkspace()
   const [integrations, setIntegrations] = React.useState<Integration[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
   const [searchQuery, setSearchQuery] = React.useState("")
-  const [categoryFilter, setCategoryFilter] = React.useState<"all" | IntegrationCategory>("all")
-  const [selectedIntegration, setSelectedIntegration] = React.useState<Integration | null>(null)
+  const [categoryFilter, setCategoryFilter] = React.useState<
+    "all" | IntegrationCategory
+  >("all")
+  const [selectedIntegration, setSelectedIntegration] =
+    React.useState<Integration | null>(null)
 
   const loadIntegrations = React.useCallback(async () => {
     setIsLoading(true)
@@ -63,10 +61,13 @@ export default function AppsPage() {
         throw new Error("Failed to fetch integrations.")
       }
 
-      const res = (await response.json()) as { data?: { integrations: Integration[] } }
+      const res = (await response.json()) as {
+        data?: { integrations: Integration[] }
+      }
       setIntegrations(res.data?.integrations ?? [])
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Something went wrong."
+      const message =
+        error instanceof Error ? error.message : "Something went wrong."
       setErrorMessage(message)
     } finally {
       setIsLoading(false)
@@ -78,7 +79,10 @@ export default function AppsPage() {
   }, [loadIntegrations])
 
   const categories = React.useMemo(
-    () => Array.from(new Set(integrations.map((integration) => integration.category))),
+    () =>
+      Array.from(
+        new Set(integrations.map((integration) => integration.category))
+      ),
     [integrations]
   )
 
@@ -86,9 +90,11 @@ export default function AppsPage() {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
     return integrations.filter((integration) => {
-      const matchesCategory = categoryFilter === "all" || integration.category === categoryFilter
+      const matchesCategory =
+        categoryFilter === "all" || integration.category === categoryFilter
       const matchesQuery =
-        normalizedQuery.length === 0 || integration.name.toLowerCase().includes(normalizedQuery)
+        normalizedQuery.length === 0 ||
+        integration.name.toLowerCase().includes(normalizedQuery)
 
       return matchesCategory && matchesQuery
     })
@@ -99,7 +105,9 @@ export default function AppsPage() {
       <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div className="space-y-5">
           <header className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Apps</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Apps
+            </h1>
             <p className="text-sm text-muted-foreground">
               Browse and manage integrations available for your workspace.
             </p>
@@ -131,7 +139,9 @@ export default function AppsPage() {
                   key={category}
                   type="button"
                   size="sm"
-                  variant={categoryFilter === category ? "secondary" : "outline"}
+                  variant={
+                    categoryFilter === category ? "secondary" : "outline"
+                  }
                   onClick={() => setCategoryFilter(category)}
                   className="h-7 text-xs"
                 >
@@ -162,67 +172,11 @@ export default function AppsPage() {
           ) : filteredIntegrations.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
               {filteredIntegrations.map((integration) => (
-                <article
+                <IntegrationCard
                   key={integration.slug}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedIntegration(integration)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
-                      setSelectedIntegration(integration)
-                    }
-                  }}
-                  className="flex min-h-[184px] flex-col rounded-xl bg-sidebar p-3.5 transition-colors hover:bg-sidebar-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-sidebar-accent">
-                    <img
-                      src={integration.logo}
-                      alt={`${integration.name} logo`}
-                      className="h-5 w-5 object-contain"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none"
-                      }}
-                    />
-                  </span>
-
-                  <div className="mt-2.5 space-y-1">
-                    <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                      {integration.name}
-                    </h2>
-                    <p className="line-clamp-2 text-xs leading-4 text-muted-foreground">
-                      {integration.description}
-                    </p>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <Badge variant="blue" size="sm">
-                      {getConnectorLabel(integration)}
-                    </Badge>
-                    {integration.connected ? (
-                      <Badge variant="green" size="sm">
-                        Connected
-                      </Badge>
-                    ) : null}
-                  </div>
-
-                  <div
-                    className="mt-auto pt-3"
-                    onClick={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => event.stopPropagation()}
-                  >
-                    <Button
-                      render={<Link href={`/apps/${integration.slug}`} />}
-                      className={
-                        integration.connected
-                          ? "h-8 w-full rounded-md bg-sidebar text-xs font-medium text-foreground hover:bg-sidebar-accent"
-                          : "h-8 w-full rounded-md bg-black text-xs font-medium text-white hover:bg-black/90"
-                      }
-                    >
-                      {integration.connected ? "Manage" : "Connect"}
-                    </Button>
-                  </div>
-                </article>
+                  integration={integration}
+                  onPreview={() => setSelectedIntegration(integration)}
+                />
               ))}
             </div>
           ) : (
@@ -242,7 +196,7 @@ export default function AppsPage() {
         <DialogContent className="max-h-[85vh] overflow-y-auto p-0 sm:max-w-2xl">
           {selectedIntegration && (
             <>
-              <DialogHeader className="border-b border-border p-6">
+              <DialogHeader className="p-6">
                 <div className="flex items-start gap-4 pr-8">
                   <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-sidebar-accent">
                     <img
@@ -256,17 +210,28 @@ export default function AppsPage() {
                       <DialogTitle className="text-xl">
                         {selectedIntegration.name}
                       </DialogTitle>
-                      <Badge variant="blue" size="sm">
-                        {getConnectorLabel(selectedIntegration)}
+                      <Badge variant="neutral" size="sm">
+                        {categoryLabels[selectedIntegration.category]}
                       </Badge>
-                      <Badge
-                        variant={selectedIntegration.connected ? "green" : "neutral"}
-                        size="sm"
-                      >
-                        {selectedIntegration.connected ? "Connected" : "Not connected"}
-                      </Badge>
+                      {!isIntegrationAvailable(selectedIntegration) ? (
+                        <Badge variant="amber" size="sm">
+                          Soon
+                        </Badge>
+                      ) : null}
+                      {isIntegrationAvailable(selectedIntegration) ? (
+                        <Badge
+                          variant={
+                            selectedIntegration.connected ? "green" : "neutral"
+                          }
+                          size="sm"
+                        >
+                          {selectedIntegration.connected
+                            ? "Connected"
+                            : "Not connected"}
+                        </Badge>
+                      ) : null}
                     </div>
-                    <DialogDescription className="mt-2 text-pretty leading-6">
+                    <DialogDescription className="mt-2 leading-6 text-pretty">
                       {selectedIntegration.description}
                     </DialogDescription>
                   </div>
@@ -275,16 +240,22 @@ export default function AppsPage() {
 
               <div className="space-y-6 p-6">
                 <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="rounded-xl bg-muted/50 p-3">
-                    <p className="text-lg font-semibold">{selectedIntegration.triggers.length}</p>
+                  <div className="rounded-xl bg-sidebar/70 p-3">
+                    <p className="text-lg font-semibold">
+                      {selectedIntegration.triggers.length}
+                    </p>
                     <p className="text-xs text-muted-foreground">Triggers</p>
                   </div>
-                  <div className="rounded-xl bg-muted/50 p-3">
-                    <p className="text-lg font-semibold">{selectedIntegration.actions.length}</p>
-                    <p className="text-xs text-muted-foreground">Actions</p>
+                  <div className="rounded-xl bg-sidebar/70 p-3">
+                    <p className="text-lg font-semibold">
+                      {selectedIntegration.actions.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">MCP tools</p>
                   </div>
-                  <div className="rounded-xl bg-muted/50 p-3">
-                    <p className="text-lg font-semibold">{selectedIntegration.scopes.length}</p>
+                  <div className="rounded-xl bg-sidebar/70 p-3">
+                    <p className="text-lg font-semibold">
+                      {selectedIntegration.scopes.length}
+                    </p>
                     <p className="text-xs text-muted-foreground">Permissions</p>
                   </div>
                 </div>
@@ -293,31 +264,122 @@ export default function AppsPage() {
                   <h3 className="text-sm font-semibold text-foreground">
                     About this integration
                   </h3>
-                  <p className="mt-3 text-pretty text-sm leading-7 text-muted-foreground">
-                    {selectedIntegration.description} Connect {selectedIntegration.name} to
-                    bring its data and capabilities into your Atmet workflows. Once connected,
-                    teams can automate recurring work, respond to important activity, and keep
-                    information synchronized without switching between tools.
-                  </p>
-                  <p className="mt-3 text-pretty text-sm leading-7 text-muted-foreground">
-                    This integration uses {getConnectorLabel(selectedIntegration)} and
-                    requests only the permissions needed for the workflows you choose to run.
+                  <p className="mt-3 text-sm leading-7 text-pretty text-muted-foreground">
+                    {selectedIntegration.description} Connect{" "}
+                    {selectedIntegration.name} to bring its data and
+                    capabilities into your Atmet workflows. Once connected,
+                    teams can automate recurring work, respond to important
+                    activity, and keep information synchronized without
+                    switching between tools.
                   </p>
                 </section>
 
-                <Button
-                  render={<Link href={`/apps/${selectedIntegration.slug}`} />}
-                  className="w-full"
-                >
-                  {selectedIntegration.connected
-                    ? `Manage ${selectedIntegration.name}`
-                    : `Connect ${selectedIntegration.name}`}
-                </Button>
+                {isIntegrationAvailable(selectedIntegration) ? (
+                  <Button
+                    render={<Link href={`/apps/${selectedIntegration.slug}`} />}
+                    className="h-10 w-full"
+                  >
+                    {selectedIntegration.connected
+                      ? `Manage ${selectedIntegration.name}`
+                      : `Connect ${selectedIntegration.name}`}
+                  </Button>
+                ) : (
+                  <Button disabled className="h-10 w-full">
+                    Soon
+                  </Button>
+                )}
               </div>
             </>
           )}
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function IntegrationCard({
+  integration,
+  onPreview,
+}: {
+  integration: Integration
+  onPreview: () => void
+}) {
+  const isAvailable = isIntegrationAvailable(integration)
+
+  return (
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={onPreview}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onPreview()
+        }
+      }}
+      className="flex min-h-[184px] flex-col rounded-xl bg-sidebar p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-sidebar-accent">
+        <img
+          src={integration.logo}
+          alt={`${integration.name} logo`}
+          className="h-5 w-5 object-contain"
+          onError={(event) => {
+            event.currentTarget.style.display = "none"
+          }}
+        />
+      </span>
+
+      <div className="mt-2.5 space-y-1">
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">
+          {integration.name}
+        </h2>
+        <p className="line-clamp-2 text-xs leading-4 text-muted-foreground">
+          {integration.description}
+        </p>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <Badge variant="neutral" size="sm">
+          {categoryLabels[integration.category]}
+        </Badge>
+        {isAvailable ? null : (
+          <Badge variant="amber" size="sm">
+            Soon
+          </Badge>
+        )}
+        {integration.connected && isAvailable ? (
+          <Badge variant="green" size="sm">
+            Connected
+          </Badge>
+        ) : null}
+      </div>
+
+      <div
+        className="mt-auto pt-3"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        {isAvailable ? (
+          <Button
+            render={<Link href={`/apps/${integration.slug}`} />}
+            className={
+              integration.connected
+                ? "h-10 w-full rounded-lg bg-sidebar text-xs font-medium text-foreground hover:bg-sidebar-accent"
+                : "h-10 w-full rounded-lg bg-black text-xs font-medium text-white hover:bg-black/90"
+            }
+          >
+            {integration.connected ? "Manage" : "Connect"}
+          </Button>
+        ) : (
+          <Button
+            disabled
+            className="h-10 w-full rounded-lg text-xs font-medium"
+          >
+            Soon
+          </Button>
+        )}
+      </div>
+    </article>
   )
 }
