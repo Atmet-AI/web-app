@@ -19,6 +19,34 @@ type AuthListUser = Awaited<
   ReturnType<typeof supabaseAdmin.auth.admin.listUsers>
 >["data"]["users"][number]
 
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+async function getSeatLimit(workspaceId: string) {
+  const [settingsRes, workspaceRes] = await Promise.all([
+    supabaseAdmin.from("platform_setting").select("value").eq("key", "usage_limits").maybeSingle(),
+    supabaseAdmin.from("workspace").select("seat_limit").eq("id", workspaceId).maybeSingle(),
+  ])
+  const globalValue = settingsRes.data?.value && typeof settingsRes.data.value === "object"
+    ? settingsRes.data.value as Record<string, unknown>
+    : {}
+  return workspaceRes.data?.seat_limit ?? (readNumber(globalValue.seatLimit) || 10)
+}
+
+async function hasAvailableSeat(workspaceId: string) {
+  const [membersCountRes, seatLimit] = await Promise.all([
+    supabaseAdmin
+      .from("workspace_member")
+      .select("user_id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("status", "active"),
+    getSeatLimit(workspaceId),
+  ])
+
+  return (membersCountRes.count ?? 0) < seatLimit
+}
+
 async function findAuthUserByEmail(email: string): Promise<AuthListUser | null> {
   for (let page = 1; page <= 10; page += 1) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({
@@ -74,8 +102,24 @@ export async function POST(
   }
 
   const email = invitation.email.trim().toLowerCase()
-  const fullName = `${parsed.data.firstName} ${parsed.data.lastName}`.trim()
+
   const existingAuthUser = await findAuthUserByEmail(email)
+  const existingMembership = existingAuthUser
+    ? (
+        await supabaseAdmin
+          .from("workspace_member")
+          .select("user_id, status")
+          .eq("workspace_id", invitation.workspace_id)
+          .eq("user_id", existingAuthUser.id)
+          .maybeSingle()
+      ).data
+    : null
+
+  if (existingMembership?.status !== "active" && !(await hasAvailableSeat(invitation.workspace_id))) {
+    return Errors.badRequest("This workspace has reached its seat limit. Ask an owner or admin to add seats before accepting.")
+  }
+
+  const fullName = `${parsed.data.firstName} ${parsed.data.lastName}`.trim()
   const metadata = {
     ...(existingAuthUser?.user_metadata ?? {}),
     full_name: fullName,
@@ -126,15 +170,15 @@ export async function POST(
     { onConflict: "id" }
   )
 
-  // Check not already a member
-  const { data: existing } = await supabaseAdmin
-    .from("workspace_member")
-    .select("user_id")
-    .eq("workspace_id", invitation.workspace_id)
-    .eq("user_id", authUser.id)
-    .maybeSingle()
-
-  if (!existing) {
+  if (existingMembership) {
+    if (existingMembership.status !== "active") {
+      await supabaseAdmin
+        .from("workspace_member")
+        .update({ role: invitation.role, status: "active" })
+        .eq("workspace_id", invitation.workspace_id)
+        .eq("user_id", authUser.id)
+    }
+  } else {
     await supabaseAdmin.from("workspace_member").insert({
       workspace_id: invitation.workspace_id,
       user_id: authUser.id,

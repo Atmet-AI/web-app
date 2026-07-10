@@ -17,7 +17,6 @@ import {
 import { BarInteractive } from "@/components/charts/bar-interactive"
 import { ChartBarPattern } from "@/components/examples/c-chart-5"
 import { Pattern as EmptyIntegrationsPattern } from "@/components/examples/c-empty-19"
-import { ColorSelector } from "@/components/color-selector"
 import { Badge, type BadgeVariant } from "@/registry/spell-ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -248,12 +247,14 @@ type PlatformRole =
   | "Admin"
   | "Owner"
   | "Member"
+  | "Pending"
 
 const platformRoles: readonly PlatformRole[] = [
   "Super Admin",
   "Admin",
   "Owner",
   "Member",
+  "Pending",
 ]
 
 type WorkspaceMember = {
@@ -261,6 +262,7 @@ type WorkspaceMember = {
   name: string
   email: string
   role: PlatformRole
+  membershipStatus?: "active" | "pending"
   profileRole: string
   lastLogin: string
   initials: string
@@ -560,128 +562,34 @@ type OpenSettingsPanelDetail = {
   returnToAdminSection?: AdminConsoleSection
 }
 
-const INITIAL_VISIBLE_CHATS = 4
-const CHAT_LOAD_STEP = 10
 const APPEARANCE_SETTINGS_STORAGE_KEY = "atmet-appearance-settings"
 const PERSONALIZATION_SETTINGS_STORAGE_KEY = "atmet-personalization-settings"
 const HELP_DOCS_EXTERNAL_URL = "https://atmet.ai/help-docs"
-const CHANALOGE_EXTERNAL_URL = "https://chanaloge.com"
+const CHANGELOGS_EXTERNAL_URL = "https://chanaloge.com"
 const BILLING_PORTAL_EXTERNAL_URL = "#"
-const appearanceColorOptions = [
-  {
-    id: "graphite",
-    label: "Graphite",
-    primary: "#111111",
-    primaryForeground: "#ffffff",
-    border: "rgb(23 23 23 / 16%)",
-    input: "rgb(23 23 23 / 18%)",
-    ring: "rgb(23 23 23 / 30%)",
-  },
-  {
-    id: "cobalt",
-    label: "Cobalt",
-    primary: "#1e90ff",
-    primaryForeground: "#ffffff",
-    border: "rgb(30 144 255 / 22%)",
-    input: "rgb(30 144 255 / 22%)",
-    ring: "rgb(30 144 255 / 36%)",
-  },
-  {
-    id: "emerald",
-    label: "Emerald",
-    primary: "#059669",
-    primaryForeground: "#ffffff",
-    border: "rgb(5 150 105 / 22%)",
-    input: "rgb(5 150 105 / 22%)",
-    ring: "rgb(5 150 105 / 36%)",
-  },
-  {
-    id: "violet",
-    label: "Violet",
-    primary: "#7c3aed",
-    primaryForeground: "#ffffff",
-    border: "rgb(124 58 237 / 22%)",
-    input: "rgb(124 58 237 / 22%)",
-    ring: "rgb(124 58 237 / 36%)",
-  },
-  {
-    id: "rose",
-    label: "Rose",
-    primary: "#e11d48",
-    primaryForeground: "#ffffff",
-    border: "rgb(225 29 72 / 22%)",
-    input: "rgb(225 29 72 / 22%)",
-    ring: "rgb(225 29 72 / 36%)",
-  },
-  {
-    id: "amber",
-    label: "Amber",
-    primary: "#d97706",
-    primaryForeground: "#ffffff",
-    border: "rgb(217 119 6 / 22%)",
-    input: "rgb(217 119 6 / 22%)",
-    ring: "rgb(217 119 6 / 36%)",
-  },
-  {
-    id: "cyan",
-    label: "Cyan",
-    primary: "#0891b2",
-    primaryForeground: "#ffffff",
-    border: "rgb(8 145 178 / 22%)",
-    input: "rgb(8 145 178 / 22%)",
-    ring: "rgb(8 145 178 / 36%)",
-  },
-  {
-    id: "teal",
-    label: "Teal",
-    primary: "#0f766e",
-    primaryForeground: "#ffffff",
-    border: "rgb(15 118 110 / 22%)",
-    input: "rgb(15 118 110 / 22%)",
-    ring: "rgb(15 118 110 / 36%)",
-  },
-  {
-    id: "slate",
-    label: "Slate",
-    primary: "#334155",
-    primaryForeground: "#ffffff",
-    border: "rgb(51 65 85 / 22%)",
-    input: "rgb(51 65 85 / 22%)",
-    ring: "rgb(51 65 85 / 36%)",
-  },
-] as const
 
 type AppearanceTheme = "light" | "dark" | "system"
-type AppearanceColorId = (typeof appearanceColorOptions)[number]["id"]
 type FontScale = "smaller" | "default" | "bigger"
 type AppearanceSettings = {
   theme: AppearanceTheme
-  colorId: AppearanceColorId
   timezone: string
   language: string
   fontScale: FontScale
 }
 
-function applyAppearanceColor(colorId: AppearanceColorId) {
-  if (typeof document === "undefined") return
-  const targetColor =
-    appearanceColorOptions.find((option) => option.id === colorId) ??
-    appearanceColorOptions[1]
-  const root = document.documentElement
+function appearanceSettingsStorageKey(userKey?: string | null) {
+  return userKey ? `${APPEARANCE_SETTINGS_STORAGE_KEY}:${userKey}` : APPEARANCE_SETTINGS_STORAGE_KEY
+}
 
-  root.style.setProperty("--primary", targetColor.primary)
-  root.style.setProperty("--primary-foreground", targetColor.primaryForeground)
-  root.style.setProperty("--sidebar-primary", targetColor.primary)
-  root.style.setProperty(
-    "--sidebar-primary-foreground",
-    targetColor.primaryForeground
-  )
-  root.style.setProperty("--sidebar-ring", targetColor.ring)
-  root.style.setProperty("--ring", targetColor.primary)
-  root.style.removeProperty("--accent")
-  root.style.removeProperty("--border")
-  root.style.removeProperty("--input")
-  root.style.removeProperty("--sidebar-border")
+function applyFixedPrimaryColor() {
+  if (typeof document === "undefined") return
+  const root = document.documentElement
+  root.style.setProperty("--primary", "#1e90ff")
+  root.style.setProperty("--primary-foreground", "#ffffff")
+  root.style.setProperty("--sidebar-primary", "#1e90ff")
+  root.style.setProperty("--sidebar-primary-foreground", "#ffffff")
+  root.style.setProperty("--sidebar-ring", "#1e90ff")
+  root.style.setProperty("--ring", "#1e90ff")
 }
 
 function applyGlobalFontScale(fontScale: FontScale) {
@@ -1467,10 +1375,12 @@ function NotificationSettingsContent() {
 function GeneralSettingsContent({
   currentTheme,
   setTheme,
+  userPreferenceKey,
   onUnsavedChangesChange,
 }: {
   currentTheme?: string
   setTheme: (theme: string) => void
+  userPreferenceKey?: string | null
   onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void
 }) {
   const inferredTimezone = React.useMemo(() => {
@@ -1501,11 +1411,10 @@ function GeneralSettingsContent({
     "German",
     "Japanese",
   ] as const
-  const initializedRef = React.useRef(false)
+  const initializedUserKeyRef = React.useRef<string | null | undefined>(undefined)
   const [appearanceSettings, setAppearanceSettings] =
     React.useState<AppearanceSettings>({
       theme: "system",
-      colorId: "cobalt",
       timezone: inferredTimezone,
       language: "English",
       fontScale: "default",
@@ -1513,15 +1422,14 @@ function GeneralSettingsContent({
   const [savedAppearanceSettings, setSavedAppearanceSettings] =
     React.useState<AppearanceSettings>({
       theme: "system",
-      colorId: "cobalt",
       timezone: inferredTimezone,
       language: "English",
       fontScale: "default",
     })
 
   React.useEffect(() => {
-    if (initializedRef.current) return
-    initializedRef.current = true
+    if (initializedUserKeyRef.current === userPreferenceKey) return
+    initializedUserKeyRef.current = userPreferenceKey
 
     const fallbackTheme: AppearanceTheme =
       currentTheme === "light" ||
@@ -1531,7 +1439,6 @@ function GeneralSettingsContent({
         : "system"
     const fallbackSettings: AppearanceSettings = {
       theme: fallbackTheme,
-      colorId: "cobalt",
       timezone: inferredTimezone,
       language: "English",
       fontScale: "default",
@@ -1540,73 +1447,35 @@ function GeneralSettingsContent({
     if (typeof window === "undefined") {
       setAppearanceSettings(fallbackSettings)
       setSavedAppearanceSettings(fallbackSettings)
+      applyFixedPrimaryColor()
       return
     }
 
-    const rawSettings = window.localStorage.getItem(
-      APPEARANCE_SETTINGS_STORAGE_KEY
-    )
+    const storageKey = appearanceSettingsStorageKey(userPreferenceKey)
+    const rawSettings =
+      window.localStorage.getItem(storageKey) ??
+      window.localStorage.getItem(APPEARANCE_SETTINGS_STORAGE_KEY)
     if (!rawSettings) {
       setAppearanceSettings(fallbackSettings)
       setSavedAppearanceSettings(fallbackSettings)
-      applyAppearanceColor(fallbackSettings.colorId)
+      applyFixedPrimaryColor()
       applyGlobalFontScale(fallbackSettings.fontScale)
       return
     }
 
-    try {
-      const parsed = JSON.parse(rawSettings) as Partial<AppearanceSettings>
-      const nextSettings: AppearanceSettings = {
-        theme:
-          parsed.theme === "light" ||
-          parsed.theme === "dark" ||
-          parsed.theme === "system"
-            ? parsed.theme
-            : fallbackSettings.theme,
-        colorId: appearanceColorOptions.some(
-          (option) => option.id === parsed.colorId
-        )
-          ? (parsed.colorId as AppearanceColorId)
-          : fallbackSettings.colorId,
-        timezone:
-          typeof parsed.timezone === "string"
-            ? parsed.timezone
-            : fallbackSettings.timezone,
-        language:
-          typeof parsed.language === "string"
-            ? parsed.language
-            : fallbackSettings.language,
-        fontScale:
-          parsed.fontScale === "smaller" ||
-          parsed.fontScale === "default" ||
-          parsed.fontScale === "bigger"
-            ? parsed.fontScale
-            : fallbackSettings.fontScale,
-      }
-
-      setAppearanceSettings(nextSettings)
-      setSavedAppearanceSettings(nextSettings)
-      applyAppearanceColor(nextSettings.colorId)
-      applyGlobalFontScale(nextSettings.fontScale)
-      setTheme(nextSettings.theme)
-    } catch {
-      setAppearanceSettings(fallbackSettings)
-      setSavedAppearanceSettings(fallbackSettings)
-      applyAppearanceColor(fallbackSettings.colorId)
-      applyGlobalFontScale(fallbackSettings.fontScale)
-    }
-  }, [currentTheme, inferredTimezone, setTheme])
+    const nextSettings = parseStoredAppearanceSettings(rawSettings, fallbackSettings)
+    setAppearanceSettings(nextSettings)
+    setSavedAppearanceSettings(nextSettings)
+    applyFixedPrimaryColor()
+    applyGlobalFontScale(nextSettings.fontScale)
+    setTheme(nextSettings.theme)
+  }, [currentTheme, inferredTimezone, setTheme, userPreferenceKey])
 
   const hasUnsavedChanges =
     appearanceSettings.theme !== savedAppearanceSettings.theme ||
-    appearanceSettings.colorId !== savedAppearanceSettings.colorId ||
     appearanceSettings.timezone !== savedAppearanceSettings.timezone ||
     appearanceSettings.language !== savedAppearanceSettings.language ||
     appearanceSettings.fontScale !== savedAppearanceSettings.fontScale
-  const selectedAppearanceColor =
-    appearanceColorOptions.find(
-      (option) => option.id === appearanceSettings.colorId
-    ) ?? appearanceColorOptions[1]
 
   const themePreviewImageById: Record<"light" | "dark" | "system", string> = {
     light: "/white.png",
@@ -1618,12 +1487,12 @@ function GeneralSettingsContent({
     (nextSettings: AppearanceSettings) => {
       if (typeof window !== "undefined") {
         window.localStorage.setItem(
-          APPEARANCE_SETTINGS_STORAGE_KEY,
+          appearanceSettingsStorageKey(userPreferenceKey),
           JSON.stringify(nextSettings)
         )
       }
     },
-    []
+    [userPreferenceKey]
   )
 
   React.useEffect(() => {
@@ -1697,41 +1566,6 @@ function GeneralSettingsContent({
                 )
               })}
             </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-muted-foreground">
-              <Palette className="h-3.5 w-3.5 text-muted-foreground/80" />
-              Primary color
-            </Label>
-            <ColorSelector
-              colors={appearanceColorOptions.map((colorOption) => colorOption.primary)}
-              defaultValue={selectedAppearanceColor.primary}
-              onColorSelect={(selectedColor) => {
-                const matchedColor = appearanceColorOptions.find(
-                  (colorOption) => colorOption.primary === selectedColor
-                )
-                if (!matchedColor) return
-                setAppearanceSettings((prev) => ({
-                  ...prev,
-                  colorId: matchedColor.id,
-                }))
-                setSavedAppearanceSettings((previousSaved) => ({
-                  ...previousSaved,
-                  colorId: matchedColor.id,
-                }))
-                applyAppearanceColor(matchedColor.id)
-                const nextSettings: AppearanceSettings = {
-                  ...appearanceSettings,
-                  colorId: matchedColor.id,
-                }
-                persistAppearanceSettings(nextSettings)
-              }}
-              className="flex flex-wrap items-center gap-2"
-            />
-            <p className="text-xs text-muted-foreground">
-              Applies to primary buttons and focused field borders.
-            </p>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -1869,11 +1703,11 @@ function GeneralSettingsContent({
           onClick={() => {
             setSavedAppearanceSettings(appearanceSettings)
             setTheme(appearanceSettings.theme)
-            applyAppearanceColor(appearanceSettings.colorId)
+            applyFixedPrimaryColor()
             applyGlobalFontScale(appearanceSettings.fontScale)
             if (typeof window !== "undefined") {
               window.localStorage.setItem(
-                APPEARANCE_SETTINGS_STORAGE_KEY,
+                appearanceSettingsStorageKey(userPreferenceKey),
                 JSON.stringify(appearanceSettings)
               )
             }
@@ -2249,6 +2083,7 @@ function MembersSettingsContent({
     Admin: "blue",
     Owner: "blue",
     Member: "neutral",
+    Pending: "yellow",
   }
   const appStatusClasses: Record<WorkspaceMemberApp["status"], BadgeVariant> = {
     Connected: "green",
@@ -2284,40 +2119,70 @@ function MembersSettingsContent({
               status: string
             } | null
           }>
+          pendingInvitations?: Array<{
+            id: string
+            email: string
+            role: "member"
+            status: "pending"
+            expires_at: string
+            created_at: string
+          }>
         }
       }
       setCurrentMemberRole(payload.data?.currentMemberRole ?? null)
       setSeatsLimit(payload.data?.seatLimit ?? 10)
       setMembers(
-        (payload.data?.members ?? []).map((row) => {
-          const user = Array.isArray(row.user) ? row.user[0] : row.user
-          const name = user?.full_name || user?.email || "Unknown user"
-          const initials = deriveInitialsFromName(name)
-          const role: PlatformRole =
-            row.role === "owner"
-              ? "Owner"
-              : row.role === "admin"
-                ? "Admin"
-              : "Member"
-          return {
-            id: user?.id ?? `${row.role}-${row.joined_at}`,
-            name,
-            email: user?.email ?? "",
-            role,
-            profileRole: user?.status ?? "active",
-            lastLogin: row.joined_at
-              ? new Date(row.joined_at).toLocaleDateString()
-              : "Unknown",
-            initials,
-            avatarUrl: user?.avatar_url ?? "",
+        [
+          ...(payload.data?.members ?? []).map((row) => {
+            const user = Array.isArray(row.user) ? row.user[0] : row.user
+            const name = user?.full_name || user?.email || "Unknown user"
+            const initials = deriveInitialsFromName(name)
+            const role: PlatformRole =
+              row.role === "owner"
+                ? "Owner"
+                : row.role === "admin"
+                  ? "Admin"
+                  : "Member"
+            return {
+              id: user?.id ?? `${row.role}-${row.joined_at}`,
+              name,
+              email: user?.email ?? "",
+              role,
+              membershipStatus: "active" as const,
+              profileRole: user?.status ?? "active",
+              lastLogin: row.joined_at
+                ? new Date(row.joined_at).toLocaleDateString()
+                : "Unknown",
+              initials,
+              avatarUrl: user?.avatar_url ?? "",
+              creditsUsage: {
+                allTime: 0,
+                thisMonth: 0,
+                thisWeek: 0,
+              },
+              integratedApps: [],
+            }
+          }),
+          ...(payload.data?.pendingInvitations ?? []).map((invitation) => ({
+            id: `invitation-${invitation.id}`,
+            name: invitation.email,
+            email: invitation.email,
+            role: "Pending" as const,
+            membershipStatus: "pending" as const,
+            profileRole: `Invited as ${invitation.role}`,
+            lastLogin: invitation.created_at
+              ? `Invited ${new Date(invitation.created_at).toLocaleDateString()}`
+              : "Pending",
+            initials: deriveInitialsFromName(invitation.email),
+            avatarUrl: "",
             creditsUsage: {
               allTime: 0,
               thisMonth: 0,
               thisWeek: 0,
             },
             integratedApps: [],
-          }
-        })
+          })),
+        ]
       )
     } finally {
       setIsMembersLoading(false)
@@ -2341,11 +2206,17 @@ function MembersSettingsContent({
       )
     })
   }, [searchQuery, roleFilter, workspaceMembers])
-  const seatsUsed = workspaceMembers.length
+  const seatsUsed = workspaceMembers.filter(
+    (member) => member.membershipStatus !== "pending"
+  ).length
   const seatsProgress = Math.min(100, (seatsUsed / Math.max(seatsLimit, 1)) * 100)
   const selectedMember = React.useMemo(
     () =>
-      workspaceMembers.find((member) => member.id === selectedMemberId) ?? null,
+      workspaceMembers.find(
+        (member) =>
+          member.id === selectedMemberId &&
+          member.membershipStatus !== "pending"
+      ) ?? null,
     [selectedMemberId, workspaceMembers]
   )
   const selectedCreditsUsage = React.useMemo(() => {
@@ -2836,8 +2707,16 @@ function MembersSettingsContent({
                   {filteredMembers.map((member) => (
                     <tr
                       key={member.id}
-                      onClick={() => setSelectedMemberId(member.id)}
-                      className="cursor-pointer border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/35"
+                      onClick={() => {
+                        if (member.membershipStatus === "pending") return
+                        setSelectedMemberId(member.id)
+                      }}
+                      className={cn(
+                        "border-b border-border/70 transition-colors last:border-b-0",
+                        member.membershipStatus === "pending"
+                          ? "cursor-default bg-muted/15"
+                          : "cursor-pointer hover:bg-muted/35"
+                      )}
                     >
                       <td className="px-2.5 py-1.5 pe-3">
                         <div className="flex items-center gap-2.5">
@@ -2870,7 +2749,7 @@ function MembersSettingsContent({
                         {member.lastLogin}
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        {canInviteMembers ? (
+                        {canInviteMembers && member.membershipStatus !== "pending" ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger
                               render={
@@ -3687,8 +3566,8 @@ function IntegrationsSettingsContent() {
       connected_at?: string
     }>
   >([])
-  const [forcedAppsByName, setForcedAppsByName] = React.useState<
-    Record<string, boolean>
+  const [memberAccessById, setMemberAccessById] = React.useState<
+    Record<string, { connectedCount: number; appNames: string[] }>
   >({})
 
   React.useEffect(() => {
@@ -3703,7 +3582,16 @@ function IntegrationsSettingsContent() {
       apiFetch(`/api/workspaces/${activeWorkspaceId}/members`).then((r) => r.json()),
     ])
       .then(([integrationsRes, membersRes]: [
-        { data?: { integrations?: typeof integrations } },
+        {
+          data?: {
+            integrations?: typeof integrations
+            memberAccess?: Array<{
+              userId: string
+              connectedCount: number
+              appNames: string[]
+            }>
+          }
+        },
         {
           data?: {
             members?: Array<{
@@ -3721,6 +3609,17 @@ function IntegrationsSettingsContent() {
         },
       ]) => {
         setIntegrations(integrationsRes.data?.integrations ?? [])
+        setMemberAccessById(
+          Object.fromEntries(
+            (integrationsRes.data?.memberAccess ?? []).map((access) => [
+              access.userId,
+              {
+                connectedCount: access.connectedCount,
+                appNames: access.appNames,
+              },
+            ])
+          )
+        )
         const nextMembers = (membersRes.data?.members ?? []).map((row) => {
           const user = Array.isArray(row.user) ? row.user[0] : row.user
           const name = user?.full_name || user?.email || "Unknown user"
@@ -3743,6 +3642,7 @@ function IntegrationsSettingsContent() {
         setIntegrations([])
         setMembers([])
         setMemberCount(0)
+        setMemberAccessById({})
       })
   }, [activeWorkspaceId, apiFetch])
 
@@ -3755,10 +3655,12 @@ function IntegrationsSettingsContent() {
         category: integration.category,
         status: integration.status ?? "active",
         connectedAt: integration.connected_at ?? null,
-        connectedUsers: memberCount,
+        connectedUsers: Object.values(memberAccessById).filter((access) =>
+          access.appNames.includes(integration.name)
+        ).length,
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [integrations, memberCount])
+  }, [integrations, memberAccessById])
 
   const categoryOptions = React.useMemo(
     () => Array.from(new Set(appRows.map((app) => app.category))).sort(),
@@ -3778,19 +3680,11 @@ function IntegrationsSettingsContent() {
     })
   }, [appRows, categoryFilter, nameFilter])
 
-  const forcedAppNames = React.useMemo(
-    () =>
-      Object.entries(forcedAppsByName)
-        .filter(([, isForced]) => isForced)
-        .map(([name]) => name),
-    [forcedAppsByName]
-  )
-
   const categoryFilterLabel =
     categoryFilter === "all" ? "All categories" : categoryFilter
   const hasAnyConnectedApps = appRows.length > 0
   const handleDisconnectApp = React.useCallback(
-    async (appSlug: string, appName: string) => {
+    async (appSlug: string) => {
       const response = await apiFetch(`/api/integrations/${appSlug}`, {
         method: "DELETE",
       }).catch(() => null)
@@ -3802,10 +3696,6 @@ function IntegrationsSettingsContent() {
             : integration
         )
       )
-      setForcedAppsByName((previous) => ({
-        ...previous,
-        [appName]: false,
-      }))
     },
     [apiFetch]
   )
@@ -3916,11 +3806,6 @@ function IntegrationsSettingsContent() {
                 </thead>
                 <tbody>
                   {filteredAppRows.map((app) => {
-                    const isForced = Boolean(forcedAppsByName[app.name])
-                    const connectedUsersCount = isForced
-                      ? memberCount
-                      : app.connectedUsers
-
                     return (
                       <tr
                         key={app.name}
@@ -3936,10 +3821,10 @@ function IntegrationsSettingsContent() {
                                 {app.name}
                               </span>
                               <Badge
-                                variant={isForced ? "blue" : "neutral"}
+                                variant="blue"
                                 className="shrink-0"
                               >
-                                {isForced ? "Forced" : "Optional"}
+                                Personal
                               </Badge>
                             </div>
                           </div>
@@ -3948,7 +3833,7 @@ function IntegrationsSettingsContent() {
                           {app.category}
                         </td>
                         <td className="px-2.5 py-1.5 text-foreground">
-                          {connectedUsersCount} / {memberCount}
+                          {app.connectedUsers} / {memberCount}
                         </td>
                         <td className="px-2.5 py-1.5 text-right">
                           <div className="flex flex-nowrap justify-end gap-1.5">
@@ -3957,21 +3842,7 @@ function IntegrationsSettingsContent() {
                               size="xs"
                               variant="ghost"
                               className="shrink-0 rounded-[min(var(--radius-md),12px)] border border-transparent bg-sidebar text-foreground hover:bg-sidebar-accent"
-                              onClick={() =>
-                                setForcedAppsByName((previous) => ({
-                                  ...previous,
-                                  [app.name]: !isForced,
-                                }))
-                              }
-                            >
-                              {isForced ? "Disable force" : "Force to all"}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="xs"
-                              variant="ghost"
-                              className="shrink-0 rounded-[min(var(--radius-md),12px)] border border-transparent bg-sidebar text-foreground hover:bg-sidebar-accent"
-                              onClick={() => void handleDisconnectApp(app.slug, app.name)}
+                              onClick={() => void handleDisconnectApp(app.slug)}
                             >
                               Unconnect
                             </Button>
@@ -3988,8 +3859,11 @@ function IntegrationsSettingsContent() {
           )}
         </>
       ) : (
-        hasAnyConnectedApps || forcedAppNames.length > 0 ? (
+        members.length > 0 ? (
           <section className="overflow-hidden rounded-xl border border-border bg-background">
+            <div className="border-b border-border px-2.5 py-2 text-[11px] text-muted-foreground">
+              Connected apps are personal. Members must connect their own accounts before Atmet can use them.
+            </div>
             <table className="w-full table-fixed border-collapse text-[0.8rem]">
               <thead>
                 <tr className="border-b border-border text-muted-foreground">
@@ -4000,19 +3874,17 @@ function IntegrationsSettingsContent() {
                     Role
                   </th>
                   <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
-                    Effective integrations
+                    Personal integrations
                   </th>
                   <th className="w-[26%] px-2.5 py-1.5 text-left font-medium">
-                    Forced integrations
+                    Connected apps
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {members.map((member) => {
-                  const effectiveSet = new Set([
-                    ...appRows.map((app) => app.name),
-                    ...forcedAppNames,
-                  ])
+                  const access = memberAccessById[member.id]
+                  const appNames = access?.appNames ?? []
 
                   return (
                     <tr
@@ -4045,12 +3917,12 @@ function IntegrationsSettingsContent() {
                         {member.role}
                       </td>
                       <td className="px-2.5 py-1.5 text-foreground">
-                        {effectiveSet.size}
+                        {access?.connectedCount ?? 0}
                       </td>
                       <td className="px-2.5 py-1.5">
-                        {forcedAppNames.length > 0 ? (
+                        {appNames.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
-                            {forcedAppNames.map((appName) => (
+                            {appNames.map((appName) => (
                               <Badge
                                 key={`${member.id}-${appName}`}
                                 variant="blue"
@@ -8468,6 +8340,41 @@ function renderAdminConsoleContent(section: AdminConsoleSection, workspaceNames:
   }
 }
 
+function parseStoredAppearanceSettings(
+  rawSettings: string | null,
+  fallbackSettings: AppearanceSettings
+) {
+  if (!rawSettings) return fallbackSettings
+
+  try {
+    const parsed = JSON.parse(rawSettings) as Partial<AppearanceSettings>
+    return {
+      theme:
+        parsed.theme === "light" ||
+        parsed.theme === "dark" ||
+        parsed.theme === "system"
+          ? parsed.theme
+          : fallbackSettings.theme,
+      timezone:
+        typeof parsed.timezone === "string"
+          ? parsed.timezone
+          : fallbackSettings.timezone,
+      language:
+        typeof parsed.language === "string"
+          ? parsed.language
+          : fallbackSettings.language,
+      fontScale:
+        parsed.fontScale === "smaller" ||
+        parsed.fontScale === "default" ||
+        parsed.fontScale === "bigger"
+          ? parsed.fontScale
+          : fallbackSettings.fontScale,
+    } satisfies AppearanceSettings
+  } catch {
+    return fallbackSettings
+  }
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -8537,6 +8444,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     .slice(0, 2)
     .map((t) => t[0]?.toUpperCase() ?? "")
     .join("") || "U"
+  const userPreferenceKey = liveUser?.id ?? liveUser?.email ?? null
+
+  React.useEffect(() => {
+    applyFixedPrimaryColor()
+    if (typeof window === "undefined" || !userPreferenceKey) return
+
+    const fallbackSettings: AppearanceSettings = {
+      theme: "system",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      language: "English",
+      fontScale: "default",
+    }
+    const rawSettings =
+      window.localStorage.getItem(appearanceSettingsStorageKey(userPreferenceKey)) ??
+      window.localStorage.getItem(APPEARANCE_SETTINGS_STORAGE_KEY)
+    const settings = parseStoredAppearanceSettings(rawSettings, fallbackSettings)
+
+    setTheme(settings.theme)
+    applyGlobalFontScale(settings.fontScale)
+  }, [setTheme, userPreferenceKey])
 
   const handleSignOut = React.useCallback(async () => {
     try {
@@ -8608,7 +8535,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       if (workspaceId === selectedWorkspaceId) return
       setActiveWorkspace(workspaceId)
       setStoredChats([])
-      setVisibleChatsCount(INITIAL_VISIBLE_CHATS)
       setEditingChatId(null)
       setEditingChatTitle("")
       setMembersQuickSearchQuery("")
@@ -8638,9 +8564,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const createWorkspaceImageInputRef = React.useRef<HTMLInputElement>(null)
   const [storedChats, setStoredChats] = React.useState<StoredChatItem[]>([])
   const [isChatsExpanded, setIsChatsExpanded] = React.useState(true)
-  const [visibleChatsCount, setVisibleChatsCount] = React.useState(
-    INITIAL_VISIBLE_CHATS
-  )
   const [editingChatId, setEditingChatId] = React.useState<string | null>(null)
   const [editingChatTitle, setEditingChatTitle] = React.useState("")
   const discardNextRenameSubmitRef = React.useRef(false)
@@ -8683,17 +8606,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       return b.updatedAt - a.updatedAt
     })
   }, [storedChats])
-  const visibleChats = React.useMemo(
-    () => sortedChats.slice(0, visibleChatsCount),
-    [sortedChats, visibleChatsCount]
-  )
   const pinnedChats = React.useMemo(
-    () => visibleChats.filter((chat) => Boolean(chat.pinned)),
-    [visibleChats]
+    () => sortedChats.filter((chat) => Boolean(chat.pinned)),
+    [sortedChats]
   )
   const unpinnedChats = React.useMemo(
-    () => visibleChats.filter((chat) => !chat.pinned),
-    [visibleChats]
+    () => sortedChats.filter((chat) => !chat.pinned),
+    [sortedChats]
   )
 
   const persistStoredChats = React.useCallback((nextChats: StoredChatItem[]) => {
@@ -9133,19 +9052,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarGroup className="mt-12 pt-2 group-data-[collapsible=icon]:hidden">
+        <SidebarGroup className="min-h-0 flex-1 pt-2 group-data-[collapsible=icon]:hidden">
           <div className="mb-1 flex items-center justify-between pr-2 pl-0">
             <button
               type="button"
-              onClick={() =>
-                setIsChatsExpanded((prev) => {
-                  const nextIsExpanded = !prev
-                  if (!nextIsExpanded) {
-                    setVisibleChatsCount(INITIAL_VISIBLE_CHATS)
-                  }
-                  return nextIsExpanded
-                })
-              }
+              onClick={() => setIsChatsExpanded((prev) => !prev)}
               aria-label={isChatsExpanded ? "Collapse chats" : "Expand chats"}
               className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
@@ -9170,12 +9081,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             className={cn(
               "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
               isChatsExpanded
-                ? "grid-rows-[1fr] opacity-100"
+                ? "min-h-0 flex-1 grid-rows-[1fr] opacity-100"
                 : "pointer-events-none grid-rows-[0fr] opacity-0"
             )}
           >
-            <div className="overflow-hidden">
-              <SidebarGroupContent>
+            <div className="min-h-0 overflow-hidden">
+              <SidebarGroupContent className="flex h-full min-h-0 flex-col">
+                <div
+                  className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto pr-1"
+                >
                 <SidebarMenu>
                   {pinnedChats.map((chat, index) => (
                     <SidebarMenuItem
@@ -9414,22 +9328,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     </SidebarMenuItem>
                   )}
                 </SidebarMenu>
-                {sortedChats.length > visibleChatsCount && (
-                  <div className="mt-1 flex justify-center px-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setVisibleChatsCount((prev) =>
-                          Math.min(prev + CHAT_LOAD_STEP, sortedChats.length)
-                        )
-                      }
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      aria-label="Show more chats"
-                    >
-                      <IconChevronDown className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
+                </div>
               </SidebarGroupContent>
             </div>
           </div>
@@ -9442,14 +9341,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="group-data-[collapsible=icon]:justify-center"
               render={
                 <a
-                  href={CHANALOGE_EXTERNAL_URL}
+                  href={CHANGELOGS_EXTERNAL_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                 />
               }
             >
               <RefreshCw className="h-3.5 w-3.5 shrink-0 opacity-80" />
-              <span>chanaloge</span>
+              <span>Changelogs</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           {isPlatformAdmin ? (
@@ -9574,6 +9473,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <GeneralSettingsContent
                           currentTheme={theme}
                           setTheme={setTheme}
+                          userPreferenceKey={userPreferenceKey}
                           onUnsavedChangesChange={setHasGeneralUnsavedChanges}
                         />
                       ) : activeSettingsSection === "Workspace" ? (

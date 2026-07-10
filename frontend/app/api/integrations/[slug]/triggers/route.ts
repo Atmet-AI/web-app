@@ -135,6 +135,7 @@ export async function POST(
     .select("id, external_connection_id")
     .eq("workspace_id", ws.workspaceId)
     .eq("provider_id", provider.id)
+    .eq("created_by", auth.user.id)
     .eq("connector_provider", "composio")
     .eq("status", "active")
     .order("connected_at", { ascending: false })

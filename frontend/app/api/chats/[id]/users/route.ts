@@ -1,8 +1,25 @@
 import { type NextRequest } from "next/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { getUser } from "@/lib/api/auth"
 import { ok, Errors } from "@/lib/api/response"
 import { supabaseAdmin } from "@/lib/supabase/admin"
 import { addChatUserSchema, removeChatUserSchema } from "@/lib/validations/chat"
+
+async function isChatParticipant(
+  supabase: SupabaseClient,
+  chatId: string,
+  userId: string
+) {
+  const { data, error } = await supabase
+    .from("chats_users")
+    .select("chat_id")
+    .eq("chat_id", chatId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) return null
+  return Boolean(data)
+}
 
 export async function GET(
   _request: NextRequest,
@@ -11,8 +28,12 @@ export async function GET(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { supabase } = auth
+  const { supabase, user } = auth
   const { id: chatId } = await params
+
+  const canAccessChat = await isChatParticipant(supabase, chatId, user.id)
+  if (canAccessChat === null) return Errors.internal()
+  if (!canAccessChat) return Errors.notFound("Chat")
 
   const { data, error } = await supabase
     .from("chats_users")
@@ -31,7 +52,7 @@ export async function POST(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { supabase } = auth
+  const { supabase, user } = auth
   const { id: chatId } = await params
 
   let body: unknown
@@ -43,6 +64,10 @@ export async function POST(
 
   const parsed = addChatUserSchema.safeParse(body)
   if (!parsed.success) return Errors.validationError(parsed.error.issues[0].message)
+
+  const canAccessChat = await isChatParticipant(supabase, chatId, user.id)
+  if (canAccessChat === null) return Errors.internal()
+  if (!canAccessChat) return Errors.notFound("Chat")
 
   const { data: chat, error: chatError } = await supabase
     .from("chat")
@@ -96,7 +121,7 @@ export async function DELETE(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { supabase } = auth
+  const { supabase, user } = auth
   const { id: chatId } = await params
 
   let body: unknown
@@ -108,6 +133,10 @@ export async function DELETE(
 
   const parsed = removeChatUserSchema.safeParse(body)
   if (!parsed.success) return Errors.validationError(parsed.error.issues[0].message)
+
+  const canAccessChat = await isChatParticipant(supabase, chatId, user.id)
+  if (canAccessChat === null) return Errors.internal()
+  if (!canAccessChat) return Errors.notFound("Chat")
 
   const { data: chat, error: chatError } = await supabase
     .from("chat")

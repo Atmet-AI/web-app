@@ -4,6 +4,9 @@ import type { AtmetUiPayload } from "@/lib/generative-ui/schema"
 export function appMiniUiToAtmetUi(
   request: AppMiniUiRequest
 ): AtmetUiPayload {
+  const submitLabel =
+    request.variant === "gmail-compose" ? "Approve" : request.submitLabel
+
   return {
     type: "atmet_ui",
     version: 1,
@@ -24,11 +27,11 @@ export function appMiniUiToAtmetUi(
         options: field.options,
       })),
       submit: {
-        label: request.submitLabel,
+        label: submitLabel,
         action: {
           type: "chat_submit",
           app: request.appSlug,
-          label: request.submitLabel,
+          label: submitLabel,
           requiresConfirmation: false,
           params: {
             variant: request.variant,

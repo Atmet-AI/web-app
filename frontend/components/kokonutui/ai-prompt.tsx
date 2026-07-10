@@ -114,6 +114,14 @@ const OPENAI_SVG = (
   </div>
 );
 
+const ATMET_THINKING_GRADIENT = [
+  { position: 0, color: "#0A84FF" },
+  { position: 0.35, color: "#28B8FF" },
+  { position: 0.68, color: "#66E3FF" },
+  { position: 1, color: "#2F6BFF" },
+];
+const CREATE_SKILL_COMMAND = "create skill";
+
 type AttachmentKind =
   | "image"
   | "excel"
@@ -308,6 +316,7 @@ export default function AI_Prompt({
     Record<number, "like" | "dislike">
   >({});
   const [appMiniUiValues, setAppMiniUiValues] = useState<Record<number, Record<string, string>>>({});
+  const [resolvedAppRequests, setResolvedAppRequests] = useState<Record<string, boolean>>({});
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
   const [codeRunOutput, setCodeRunOutput] = useState<
     Record<string, { status: "success" | "error" | "info"; output: string }>
@@ -433,7 +442,11 @@ export default function AI_Prompt({
     );
   }, [connectedApps, value, messages]);
   const mentionableSkills = useMemo(() => {
-    const baseSkills = availableSkillNames;
+    const baseSkills = availableSkillNames.some(
+      (skill) => skill.toLowerCase() === CREATE_SKILL_COMMAND
+    )
+      ? availableSkillNames
+      : [CREATE_SKILL_COMMAND, ...availableSkillNames];
     if (!fixedSkillName) return baseSkills;
     if (baseSkills.some((skill) => skill.toLowerCase() === fixedSkillName.toLowerCase())) {
       return baseSkills;
@@ -588,13 +601,17 @@ export default function AI_Prompt({
   const commandItems = useMemo(() => {
     if (!commandMenu) return [];
 
-    const source =
-      commandMenu.type === "skill"
-        ? mentionableSkills
-        : appNames;
+    const source = commandMenu.type === "skill" ? mentionableSkills : appNames;
 
     const query = commandMenu.query.trim().toLowerCase();
-    return source.filter((item) => item.toLowerCase().includes(query));
+    return source
+      .filter((item) => item.toLowerCase().includes(query))
+      .sort((a, b) => {
+        if (commandMenu.type !== "skill") return 0;
+        if (a.toLowerCase() === CREATE_SKILL_COMMAND) return -1;
+        if (b.toLowerCase() === CREATE_SKILL_COMMAND) return 1;
+        return a.localeCompare(b);
+      });
   }, [commandMenu, mentionableSkills, appNames]);
 
   const MODEL_ICONS: Record<string, React.ReactNode> = {
@@ -902,9 +919,17 @@ export default function AI_Prompt({
         }
       }
 
+      for (const app of appNames) {
+        const escaped = app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const pattern = new RegExp(`(^|\\s)@${escaped}(?=\\s|$|[.,!?;:])`, "i");
+        if (pattern.test(text) && !apps.includes(app)) {
+          apps.push(app);
+        }
+      }
+
       return apps;
     },
-    [integrationByName, integrationBySlug]
+    [appNames, integrationByName, integrationBySlug]
   );
 
   useEffect(() => {
@@ -947,8 +972,7 @@ export default function AI_Prompt({
     if (!commandMenu) return;
 
     const prefix = commandMenu.type === "skill" ? "/" : "@";
-    const integration = commandMenu.type === "app" ? integrationByName.get(item.toLowerCase()) : null;
-    const replacement = integration ? `[${integration.name}](app://${integration.slug}) ` : `${prefix}${item} `;
+    const replacement = `${prefix}${item} `;
     const nextValue =
       value.slice(0, commandMenu.start) + replacement + value.slice(commandMenu.end);
 
@@ -980,7 +1004,10 @@ export default function AI_Prompt({
       return { nextValue: inputValue, nextCursor: cursorPosition };
     }
 
-    const mentionTokens = mentionableSkills.map((skill) => `/${skill}`).sort((a, b) => b.length - a.length);
+    const mentionTokens = [
+      ...appNames.map((app) => `@${app}`),
+      ...mentionableSkills.map((skill) => `/${skill}`),
+    ].sort((a, b) => b.length - a.length);
 
     const lowerBefore = beforeCursor.toLowerCase();
 
@@ -1005,15 +1032,21 @@ export default function AI_Prompt({
     inputValue: string,
     cursorPosition: number
   ): { nextValue: string; nextCursor: number } => {
+    const escapedApps = appNames
+      .map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .sort((a, b) => b.length - a.length);
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .sort((a, b) => b.length - a.length);
 
-    if (escapedSkills.length === 0) {
+    if (escapedApps.length === 0 && escapedSkills.length === 0) {
       return { nextValue: inputValue, nextCursor: cursorPosition };
     }
 
     const mentionParts: string[] = [];
+    if (escapedApps.length > 0) {
+      mentionParts.push(`@(?:${escapedApps.join("|")})`);
+    }
     if (escapedSkills.length > 0) {
       mentionParts.push(`\\/(?:${escapedSkills.join("|")})`);
     }
@@ -1047,10 +1080,14 @@ export default function AI_Prompt({
   };
 
   const getMentionRanges = (inputValue: string): Array<{ start: number; end: number }> => {
+    const escapedApps = appNames
+      .map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .sort((a, b) => b.length - a.length);
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .sort((a, b) => b.length - a.length);
     const parts = ["\\[[^\\]]+\\]\\(app:\\/\\/[a-z0-9-]+\\)"];
+    if (escapedApps.length > 0) parts.push(`@(?:${escapedApps.join("|")})(?=\\s|$|[.,!?;:])`);
     if (escapedSkills.length > 0) parts.push(`\\/(?:${escapedSkills.join("|")})(?=\\s|$|[.,!?;:])`);
     const mentionRegex = new RegExp(parts.join("|"), "gi");
 
@@ -1178,8 +1215,7 @@ export default function AI_Prompt({
   };
 
   const insertAppMention = (app: string) => {
-    const integration = integrationByName.get(app.toLowerCase());
-    const mention = integration ? `[${integration.name}](app://${integration.slug}) ` : `${app} `;
+    const mention = `@${app} `;
     const nextValue = value.length === 0
       ? mention
       : `${value}${value.endsWith(" ") ? "" : " "}${mention}`;
@@ -1201,12 +1237,14 @@ export default function AI_Prompt({
       const integration = integrationByName.get(app.toLowerCase());
       const escapedApp = app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const escapedSlug = integration?.slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const appMentionPattern = escapedSlug
+      const linkedMentionPattern = escapedSlug
         ? new RegExp(`(^|\\s)\\[${escapedApp}\\]\\(app:\\/\\/${escapedSlug}\\)(?=\\s|$)`, "g")
         : new RegExp(`(^|\\s)\\[${escapedApp}\\]\\(app:\\/\\/[a-z0-9-]+\\)(?=\\s|$)`, "g");
+      const atMentionPattern = new RegExp(`(^|\\s)@${escapedApp}(?=\\s|$|[.,!?;:])`, "g");
 
       return prev
-        .replace(appMentionPattern, "$1")
+        .replace(linkedMentionPattern, "$1")
+        .replace(atMentionPattern, "$1")
         .replace(/[ \t]{2,}/g, " ")
         .replace(/[ \t]+\n/g, "\n")
         .replace(/\n[ \t]+/g, "\n")
@@ -1376,6 +1414,11 @@ export default function AI_Prompt({
       }
 
       const approvedContent = `[${approval.appName}](app://${approval.appSlug}) ${approval.originalRequest}`;
+      const resolvedKey = `${sourceMessageId}:${approval.appName.toLowerCase()}`;
+      setResolvedAppRequests((prev) => ({
+        ...prev,
+        [resolvedKey]: true,
+      }));
       setConnectedApps((prev) =>
         prev.some((app) => app.toLowerCase() === approval.appName.toLowerCase())
           ? prev
@@ -1526,10 +1569,15 @@ export default function AI_Prompt({
       }
 
       const submittedContent = buildAppMiniUiSubmission(request, values);
+      const resolvedKey = `${sourceMessageId}:${request.appName.toLowerCase()}`;
       const submittedStatus =
         request.variant === "gmail-compose"
           ? `${request.appName} approved. Sending now.`
           : `${request.appName} details submitted. Running the request now.`;
+      setResolvedAppRequests((prev) => ({
+        ...prev,
+        [resolvedKey]: true,
+      }));
       setMessages((prev) =>
         prev.map((message) =>
           message.id === sourceMessageId
@@ -1558,6 +1606,9 @@ export default function AI_Prompt({
 
   const isAppRequestResolved = useCallback(
     (messageId: number, appName: string) => {
+      if (resolvedAppRequests[`${messageId}:${appName.toLowerCase()}`]) {
+        return true;
+      }
       const integration = integrationByName.get(appName.toLowerCase());
       const appToken = integration ? `[${integration.name}](app://${integration.slug})` : "";
       return messages.some(
@@ -1571,7 +1622,7 @@ export default function AI_Prompt({
               !parseAppMiniUiRequest(message.content)))
       );
     },
-    [integrationByName, messages]
+    [integrationByName, messages, resolvedAppRequests]
   );
 
   const uploadMessageAttachments = useCallback(
@@ -2167,14 +2218,21 @@ export default function AI_Prompt({
   ) => {
     const useInlineMentionStyle = options?.plainInline ?? true;
     const preserveComposerCaret = options?.preserveComposerCaret ?? false;
+    const escapedApps = appNames
+      .map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .sort((a, b) => b.length - a.length);
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .sort((a, b) => b.length - a.length);
     const mentionParts = ["\\[([^\\]]+)\\]\\(app:\\/\\/([a-z0-9-]+)\\)"];
+    if (escapedApps.length > 0) {
+      mentionParts.push(`@(${escapedApps.join("|")})(?=\\s|$|[.,!?;:])`);
+    }
     if (escapedSkills.length > 0) {
       mentionParts.push(`\\/(${escapedSkills.join("|")})(?=\\s|$|[.,!?;:])`);
     }
     const mentionRegex = new RegExp(mentionParts.join("|"), "gi");
+    const appByLower = new Map(appNames.map((app) => [app.toLowerCase(), app]));
     const skillByLower = new Map(
       mentionableSkills.map((skill) => [skill.toLowerCase(), skill])
     );
@@ -2187,10 +2245,11 @@ export default function AI_Prompt({
       const fullMatch = match[0] ?? "";
       const appLabel = match[1] ?? "";
       const appSlug = match[2] ?? "";
-      const skillRaw = match[3] ?? "";
+      const appAtRaw = match[3] ?? "";
+      const skillRaw = match[4] ?? "";
       const integration =
         appSlug ? integrationBySlug.get(appSlug) ?? integrationByName.get(appLabel.toLowerCase()) : null;
-      const appName = integration?.name ?? appLabel;
+      const appName = integration?.name || (appAtRaw ? appByLower.get(appAtRaw.toLowerCase()) ?? appAtRaw : appLabel);
       const skillName = skillRaw
         ? skillByLower.get(skillRaw.toLowerCase()) ?? skillRaw
         : "";
@@ -2468,6 +2527,24 @@ export default function AI_Prompt({
     });
   };
 
+  const renderThinkingIndicator = () => (
+    <div className="flex items-center px-0.5 py-1">
+      <GradientSpin
+        gradient={ATMET_THINKING_GRADIENT}
+        pattern="diagonal"
+        rows={4}
+        cols={4}
+        cellSize={6}
+        cellGap={0}
+        cellRadius={1}
+        period={650}
+        dim={0.19}
+        colorBy="row"
+        label="Thinking"
+      />
+    </div>
+  );
+
   const renderAppApprovalCard = (approval: AppApprovalRequest, messageId: number) => {
     const isGmailSendApproval =
       approval.appName.toLowerCase() === "gmail" &&
@@ -2476,35 +2553,35 @@ export default function AI_Prompt({
     const approvalTitle = isGmailSendApproval
       ? `Approve ${approval.appName}?`
       : `Add ${approval.appName}?`;
-    const approvalActionLabel = isGmailSendApproval ? "Approve and send" : "Add";
+    const approvalActionLabel = isGmailSendApproval ? "Approve" : "Add";
 
     return (
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
-        <div className="flex items-start gap-3 px-4 py-4">
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+      <div className="mx-auto w-full overflow-hidden rounded-2xl bg-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.07),0_0_0_1px_rgba(255,255,255,0.18)_inset,0_20px_70px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_20px_70px_rgba(0,0,0,0.22)]">
+        <div className="flex items-start gap-2.5 px-3 py-3">
+          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg">
             {renderAppLogo(approval.appName, "md")}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-base font-medium leading-6 text-foreground">
+            <div className="text-sm font-medium leading-5 text-foreground">
               {approvalTitle}
             </div>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
               {approval.reason}
             </p>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-2 border-t border-border/60 px-4 py-3">
+        <div className="flex items-center justify-end gap-2 border-t border-black/10 px-3 py-2.5 dark:border-white/10">
           <Button
             type="button"
             variant="ghost"
-            className="h-9 px-3 text-sm text-muted-foreground active:scale-[0.96] transition-transform"
+            className="h-8 px-2.5 text-xs text-muted-foreground active:scale-[0.96] transition-transform"
             onClick={() => rejectAppRequest(approval, messageId)}
           >
             Not now
           </Button>
           <Button
             type="button"
-            className="h-9 gap-1.5 px-3 text-sm active:scale-[0.96] transition-transform"
+            className="h-7 gap-1.5 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] active:scale-[0.96] transition-transform"
             onClick={() => void approveAppRequest(approval, messageId)}
             disabled={isResponding}
           >
@@ -2520,16 +2597,19 @@ export default function AI_Prompt({
     const values = getAppMiniUiValues(request, messageId);
 
     return (
-      <AtmetGenerativeUi
-        payload={appMiniUiToAtmetUi(request)}
-        logo={renderAppLogo(request.appName, "md")}
-        values={values}
-        disabled={isResponding}
-        onFieldChange={(fieldId, nextValue) =>
-          updateAppMiniUiValue(messageId, fieldId, nextValue)
-        }
-        onAction={() => void submitAppMiniUiRequest(request, messageId)}
-      />
+      <div className="mx-auto w-full">
+        <AtmetGenerativeUi
+          payload={appMiniUiToAtmetUi(request)}
+          logo={renderAppLogo(request.appName, "md")}
+          values={values}
+          disabled={isResponding}
+          compact
+          onFieldChange={(fieldId, nextValue) =>
+            updateAppMiniUiValue(messageId, fieldId, nextValue)
+          }
+          onAction={() => void submitAppMiniUiRequest(request, messageId)}
+        />
+      </div>
     );
   };
 
@@ -2569,11 +2649,12 @@ export default function AI_Prompt({
     const atmetUi = parseAtmetUiPayload(content);
     if (atmetUi) {
       return (
-        <div className="w-full max-w-xl">
+        <div className="w-full">
           <AtmetGenerativeUi
             payload={atmetUi}
             logo={atmetUi.appName ? renderAppLogo(atmetUi.appName, "md") : undefined}
             disabled={isResponding}
+            compact
           />
         </div>
       );
@@ -2919,9 +3000,9 @@ export default function AI_Prompt({
     return null;
   }, [isAppRequestResolved, messages]);
   const glassLayerBack =
-    "bg-background/20 backdrop-blur-xl supports-[backdrop-filter]:bg-background/15";
+    "bg-transparent backdrop-blur-xl supports-[backdrop-filter]:bg-transparent";
   const glassLayerFront =
-    "bg-background/20 backdrop-blur-xl supports-[backdrop-filter]:bg-background/10";
+    "bg-transparent backdrop-blur-xl supports-[backdrop-filter]:bg-transparent";
   const glassBorder = "border-sidebar-border";
 
   return (
@@ -2978,13 +3059,13 @@ export default function AI_Prompt({
               "space-y-3",
               glassComposer
                 ? cn(
-                    "relative z-10 min-h-[9rem] overflow-y-auto rounded-t-2xl border-x border-t border-b-0 px-3 pt-3 pb-5",
+                    "scrollbar-hidden relative z-10 min-h-[9rem] overflow-y-auto rounded-t-2xl border-x border-t border-b-0 px-3 pt-3 pb-5",
                     dockComposerToBottom ? "min-h-0 flex-1" : "max-h-[32vh]",
                     glassBorder,
                     glassLayerFront
                   )
                 : "mb-4",
-              dockComposerToBottom && "min-h-0 flex-1 overflow-y-auto pr-1"
+              dockComposerToBottom && "scrollbar-hidden min-h-0 flex-1 overflow-y-auto pr-1"
             )}
           >
           {messages.map((message) => (
@@ -2997,8 +3078,10 @@ export default function AI_Prompt({
             >
               <div
                 className={cn(
-                  "flex min-w-0 max-w-[82%] flex-col",
-                  message.role === "user" ? "ml-auto items-end" : "items-start"
+                  "flex min-w-0 flex-col",
+                  message.role === "user"
+                    ? "ml-auto max-w-[82%] items-end"
+                    : "w-full items-start"
                 )}
               >
                 {message.role === "user" ? (
@@ -3071,7 +3154,9 @@ export default function AI_Prompt({
                     )}
                   </>
                 ) : (
-                  renderAssistantContent(message.content, message.id)
+                  isResponding && message.content.trim().length === 0
+                    ? renderThinkingIndicator()
+                    : renderAssistantContent(message.content, message.id)
                 )}
 
                 <div
@@ -3269,23 +3354,6 @@ export default function AI_Prompt({
               {createAgentError}
             </div>
           ) : null}
-          {isResponding && (
-            <div className="flex items-center px-0.5 py-1">
-              <GradientSpin
-                gradient="sunrise"
-                pattern="snake"
-                rows={3}
-                cols={3}
-                cellSize={4}
-                cellGap={2}
-                cellRadius={1}
-                period={750}
-                dim={0.1}
-                colorBy="row"
-                label="Thinking"
-              />
-            </div>
-          )}
           <div ref={messagesEndRef} />
           </div>
           </div>
@@ -3524,7 +3592,7 @@ export default function AI_Prompt({
         )}
       >
         {pendingAppAction ? (
-          <div className="mb-2 px-0.5">
+          <div className="relative z-40 -mt-3 -mb-2 px-0">
             {pendingAppAction.approval
               ? renderAppApprovalCard(pendingAppAction.approval, pendingAppAction.messageId)
               : pendingAppAction.miniUi
@@ -3571,7 +3639,7 @@ export default function AI_Prompt({
             )}
           >
             <div className="relative z-10 p-2 sm:p-2.5">
-              <div className="flex max-h-36 min-h-9 flex-wrap items-start gap-2 overflow-y-auto">
+              <div className="scrollbar-hidden flex max-h-36 min-h-9 flex-wrap items-start gap-2 overflow-y-auto">
                 {attachedFiles.map((attachment) => (
                   <div
                     key={attachment.id}
@@ -3638,12 +3706,12 @@ export default function AI_Prompt({
                 : "rounded-xl border border-sidebar-border bg-sidebar"
             )}
           >
-            <div className="relative overflow-y-auto" style={{ maxHeight: "400px" }}>
+            <div className="scrollbar-hidden relative overflow-y-auto" style={{ maxHeight: "400px" }}>
               <div
                 aria-hidden="true"
                 className={cn(
-                  "pointer-events-none absolute inset-0 z-0 overflow-hidden px-4 pb-3 text-base text-foreground font-normal leading-normal tracking-normal md:text-sm",
-                  "pt-3"
+                  "pointer-events-none absolute inset-0 z-0 overflow-hidden px-4 pb-2.5 text-base text-foreground font-normal leading-normal tracking-normal md:text-sm",
+                  "pt-2.5"
                 )}
               >
                 <div
@@ -3656,8 +3724,8 @@ export default function AI_Prompt({
               <Textarea
                 className={cn(
                   "relative z-10 w-full resize-none border-none bg-transparent px-4 pb-3 text-transparent caret-foreground selection:bg-primary/20 selection:text-transparent focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent",
-                  "pt-3",
-                  "min-h-[72px]"
+                  "pt-2.5",
+                  "min-h-[64px]"
                 )}
                 id={textareaId}
                 onChange={handleInputChange}
@@ -3919,11 +3987,24 @@ export default function AI_Prompt({
                 >
                   <span className="flex items-center gap-2">
                     {commandMenu.type === "skill" ? (
-                      <span className="text-muted-foreground">/</span>
+                      <span
+                        className={cn(
+                          "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md",
+                          item.toLowerCase() === CREATE_SKILL_COMMAND
+                            ? "bg-primary/12 text-primary"
+                            : "bg-pink-500/12 text-pink-600 dark:bg-pink-400/14 dark:text-pink-300"
+                        )}
+                      >
+                        {item.toLowerCase() === CREATE_SKILL_COMMAND ? (
+                          <Plus className="h-3.5 w-3.5" />
+                        ) : (
+                          <Bot className="h-3.5 w-3.5" />
+                        )}
+                      </span>
                     ) : (
                       renderAppLogo(item)
                     )}
-                    <span>{item}</span>
+                    <span>{commandMenu.type === "skill" ? `/${item}` : item}</span>
                   </span>
                   {commandMenu.type === "app" && connectedApps.includes(item) && (
                     <Check className="h-4 w-4 text-primary" />

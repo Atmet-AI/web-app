@@ -8,6 +8,34 @@ const respondSchema = z.object({
   action: z.enum(["accept", "decline"]),
 })
 
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+async function getSeatLimit(workspaceId: string) {
+  const [settingsRes, workspaceRes] = await Promise.all([
+    supabaseAdmin.from("platform_setting").select("value").eq("key", "usage_limits").maybeSingle(),
+    supabaseAdmin.from("workspace").select("seat_limit").eq("id", workspaceId).maybeSingle(),
+  ])
+  const globalValue = settingsRes.data?.value && typeof settingsRes.data.value === "object"
+    ? settingsRes.data.value as Record<string, unknown>
+    : {}
+  return workspaceRes.data?.seat_limit ?? (readNumber(globalValue.seatLimit) || 10)
+}
+
+async function hasAvailableSeat(workspaceId: string) {
+  const [membersCountRes, seatLimit] = await Promise.all([
+    supabaseAdmin
+      .from("workspace_member")
+      .select("user_id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .eq("status", "active"),
+    getSeatLimit(workspaceId),
+  ])
+
+  return (membersCountRes.count ?? 0) < seatLimit
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -68,6 +96,10 @@ export async function POST(
     .eq("workspace_id", invitation.workspace_id)
     .eq("user_id", auth.user.id)
     .maybeSingle()
+
+  if (existingMembership?.status !== "active" && !(await hasAvailableSeat(invitation.workspace_id))) {
+    return Errors.badRequest("This workspace has reached its seat limit. Ask an owner or admin to add seats before accepting.")
+  }
 
   if (existingMembership) {
     if (existingMembership.status !== "active") {

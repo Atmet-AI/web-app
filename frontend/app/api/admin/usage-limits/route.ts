@@ -32,13 +32,20 @@ function readNumber(value: unknown) {
 function tokenCountFromMetadata(metadata: unknown) {
   if (!metadata || typeof metadata !== "object") return 0
   const value = metadata as Record<string, unknown>
+  const usage = featureRecord(value.usage)
   return (
     readNumber(value.total_tokens) ||
     readNumber(value.totalTokens) ||
     readNumber(value.tokenCount) ||
     readNumber(value.tokens) ||
+    readNumber(usage.total_tokens) ||
+    readNumber(usage.totalTokens) ||
+    readNumber(usage.tokenCount) ||
+    readNumber(usage.tokens) ||
     readNumber(value.prompt_tokens) + readNumber(value.completion_tokens) ||
-    readNumber(value.promptTokens) + readNumber(value.completionTokens)
+    readNumber(value.promptTokens) + readNumber(value.completionTokens) ||
+    readNumber(usage.prompt_tokens) + readNumber(usage.completion_tokens) ||
+    readNumber(usage.promptTokens) + readNumber(usage.completionTokens)
   )
 }
 

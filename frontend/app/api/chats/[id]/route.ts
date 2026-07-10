@@ -1,7 +1,24 @@
 import { type NextRequest } from "next/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { getUser } from "@/lib/api/auth"
 import { ok, Errors } from "@/lib/api/response"
 import { updateChatSchema } from "@/lib/validations/chat"
+
+async function isChatParticipant(
+  supabase: SupabaseClient,
+  chatId: string,
+  userId: string
+) {
+  const { data, error } = await supabase
+    .from("chats_users")
+    .select("chat_id")
+    .eq("chat_id", chatId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) return null
+  return Boolean(data)
+}
 
 export async function GET(
   _request: NextRequest,
@@ -10,7 +27,7 @@ export async function GET(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { supabase } = auth
+  const { supabase, user } = auth
   const { id } = await params
 
   const { data: chat, error } = await supabase
@@ -20,6 +37,9 @@ export async function GET(
     .maybeSingle()
 
   if (error || !chat) return Errors.notFound("Chat")
+  const canAccessChat = await isChatParticipant(supabase, id, user.id)
+  if (canAccessChat === null) return Errors.internal()
+  if (!canAccessChat) return Errors.notFound("Chat")
 
   // Fetch linked resources
   const [usersRes, skillsRes, automationsRes, schedulesRes] = await Promise.all([
@@ -57,7 +77,7 @@ export async function PATCH(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { supabase } = auth
+  const { supabase, user } = auth
   const { id } = await params
 
   let body: unknown
@@ -71,6 +91,10 @@ export async function PATCH(
   if (!parsed.success) {
     return Errors.validationError(parsed.error.issues[0].message)
   }
+
+  const canAccessChat = await isChatParticipant(supabase, id, user.id)
+  if (canAccessChat === null) return Errors.internal()
+  if (!canAccessChat) return Errors.notFound("Chat")
 
   const { data, error } = await supabase
     .from("chat")
@@ -91,8 +115,12 @@ export async function DELETE(
   const auth = await getUser()
   if (!auth.ok) return auth.response
 
-  const { supabase } = auth
+  const { supabase, user } = auth
   const { id } = await params
+
+  const canAccessChat = await isChatParticipant(supabase, id, user.id)
+  if (canAccessChat === null) return Errors.internal()
+  if (!canAccessChat) return Errors.notFound("Chat")
 
   const { error } = await supabase.from("chat").delete().eq("id", id)
 

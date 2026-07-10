@@ -18,8 +18,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import { IconPhoto } from "@tabler/icons-react"
-import { FolderUp, Search, Upload, X } from "lucide-react"
+import { Bot, FileText, Folder, FolderUp, Search, Upload, X } from "lucide-react"
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 
 type SkillCategory = "Reasoning" | "Data" | "Automation" | "Support"
@@ -44,6 +43,7 @@ type SkillItem = {
   owner: string
   isUserCreated: boolean
   scope?: "system" | "workspace" | "user"
+  sourceType?: "md_file" | "folder" | "atmet_chat"
   imageUrl?: string | null
   connectedApps?: string[]
 }
@@ -56,134 +56,6 @@ const SECTION_ORDER: SkillSection[] = [
   "Operations",
   "Support",
   "Product",
-]
-
-const INITIAL_SKILL_ITEMS: SkillItem[] = [
-  {
-    id: "skill-contract-risk",
-    name: "Contract Risk Detector",
-    description: "Identifies high-risk clauses and flags legal exceptions.",
-    category: "Reasoning",
-    section: "Operations",
-    status: "Active",
-    updatedAt: "2026-03-12",
-    owner: "Sarah Chen",
-    isUserCreated: false,
-  },
-  {
-    id: "skill-policy-qa",
-    name: "Policy QA",
-    description: "Answers internal policy questions from indexed knowledge.",
-    category: "Support",
-    section: "Support",
-    status: "Active",
-    updatedAt: "2026-03-08",
-    owner: "Nina Brooks",
-    isUserCreated: false,
-  },
-  {
-    id: "skill-invoice-struct",
-    name: "Invoice Structuring",
-    description: "Extracts invoice fields and normalizes vendor data.",
-    category: "Data",
-    section: "Sales",
-    status: "Draft",
-    updatedAt: "2026-03-01",
-    owner: "Xi Sun",
-    isUserCreated: false,
-  },
-  {
-    id: "skill-ticket-orchestrator",
-    name: "Ticket Orchestrator",
-    description: "Creates and routes Jira tasks from workflow outcomes.",
-    category: "Automation",
-    section: "Engineering",
-    status: "Active",
-    updatedAt: "2026-02-26",
-    owner: "Jay Park",
-    isUserCreated: false,
-  },
-  {
-    id: "skill-nda-explainer",
-    name: "NDA Explainer",
-    description: "Summarizes confidentiality terms in plain language.",
-    category: "Reasoning",
-    section: "Support",
-    status: "Draft",
-    updatedAt: "2026-02-20",
-    owner: "Amir Haddad",
-    isUserCreated: true,
-  },
-  {
-    id: "skill-seo-cluster-writer",
-    name: "SEO Cluster Writer",
-    description:
-      "Creates SEO content clusters and internal linking suggestions.",
-    category: "Automation",
-    section: "Marketing",
-    status: "Active",
-    updatedAt: "2026-03-15",
-    owner: "You",
-    isUserCreated: true,
-  },
-  {
-    id: "skill-lead-qualification",
-    name: "Lead Qualification",
-    description: "Scores leads from inbound data and routes hot opportunities.",
-    category: "Data",
-    section: "Sales",
-    status: "Active",
-    updatedAt: "2026-03-10",
-    owner: "Mia Torres",
-    isUserCreated: false,
-  },
-  {
-    id: "skill-release-notes-drafter",
-    name: "Release Notes Drafter",
-    description:
-      "Drafts changelogs from merged pull requests and ticket links.",
-    category: "Automation",
-    section: "Engineering",
-    status: "Draft",
-    updatedAt: "2026-03-05",
-    owner: "Noah Karim",
-    isUserCreated: false,
-  },
-  {
-    id: "skill-playbook-builder",
-    name: "Playbook Builder",
-    description: "Builds SOP playbooks for internal operations and onboarding.",
-    category: "Support",
-    section: "Operations",
-    status: "Active",
-    updatedAt: "2026-03-03",
-    owner: "Leen Haddad",
-    isUserCreated: false,
-  },
-  {
-    id: "skill-finance-variance-monitor",
-    name: "Budget Variance Monitor",
-    description:
-      "Tracks spending variance and flags unusual cost deviations across teams.",
-    category: "Data",
-    section: "Finance",
-    status: "Active",
-    updatedAt: "2026-03-09",
-    owner: "Rana Kamel",
-    isUserCreated: false,
-  },
-  {
-    id: "skill-product-prioritizer",
-    name: "Product Prioritizer",
-    description:
-      "Ranks product opportunities by impact, effort, and business constraints.",
-    category: "Reasoning",
-    section: "Product",
-    status: "Draft",
-    updatedAt: "2026-03-07",
-    owner: "Adam Saleh",
-    isUserCreated: false,
-  },
 ]
 
 const statusStyles: Record<SkillStatus, BadgeVariant> = {
@@ -213,6 +85,21 @@ function toSkillItem(skill: SkillApiRecord): SkillItem {
   const scope = skill.scope ?? "workspace"
   const category = readDefinitionText(skill.definition, "category")
   const section = readDefinitionText(skill.definition, "section")
+  const source = readDefinitionText(skill.definition, "source")
+  const packageInfo =
+    skill.definition?.package &&
+    typeof skill.definition.package === "object" &&
+    !Array.isArray(skill.definition.package)
+      ? skill.definition.package as Record<string, unknown>
+      : null
+  const fileCount =
+    typeof packageInfo?.file_count === "number" ? packageInfo.file_count : 0
+  const sourceType: SkillItem["sourceType"] =
+    source === "atmet_chat"
+      ? "atmet_chat"
+      : fileCount > 1
+        ? "folder"
+        : "md_file"
 
   return {
     id: skill.id,
@@ -225,30 +112,80 @@ function toSkillItem(skill: SkillApiRecord): SkillItem {
     owner: scope === "system" ? "Atmet" : "You",
     isUserCreated: scope !== "system",
     scope,
+    sourceType,
     imageUrl: skill.image_url,
   }
 }
 
-function SkillCover({ skill }: { skill: SkillItem }) {
-  if (skill.imageUrl) {
-    return (
-      <div className="aspect-[40/19] shrink-0 overflow-hidden border-b border-border bg-muted/40">
-        <img
-          src={skill.imageUrl}
-          alt=""
-          className="h-full w-full object-cover"
-        />
-      </div>
-    )
-  }
+function skillSourceLabel(sourceType: SkillItem["sourceType"] = "md_file") {
+  if (sourceType === "atmet_chat") return "Built by Atmet"
+  if (sourceType === "folder") return "Folder"
+  return "MD file"
+}
+
+function SkillAvatar({ sourceType = "md_file" }: { sourceType?: SkillItem["sourceType"] }) {
+  const Icon =
+    sourceType === "atmet_chat" ? Bot : sourceType === "folder" ? Folder : FileText
 
   return (
-    <div className="flex aspect-[40/19] shrink-0 items-center justify-center border-b border-border bg-muted/40 text-muted-foreground">
-      <span className="inline-flex items-center gap-1 text-xs">
-        <IconPhoto className="h-4 w-4" strokeWidth={1.7} />
-        Cover image
-      </span>
-    </div>
+    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-muted-foreground">
+      <Icon className="h-4 w-4" strokeWidth={1.7} />
+    </span>
+  )
+}
+
+function SkillCard({
+  skill,
+  onPreview,
+}: {
+  skill: SkillItem
+  onPreview: () => void
+}) {
+  return (
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={onPreview}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onPreview()
+        }
+      }}
+      className="flex min-h-32 gap-3 rounded-xl bg-sidebar p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <SkillAvatar sourceType={skill.sourceType} />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold tracking-tight text-foreground">
+              {skill.name}
+            </h2>
+            <p className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
+              {skill.description || "No description yet."}
+            </p>
+          </div>
+          <Badge variant={statusStyles[skill.status]} size="sm" className="shrink-0">
+            {skill.status}
+          </Badge>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Badge variant="neutral" size="sm">
+            {skill.category}
+          </Badge>
+          <Badge variant="blue" size="sm">
+            {skillSourceLabel(skill.sourceType)}
+          </Badge>
+          {skill.isUserCreated ? (
+            <Badge variant="violet" size="sm">
+              Workspace
+            </Badge>
+          ) : null}
+        </div>
+      </div>
+    </article>
   )
 }
 
@@ -420,20 +357,13 @@ function SkillsPageContent() {
     })
   }, [skills, nameFilter, categoryFilter, sectionFilter, statusFilter])
 
-  const pinnedSkills = useMemo(
-    () => filteredSkills.filter((skill) => skill.isUserCreated),
-    [filteredSkills]
-  )
-
-  const sectionedSkills = useMemo(
+  const categoryGroups = useMemo(
     () =>
-      SECTION_ORDER.map((section) => ({
-        section,
-        items: filteredSkills.filter(
-          (skill) => !skill.isUserCreated && skill.section === section
-        ),
+      categoryOptions.map((category) => ({
+        category,
+        items: filteredSkills.filter((skill) => skill.category === category),
       })).filter((group) => group.items.length > 0),
-    [filteredSkills]
+    [categoryOptions, filteredSkills]
   )
 
   return (
@@ -518,143 +448,46 @@ function SkillsPageContent() {
             </div>
           </section>
 
-          <p className="text-sm text-muted-foreground">
-            {isLoadingSkills ? "Loading…" : `${filteredSkills.length} skills`}
-          </p>
-
-        {pinnedSkills.length > 0 && (
-          <section className="mb-6">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-foreground">
-                Pinned by you
-              </h2>
-              <span className="text-xs text-muted-foreground">
-                {pinnedSkills.length} skills
-              </span>
-            </div>
-            <div className="grid grid-cols-[repeat(auto-fill,220px)] gap-3">
-              {pinnedSkills.map((skill) => (
-                <article
-                  key={skill.id}
-                  className="flex aspect-[4/5] flex-col overflow-hidden rounded-2xl border border-border bg-card"
-                >
-                  <SkillCover skill={skill} />
-
-                  <div className="flex flex-1 flex-col p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="truncate text-sm font-semibold text-foreground">
-                        {skill.name}
-                      </h3>
-                      <Badge
-                        variant={statusStyles[skill.status]}
-                        className="shrink-0"
-                      >
-                        {skill.status}
-                      </Badge>
-                    </div>
-
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      {skill.description}
-                    </p>
-
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="neutral">
-                        {skill.category}
-                      </Badge>
-                      {skill.connectedApps?.map((app) => (
-                        <Badge
-                          key={`${skill.id}-${app}`}
-                          variant="violet"
-                        >
-                          {app}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <div className="mt-auto pt-2">
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        className="px-2 text-xs"
-                        onClick={() => setSelectedSkill(skill)}
-                      >
-                        Know more
-                      </Button>
-                    </div>
-                  </div>
-                </article>
+          {isLoadingSkills ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="h-32 rounded-xl bg-sidebar p-3.5">
+                  <div className="h-9 w-9 rounded-lg bg-sidebar-accent" />
+                  <div className="mt-3 h-4 w-40 rounded bg-sidebar-accent" />
+                  <div className="mt-2 h-3 w-full rounded bg-sidebar-accent" />
+                  <div className="mt-1.5 h-3 w-2/3 rounded bg-sidebar-accent" />
+                </div>
               ))}
             </div>
-          </section>
-        )}
-
-        <section className="space-y-6">
-          {sectionedSkills.map((group) => (
-            <div key={group.section}>
-              <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-foreground">
-                  {group.section}
-                </h2>
-                <span className="text-xs text-muted-foreground">
-                  {group.items.length} skills
-                </span>
-              </div>
-              <div className="grid grid-cols-[repeat(auto-fill,220px)] gap-3">
-                {group.items.map((skill) => (
-                  <article
-                    key={skill.id}
-                    className="flex aspect-[4/5] flex-col overflow-hidden rounded-2xl border border-border bg-card"
-                  >
-                    <SkillCover skill={skill} />
-
-                    <div className="flex flex-1 flex-col p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="truncate text-sm font-semibold text-foreground">
-                          {skill.name}
-                        </h3>
-                        <Badge
-                          variant={statusStyles[skill.status]}
-                          className="shrink-0"
-                        >
-                          {skill.status}
-                        </Badge>
-                      </div>
-
-                      <p className="mt-1.5 text-xs text-muted-foreground">
-                        {skill.description}
-                      </p>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <Badge variant="neutral">
-                          {skill.category}
-                        </Badge>
-                        {skill.connectedApps?.map((app) => (
-                          <Badge
-                            key={`${skill.id}-${app}`}
-                            variant="violet"
-                          >
-                            {app}
-                          </Badge>
-                        ))}
-                      </div>
-
-                      <div className="mt-auto pt-2">
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          className="px-2 text-xs"
-                          onClick={() => setSelectedSkill(skill)}
-                        >
-                          Know more
-                        </Button>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
+          ) : filteredSkills.length > 0 ? (
+            <section className="space-y-6">
+              {categoryGroups.map((group) => (
+                <div key={group.category} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-semibold text-foreground">
+                      {group.category}
+                    </h2>
+                    <span className="text-xs text-muted-foreground">
+                      {group.items.length} skills
+                    </span>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {group.items.map((skill) => (
+                      <SkillCard
+                        key={skill.id}
+                        skill={skill}
+                        onPreview={() => setSelectedSkill(skill)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+              No skills match your current filters.
             </div>
-          ))}
-        </section>
+          )}
           </div>
         </section>
       <aside
@@ -693,7 +526,7 @@ function SkillsPageContent() {
 
           <div className="min-h-0 flex-1 overflow-hidden px-4 py-4">
             <AIPrompt
-              chatId="skills-create-skill"
+              chatId={null}
               persistChatListEntry={false}
               hideGreeting
               dockComposerToBottom
@@ -879,24 +712,30 @@ function SkillsPageContent() {
         <DialogContent className="max-h-[85vh] overflow-y-auto p-0 sm:max-w-2xl">
           {selectedSkill && (
             <>
-              <SkillCover skill={selectedSkill} />
-
               <div className="space-y-6 p-6">
                 <DialogHeader>
-                  <div className="flex items-center justify-between gap-3 pr-8">
-                    <DialogTitle className="text-xl">
-                      {selectedSkill.name}
-                    </DialogTitle>
-                    <Badge
-                      variant={statusStyles[selectedSkill.status]}
-                      className="shrink-0"
-                    >
-                      {selectedSkill.status}
-                    </Badge>
+                  <div className="flex items-start gap-4 pr-8">
+                    <SkillAvatar sourceType={selectedSkill.sourceType} />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <DialogTitle className="text-xl">
+                          {selectedSkill.name}
+                        </DialogTitle>
+                        <Badge
+                          variant={statusStyles[selectedSkill.status]}
+                          size="sm"
+                        >
+                          {selectedSkill.status}
+                        </Badge>
+                        <Badge variant="blue" size="sm">
+                          {skillSourceLabel(selectedSkill.sourceType)}
+                        </Badge>
+                      </div>
+                      <DialogDescription className="mt-2 leading-6 text-pretty">
+                        {selectedSkill.description || "No description yet."}
+                      </DialogDescription>
+                    </div>
                   </div>
-                  <DialogDescription className="sr-only">
-                    Details about {selectedSkill.name}
-                  </DialogDescription>
                 </DialogHeader>
 
                 <section>
@@ -904,7 +743,7 @@ function SkillsPageContent() {
                     Description
                   </h3>
                   <p className="mt-3 text-pretty text-sm leading-7 text-muted-foreground">
-                    {selectedSkill.description} This {selectedSkill.category.toLowerCase()} skill
+                    {selectedSkill.description || "This skill is ready to use in Atmet chats."} This {selectedSkill.category.toLowerCase()} skill
                     is designed for the {selectedSkill.section.toLowerCase()} team to make
                     recurring work faster, more consistent, and easier to pass into connected
                     workflows.

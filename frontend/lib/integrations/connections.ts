@@ -46,6 +46,7 @@ export async function upsertWorkspaceIntegration({
     .select("id")
     .eq("workspace_id", workspaceId)
     .eq("provider_id", providerId)
+    .eq("created_by", userId)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -88,6 +89,11 @@ export async function upsertWorkspaceIntegration({
     connectionName,
     connectedAccount,
     settings,
+    connectorProvider,
+    externalConnectionId,
+    externalUserId,
+    externalAuthConfigId,
+    externalMetadata,
   })
 }
 

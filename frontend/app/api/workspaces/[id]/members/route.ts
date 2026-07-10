@@ -51,22 +51,30 @@ export async function GET(
 
   if (!currentMemberRole) return Errors.forbidden()
 
-  const [membersRes, seatLimit] = await Promise.all([
+  const [membersRes, pendingInvitesRes, seatLimit] = await Promise.all([
     supabaseAdmin
       .from("workspace_member")
       .select("role, joined_at, user:user_id(id, email, full_name, avatar_url, status)")
       .eq("workspace_id", workspaceId)
       .eq("status", "active")
       .order("joined_at", { ascending: true }),
+    supabaseAdmin
+      .from("invitation")
+      .select("id, email, role, status, expires_at, created_at")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "pending")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: true }),
     getSeatLimit(workspaceId),
   ])
 
-  if (membersRes.error) {
+  if (membersRes.error || pendingInvitesRes.error) {
     return Errors.internal()
   }
 
   return ok({
     members: membersRes.data,
+    pendingInvitations: pendingInvitesRes.data ?? [],
     currentMemberRole,
     canInvite: canManageMembers(currentMemberRole),
     seatLimit,
@@ -162,16 +170,6 @@ export async function POST(
       invitationEmailSent: emailResult.ok,
       invitationEmailWarning: emailResult.ok ? null : emailResult.reason,
     })
-  }
-
-  const [membersCountRes, pendingInvitesCountRes, seatLimit] = await Promise.all([
-    supabaseAdmin.from("workspace_member").select("user_id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "active"),
-    supabaseAdmin.from("invitation").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq("status", "pending"),
-    getSeatLimit(workspaceId),
-  ])
-
-  if ((membersCountRes.count ?? 0) + (pendingInvitesCountRes.count ?? 0) >= seatLimit) {
-    return Errors.badRequest(`Workspace has reached the ${seatLimit.toLocaleString()} seat limit.`)
   }
 
   const { data: invitation, error } = await supabaseAdmin
