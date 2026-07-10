@@ -60,6 +60,9 @@ import {
   parseAppMiniUiRequest,
   type AppMiniUiRequest,
 } from "@/lib/integrations/app-mini-ui";
+import { AtmetGenerativeUi } from "@/components/generative-ui/AtmetGenerativeUi";
+import { appMiniUiToAtmetUi } from "@/lib/generative-ui/app-mini-ui-adapter";
+import { parseAtmetUiPayload } from "@/lib/generative-ui/schema";
 import {
   Artifact,
   ArtifactAction,
@@ -148,6 +151,7 @@ type ApiMessage = {
   content: string;
   metadata?: {
     attachments?: MessageAttachment[];
+    uiBlocks?: unknown[];
   } | null;
 };
 
@@ -2347,88 +2351,18 @@ export default function AI_Prompt({
 
   const renderAppMiniUiCard = (request: AppMiniUiRequest, messageId: number) => {
     const values = getAppMiniUiValues(request, messageId);
-    const isComplete = request.fields.every(
-      (field) => !field.required || values[field.id]?.trim()
-    );
 
     return (
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
-        <div className="flex items-start gap-3 px-4 py-4">
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-            {renderAppLogo(request.appName, "md")}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-base font-medium leading-6 text-foreground">
-              {request.title}
-            </div>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              {request.description}
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3 px-4 pb-4">
-          {request.fields.map((field) => {
-            const fieldValue = values[field.id] ?? "";
-            const commonClassName =
-              "mt-1.5 border-border/70 bg-background text-sm shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0";
-
-            return (
-              <label key={field.id} className="block text-xs font-medium text-muted-foreground">
-                {field.label}
-                {field.type === "textarea" ? (
-                  <Textarea
-                    value={fieldValue}
-                    placeholder={field.placeholder}
-                    onChange={(event) =>
-                      updateAppMiniUiValue(messageId, field.id, event.target.value)
-                    }
-                    className={cn(commonClassName, "min-h-24 resize-none rounded-lg")}
-                  />
-                ) : field.type === "select" ? (
-                  <select
-                    value={fieldValue}
-                    onChange={(event) =>
-                      updateAppMiniUiValue(messageId, field.id, event.target.value)
-                    }
-                    className={cn(
-                      commonClassName,
-                      "h-9 w-full rounded-lg px-3 outline-none"
-                    )}
-                  >
-                    {(field.options ?? []).map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Input
-                    value={fieldValue}
-                    placeholder={field.placeholder}
-                    onChange={(event) =>
-                      updateAppMiniUiValue(messageId, field.id, event.target.value)
-                    }
-                    className={cn(commonClassName, "h-9 rounded-lg")}
-                  />
-                )}
-              </label>
-            );
-          })}
-        </div>
-
-        <div className="flex justify-end border-t border-border/60 px-4 py-3">
-          <Button
-            type="button"
-            className="h-9 gap-1.5 px-3 text-sm active:scale-[0.96] transition-transform"
-            onClick={() => void submitAppMiniUiRequest(request, messageId)}
-            disabled={isResponding || !isComplete}
-          >
-            <Check className="h-3.5 w-3.5" />
-            {request.submitLabel}
-          </Button>
-        </div>
-      </div>
+      <AtmetGenerativeUi
+        payload={appMiniUiToAtmetUi(request)}
+        logo={renderAppLogo(request.appName, "md")}
+        values={values}
+        disabled={isResponding}
+        onFieldChange={(fieldId, nextValue) =>
+          updateAppMiniUiValue(messageId, fieldId, nextValue)
+        }
+        onAction={() => void submitAppMiniUiRequest(request, messageId)}
+      />
     );
   };
 
@@ -2461,6 +2395,19 @@ export default function AI_Prompt({
               ? `${appMiniUi.appName} details submitted.`
               : "Awaiting details"}
           </span>
+        </div>
+      );
+    }
+
+    const atmetUi = parseAtmetUiPayload(content);
+    if (atmetUi) {
+      return (
+        <div className="w-full max-w-xl">
+          <AtmetGenerativeUi
+            payload={atmetUi}
+            logo={atmetUi.appName ? renderAppLogo(atmetUi.appName, "md") : undefined}
+            disabled={isResponding}
+          />
         </div>
       );
     }

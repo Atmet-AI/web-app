@@ -18,6 +18,8 @@ import {
   parseAppMiniUiRequest,
   serializeAppMiniUiRequest,
 } from "@/lib/integrations/app-mini-ui"
+import { appMiniUiToAtmetUi } from "@/lib/generative-ui/app-mini-ui-adapter"
+import { parseAtmetUiPayload } from "@/lib/generative-ui/schema"
 
 const FILE_BUCKET = "workspace-files"
 
@@ -240,6 +242,8 @@ export async function POST(
       ? "Atmet asked the user to approve adding a connected app to this chat."
       : parseAppMiniUiRequest(m.content)
         ? "Atmet showed a connected app mini form for the user to complete."
+        : parseAtmetUiPayload(m.content)
+          ? "Atmet showed a structured interactive UI block."
         : m.content,
   }))
 
@@ -262,10 +266,11 @@ export async function POST(
   })
 
   if (appMiniUiRequest) {
+    const uiBlock = appMiniUiToAtmetUi(appMiniUiRequest)
     return streamAssistantText({
       chatId,
       content: serializeAppMiniUiRequest(appMiniUiRequest),
-      metadata: { appMiniUiRequest },
+      metadata: { appMiniUiRequest, uiBlocks: [uiBlock] },
     })
   }
 
