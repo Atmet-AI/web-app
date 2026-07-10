@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHmac, timingSafeEqual } from "crypto"
 
-import { Composio } from "@composio/core"
+import { AuthScheme, Composio } from "@composio/core"
 
 type JsonRecord = Record<string, unknown>
 
@@ -32,6 +32,12 @@ export type ComposioConnectedAccount = {
   isDisabled: boolean
   createdAt: string
   updatedAt: string
+}
+
+export type ComposioApiKeyAccount = {
+  authConfigId: string
+  connectedAccountId: string | null
+  status: string | null
 }
 
 function getComposioApiKey() {
@@ -141,6 +147,60 @@ async function getOrCreateManagedAuthConfig(toolkit: string) {
   })
 
   return created.id
+}
+
+async function getOrCreateApiKeyAuthConfig(toolkit: string) {
+  const composio = getComposioClient()
+  const existing = await composio.authConfigs.list({
+    toolkit,
+    isComposioManaged: false,
+    limit: 25,
+  })
+
+  const existingConfig = existing.items.find(
+    (config) => config.status === "ENABLED" && config.authScheme === "API_KEY"
+  )
+  if (existingConfig?.id) return existingConfig.id
+
+  const name = toolkit
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+
+  const created = await composio.authConfigs.create(toolkit, {
+    type: "use_custom_auth",
+    name: `${name} API Key Auth Config`,
+    authScheme: "API_KEY",
+    credentials: {},
+    isEnabledForToolRouter: true,
+  })
+
+  return created.id
+}
+
+export async function createComposioApiKeyConnectedAccount(input: {
+  workspaceId: string
+  userId: string
+  toolkit: string
+  apiKey: string
+  alias?: string | null
+}): Promise<ComposioApiKeyAccount> {
+  const composio = getComposioClient()
+  const toolkit = normalizeComposioToolkit(input.toolkit)
+  const composioUserId = getComposioUserId(input.workspaceId, input.userId)
+  const authConfigId = await getOrCreateApiKeyAuthConfig(toolkit)
+  const request = await composio.connectedAccounts.initiate(composioUserId, authConfigId, {
+    allowMultiple: true,
+    alias: input.alias ?? undefined,
+    config: AuthScheme.APIKey({ api_key: input.apiKey, generic_api_key: input.apiKey }),
+  })
+
+  return {
+    authConfigId,
+    connectedAccountId: request.id ?? null,
+    status: request.status ?? null,
+  }
 }
 
 export async function createComposioConnectLink(input: {

@@ -10,6 +10,11 @@ type WorkspaceIntegrationInput = {
   connectionName?: string | null
   connectedAccount?: string | null
   settings?: Record<string, unknown>
+  connectorProvider?: "native" | "composio" | "mcp" | "external_api"
+  externalConnectionId?: string | null
+  externalUserId?: string | null
+  externalAuthConfigId?: string | null
+  externalMetadata?: Record<string, unknown> | null
 }
 
 type WorkspaceIntegrationRecord = {
@@ -30,6 +35,11 @@ export async function upsertWorkspaceIntegration({
   connectionName = null,
   connectedAccount = null,
   settings = {},
+  connectorProvider = "native",
+  externalConnectionId = null,
+  externalUserId = null,
+  externalAuthConfigId = null,
+  externalMetadata = null,
 }: WorkspaceIntegrationInput): Promise<WorkspaceIntegrationRecord> {
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("workspace_integration")
@@ -53,6 +63,11 @@ export async function upsertWorkspaceIntegration({
         connection_name: connectionName,
         connected_account: connectedAccount,
         settings,
+        connector_provider: connectorProvider,
+        external_connection_id: externalConnectionId,
+        external_user_id: externalUserId,
+        external_auth_config_id: externalAuthConfigId,
+        external_metadata: externalMetadata,
         connected_at: new Date().toISOString(),
       })
       .eq("id", existing.id)
@@ -83,6 +98,11 @@ export async function createWorkspaceIntegration({
   connectionName = null,
   connectedAccount = null,
   settings = {},
+  connectorProvider = "native",
+  externalConnectionId = null,
+  externalUserId = null,
+  externalAuthConfigId = null,
+  externalMetadata = null,
 }: WorkspaceIntegrationInput): Promise<WorkspaceIntegrationRecord> {
   const { data, error } = await supabaseAdmin
     .from("workspace_integration")
@@ -94,6 +114,11 @@ export async function createWorkspaceIntegration({
       connection_name: connectionName,
       connected_account: connectedAccount,
       settings,
+      connector_provider: connectorProvider,
+      external_connection_id: externalConnectionId,
+      external_user_id: externalUserId,
+      external_auth_config_id: externalAuthConfigId,
+      external_metadata: externalMetadata,
       connected_at: new Date().toISOString(),
     })
     .select("id")

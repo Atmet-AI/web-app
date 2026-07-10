@@ -53,14 +53,26 @@ export function ConnectApiKeyDrawer({
   onSave,
 }: ConnectApiKeyDrawerProps) {
   const canSave = Boolean(apiKey.trim()) && (testSucceeded || manualConfirm)
-  const secretLabel = "API Key"
-  const secretPlaceholder = "Paste your API key"
+  const isTelegram = integration.slug === "telegram"
+  const isChatGpt = integration.slug === "chatgpt"
+  const secretLabel = isTelegram ? "Bot token" : isChatGpt ? "OpenAI API key" : "API Key"
+  const secretPlaceholder = isTelegram
+    ? "Paste the token from BotFather"
+    : isChatGpt
+      ? "Paste your sk-... OpenAI key"
+      : "Paste your API key"
   const nameLabel = "Key name (optional)"
-  const namePlaceholder = "Production key"
-  const instructionsTitle = "How to find your API key"
-  const apiPageLabel = "Open API key page"
-  const description = "Provide your API key to connect this integration."
-  const confirmationText = "I confirm this API key is valid and ready to save."
+  const namePlaceholder = isTelegram ? "Support bot" : "Production key"
+  const instructionsTitle = isTelegram ? "How to find your bot token" : "How to find your API key"
+  const apiPageLabel = isTelegram ? "Open BotFather" : "Open API key page"
+  const description = isTelegram
+    ? "Connect a Telegram bot token so Atmet can use it in agents and workflows."
+    : isChatGpt
+      ? "Connect your OpenAI API key so Atmet can use ChatGPT/OpenAI tools."
+      : "Provide your API key to connect this integration."
+  const confirmationText = isTelegram
+    ? "I confirm this bot token is valid and ready to save."
+    : "I confirm this API key is valid and ready to save."
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
