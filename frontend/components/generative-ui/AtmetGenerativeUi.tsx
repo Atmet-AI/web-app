@@ -184,8 +184,22 @@ function AtmetUiForm({
       <div className="space-y-3">
         {component.fields.map((field) => {
           const fieldValue = currentValues[field.id] ?? ""
+          const hasValue = fieldValue.trim().length > 0
           const controlClassName =
-            "mt-1.5 border-border/70 bg-background text-sm shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
+            "mt-1.5 border-border/70 bg-background text-sm shadow-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
+          const valueToneClassName = hasValue
+            ? "text-foreground"
+            : "text-muted-foreground"
+          const inputType =
+            field.type === "email"
+              ? "email"
+              : field.type === "date"
+                ? "date"
+                : field.type === "time"
+                  ? "time"
+                  : field.type === "number"
+                    ? "number"
+                    : "text"
 
           return (
             <label
@@ -198,7 +212,11 @@ function AtmetUiForm({
                   value={fieldValue}
                   placeholder={field.placeholder}
                   onChange={(event) => updateField(field.id, event.target.value)}
-                  className={cn(controlClassName, "min-h-24 resize-none rounded-lg")}
+                  className={cn(
+                    controlClassName,
+                    valueToneClassName,
+                    "min-h-24 resize-none rounded-lg"
+                  )}
                 />
               ) : field.type === "select" ? (
                 <select
@@ -206,9 +224,15 @@ function AtmetUiForm({
                   onChange={(event) => updateField(field.id, event.target.value)}
                   className={cn(
                     controlClassName,
+                    valueToneClassName,
                     "h-9 w-full rounded-lg px-3 outline-none"
                   )}
                 >
+                  {field.placeholder ? (
+                    <option value="" disabled>
+                      {field.placeholder}
+                    </option>
+                  ) : null}
                   {(field.options ?? []).map((option) => (
                     <option key={option} value={option}>
                       {option}
@@ -218,10 +242,11 @@ function AtmetUiForm({
               ) : (
                 <Input
                   value={fieldValue}
-                  type={field.type === "email" ? "email" : "text"}
+                  type={inputType}
+                  inputMode={field.type === "number" ? "numeric" : undefined}
                   placeholder={field.placeholder}
                   onChange={(event) => updateField(field.id, event.target.value)}
-                  className={cn(controlClassName, "h-9 rounded-lg")}
+                  className={cn(controlClassName, valueToneClassName, "h-9 rounded-lg")}
                 />
               )}
             </label>

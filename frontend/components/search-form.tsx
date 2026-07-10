@@ -168,7 +168,7 @@ const projectQuickActions: QuickAction[] = [
     level: 0,
     sector: "Projects",
     label: "New Project",
-    description: "Start a new workflow project.",
+    description: "Start a new agent project.",
     path: "/workflow",
     icon: FolderPlus,
     shortcut: {
@@ -200,7 +200,7 @@ const projectQuickActions: QuickAction[] = [
     level: 0,
     sector: "Projects",
     label: "Manage Projects",
-    description: "Open workflow projects and builders.",
+    description: "Open agent projects and builders.",
     path: "/workflow",
     icon: FolderOpen,
     shortcut: {
@@ -215,8 +215,8 @@ const projectQuickActions: QuickAction[] = [
     parentId: "projects-manage",
     level: 1,
     sector: "Projects",
-    label: "Workflow Builder",
-    description: "Create and manage workflow automations.",
+    label: "Agents",
+    description: "Create and manage agent automations.",
     path: "/workflow",
     icon: Workflow,
   },

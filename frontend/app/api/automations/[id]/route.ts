@@ -21,7 +21,23 @@ export async function GET(
 
   if (error || !data) return Errors.notFound("Automation")
 
-  return ok({ automation: data })
+  const { data: chatLinks } = await supabase
+    .from("chats_automation")
+    .select("chat_id")
+    .eq("automation_id", id)
+
+  const chatIds = Array.from(
+    new Set((chatLinks ?? []).map((link) => link.chat_id).filter(Boolean))
+  )
+
+  const { data: chatUsers } = chatIds.length
+    ? await supabase
+        .from("chats_users")
+        .select("user:user_id(id, email, full_name, avatar_url, status)")
+        .in("chat_id", chatIds)
+    : { data: [] }
+
+  return ok({ automation: data, chatUsers: chatUsers ?? [] })
 }
 
 export async function PATCH(

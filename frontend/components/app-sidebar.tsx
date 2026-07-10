@@ -143,7 +143,7 @@ const navItems = [
     icon: IconPlus,
   },
   {
-    title: "Workflows",
+    title: "Agents",
     url: "/workflow",
     iconType: "hugeicons" as const,
     icon: WorkflowCircle01Icon,
@@ -8782,32 +8782,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     [activeChatId, apiFetch, persistStoredChats, router, storedChats]
   )
 
-  const createNewChat = React.useCallback(async () => {
-    const response = await apiFetch("/api/chats", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "New chat" }),
-    }).catch(() => null)
-    if (!response?.ok) return
-
-    const payload = (await response.json()) as {
-      data?: { chat?: { id: string; title: string; updated_at?: string; created_at?: string } }
-    }
-    const chat = payload.data?.chat
-    if (!chat) return
-
-    const updatedAt = chat.updated_at ?? chat.created_at ?? new Date().toISOString()
-    const nextChat: StoredChatItem = {
-      id: chat.id,
-      title: chat.title,
-      updatedAt: Date.parse(updatedAt),
-      pinned: false,
-      path: `/ai-core?chat=${chat.id}`,
-    }
-
-    persistStoredChats([nextChat, ...storedChats.filter((item) => item.id !== chat.id)])
-    router.push(nextChat.path ?? "/ai-core")
-  }, [apiFetch, persistStoredChats, router, storedChats])
+  const createNewChat = React.useCallback(() => {
+    router.push("/ai-core")
+  }, [router])
 
   const handleWorkspaceSave = React.useCallback(
     async (nextWorkspace: WorkspaceProfile) => {

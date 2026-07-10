@@ -18,7 +18,6 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
   const promptRef = useRef<HTMLDivElement>(null)
   const [, setHasStartedConversation] = useState(false)
   const [hasConversationActivity, setHasConversationActivity] = useState(false)
-  const [bottomShift, setBottomShift] = useState(0)
   const [currentUserFullName, setCurrentUserFullName] = useState("there")
 
   const openUserPicker = useCallback(() => {
@@ -29,29 +28,7 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
     window.dispatchEvent(new CustomEvent(AUTOMATION_CHAT_STARTED_EVENT))
   }, [])
 
-  const recalculateBottomShift = useCallback(() => {
-    if (!containerRef.current || !promptRef.current) return
-
-    const containerHeight = containerRef.current.clientHeight
-    const promptHeight = promptRef.current.clientHeight
-    const bottomPadding = 16
-    const centerToBottom =
-      containerHeight / 2 - promptHeight / 2 - bottomPadding
-
-    setBottomShift(Math.min(320, Math.max(0, centerToBottom)))
-  }, [])
-
   const shouldDockToBottom = hasConversationActivity
-
-  useEffect(() => {
-    recalculateBottomShift()
-
-    const observer = new ResizeObserver(recalculateBottomShift)
-    if (containerRef.current) observer.observe(containerRef.current)
-    if (promptRef.current) observer.observe(promptRef.current)
-
-    return () => observer.disconnect()
-  }, [recalculateBottomShift])
 
   useEffect(() => {
     let isMounted = true
@@ -93,9 +70,7 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
           shouldDockToBottom ? "h-full min-h-0" : "will-change-transform"
         )}
         style={{
-          transform: shouldDockToBottom
-            ? "none"
-            : `translateY(${Number.isFinite(bottomShift) ? bottomShift : 0}px)`,
+          transform: "none",
         }}
       >
         <AIPrompt

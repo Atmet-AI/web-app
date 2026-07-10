@@ -133,16 +133,16 @@ export default function WorkflowPage() {
         <div className="space-y-5">
           <header className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Workflows
+              Agents
             </h1>
             <p className="text-sm text-muted-foreground">
-              Browse and manage workflows available for your workspace.
+              Browse and manage agents available for your workspace.
             </p>
           </header>
 
           {isLoading ? (
             <div className="flex h-44 w-full items-center justify-center rounded-xl border border-dashed border-border">
-              <p className="text-sm text-muted-foreground">Loading workflows...</p>
+              <p className="text-sm text-muted-foreground">Loading agents...</p>
             </div>
           ) : projects.length === 0 ? (
             <div className="flex h-full min-h-[50vh] items-center justify-center">
