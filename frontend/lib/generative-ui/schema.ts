@@ -14,7 +14,7 @@ export const atmetUiActionSchema = z.object({
 export const atmetUiFieldSchema = z.object({
   id: z.string().min(1).max(64),
   label: z.string().min(1).max(80),
-  type: z.enum(["text", "email", "textarea", "select", "date", "number"]),
+  type: z.enum(["text", "email", "textarea", "select", "date", "time", "number"]),
   value: z.string().max(4000).optional(),
   placeholder: z.string().max(160).optional(),
   required: z.boolean().optional(),

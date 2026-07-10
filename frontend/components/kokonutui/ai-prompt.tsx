@@ -32,6 +32,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { GradientSpin } from "gradient-spin";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -385,6 +386,10 @@ export default function AI_Prompt({
   const appNames = useMemo(() => availableIntegrations.map((i) => i.name), [availableIntegrations]);
   const integrationByName = useMemo(
     () => new Map(availableIntegrations.map((i) => [i.name.toLowerCase(), i])),
+    [availableIntegrations]
+  );
+  const integrationBySlug = useMemo(
+    () => new Map(availableIntegrations.map((i) => [i.slug, i])),
     [availableIntegrations]
   );
   const telegramIntegration = useMemo(
@@ -770,14 +775,16 @@ export default function AI_Prompt({
   }, [chatId]);
 
   useEffect(() => {
-    if (!chatId) {
+    const effectiveChatId = chatId ?? resolvedChatId;
+
+    if (!effectiveChatId) {
       setMessages([]);
       return;
     }
     if (isResponding) return;
 
     let isCancelled = false;
-    void apiFetch(`/api/chats/${chatId}/messages`)
+    void apiFetch(`/api/chats/${effectiveChatId}/messages`)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: { data?: { messages?: ApiMessage[] } } | null) => {
         if (isCancelled) return;
@@ -799,7 +806,7 @@ export default function AI_Prompt({
     return () => {
       isCancelled = true;
     };
-  }, [apiFetch, chatId, isResponding]);
+  }, [apiFetch, chatId, isResponding, resolvedChatId]);
 
   useEffect(() => {
     const copyTimers = copyTimersRef.current;
@@ -881,14 +888,23 @@ export default function AI_Prompt({
 
   const extractMentionedApps = useCallback(
     (text: string) => {
-      const lowerText = text.toLowerCase();
-      return appNames.filter((app) => {
-        const escaped = app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").toLowerCase();
-        const pattern = new RegExp(`(^|\\s)@${escaped}(?=\\s|$)`, "i");
-        return pattern.test(lowerText);
-      });
+      const apps: string[] = [];
+      const appLinkRegex = /\[([^\]]+)\]\(app:\/\/([a-z0-9-]+)\)/gi;
+      let match: RegExpExecArray | null;
+
+      while ((match = appLinkRegex.exec(text)) !== null) {
+        const slug = match[2] ?? "";
+        const label = match[1] ?? "";
+        const integration =
+          integrationBySlug.get(slug) ?? integrationByName.get(label.toLowerCase());
+        if (integration && !apps.includes(integration.name)) {
+          apps.push(integration.name);
+        }
+      }
+
+      return apps;
     },
-    [appNames]
+    [integrationByName, integrationBySlug]
   );
 
   useEffect(() => {
@@ -931,7 +947,8 @@ export default function AI_Prompt({
     if (!commandMenu) return;
 
     const prefix = commandMenu.type === "skill" ? "/" : "@";
-    const replacement = `${prefix}${item} `;
+    const integration = commandMenu.type === "app" ? integrationByName.get(item.toLowerCase()) : null;
+    const replacement = integration ? `[${integration.name}](app://${integration.slug}) ` : `${prefix}${item} `;
     const nextValue =
       value.slice(0, commandMenu.start) + replacement + value.slice(commandMenu.end);
 
@@ -963,10 +980,7 @@ export default function AI_Prompt({
       return { nextValue: inputValue, nextCursor: cursorPosition };
     }
 
-    const mentionTokens = [
-      ...appNames.map((app) => `@${app}`),
-      ...mentionableSkills.map((skill) => `/${skill}`),
-    ].sort((a, b) => b.length - a.length);
+    const mentionTokens = mentionableSkills.map((skill) => `/${skill}`).sort((a, b) => b.length - a.length);
 
     const lowerBefore = beforeCursor.toLowerCase();
 
@@ -991,21 +1005,15 @@ export default function AI_Prompt({
     inputValue: string,
     cursorPosition: number
   ): { nextValue: string; nextCursor: number } => {
-    const escapedApps = appNames.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
-      (a, b) => b.length - a.length
-    );
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .sort((a, b) => b.length - a.length);
 
-    if (escapedApps.length === 0 && escapedSkills.length === 0) {
+    if (escapedSkills.length === 0) {
       return { nextValue: inputValue, nextCursor: cursorPosition };
     }
 
     const mentionParts: string[] = [];
-    if (escapedApps.length > 0) {
-      mentionParts.push(`@(?:${escapedApps.join("|")})`);
-    }
     if (escapedSkills.length > 0) {
       mentionParts.push(`\\/(?:${escapedSkills.join("|")})`);
     }
@@ -1039,16 +1047,12 @@ export default function AI_Prompt({
   };
 
   const getMentionRanges = (inputValue: string): Array<{ start: number; end: number }> => {
-    const escapedApps = appNames.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
-      (a, b) => b.length - a.length
-    );
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .sort((a, b) => b.length - a.length);
-    const mentionRegex = new RegExp(
-      `(@(${escapedApps.join("|")})|\\/(${escapedSkills.join("|")}))(?=\\s|$|[.,!?;:])`,
-      "gi"
-    );
+    const parts = ["\\[[^\\]]+\\]\\(app:\\/\\/[a-z0-9-]+\\)"];
+    if (escapedSkills.length > 0) parts.push(`\\/(?:${escapedSkills.join("|")})(?=\\s|$|[.,!?;:])`);
+    const mentionRegex = new RegExp(parts.join("|"), "gi");
 
     const ranges: Array<{ start: number; end: number }> = [];
     let match: RegExpExecArray | null;
@@ -1174,7 +1178,8 @@ export default function AI_Prompt({
   };
 
   const insertAppMention = (app: string) => {
-    const mention = `@${app} `;
+    const integration = integrationByName.get(app.toLowerCase());
+    const mention = integration ? `[${integration.name}](app://${integration.slug}) ` : `${app} `;
     const nextValue = value.length === 0
       ? mention
       : `${value}${value.endsWith(" ") ? "" : " "}${mention}`;
@@ -1193,8 +1198,12 @@ export default function AI_Prompt({
 
   const removeConnectedApp = (app: string) => {
     setValue((prev) => {
+      const integration = integrationByName.get(app.toLowerCase());
       const escapedApp = app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const appMentionPattern = new RegExp(`(^|\\s)@${escapedApp}(?=\\s|$)`, "g");
+      const escapedSlug = integration?.slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const appMentionPattern = escapedSlug
+        ? new RegExp(`(^|\\s)\\[${escapedApp}\\]\\(app:\\/\\/${escapedSlug}\\)(?=\\s|$)`, "g")
+        : new RegExp(`(^|\\s)\\[${escapedApp}\\]\\(app:\\/\\/[a-z0-9-]+\\)(?=\\s|$)`, "g");
 
       return prev
         .replace(appMentionPattern, "$1")
@@ -1366,7 +1375,7 @@ export default function AI_Prompt({
         return;
       }
 
-      const approvedContent = `@${approval.appName} ${approval.originalRequest}`;
+      const approvedContent = `[${approval.appName}](app://${approval.appSlug}) ${approval.originalRequest}`;
       setConnectedApps((prev) =>
         prev.some((app) => app.toLowerCase() === approval.appName.toLowerCase())
           ? prev
@@ -1431,9 +1440,14 @@ export default function AI_Prompt({
 
   const buildAppMiniUiSubmission = useCallback(
     (request: AppMiniUiRequest, values: Record<string, string>) => {
+      const integration = integrationByName.get(request.appName.toLowerCase());
+      const appToken = integration
+        ? `[${integration.name}](app://${integration.slug})`
+        : request.appName;
+
       if (request.variant === "gmail-compose") {
         return [
-          `@${request.appName} Send an email with these exact fields:`,
+          `${appToken} The user approved these exact Gmail fields. Send the email now without asking for another confirmation:`,
           `To: ${cleanEmailAddress(values.to ?? "")}`,
           `Subject: ${values.subject?.trim() ?? ""}`,
           `Body:`,
@@ -1441,27 +1455,40 @@ export default function AI_Prompt({
         ].join("\n");
       }
 
+      if (request.variant === "google-calendar-event") {
+        return [
+          `${appToken} Schedule a calendar event with these exact fields:`,
+          `Title: ${values.title?.trim() ?? ""}`,
+          `Description: ${values.description?.trim() ?? ""}`,
+          `Invited emails: ${values.invitees?.trim() ?? ""}`,
+          `Date: ${values.date?.trim() ?? ""}`,
+          `Time: ${values.time?.trim() ?? ""}`,
+          `Duration: ${values.duration?.trim() ?? "30"} minutes`,
+          `Timezone: ${values.timezone?.trim() || "Asia/Amman"}`,
+        ].join("\n");
+      }
+
       if (request.variant === "google-sheets-create") {
-        return `@${request.appName} Create a new spreadsheet titled "${values.title?.trim() ?? ""}" with headers: ${values.headers?.trim() ?? ""}`;
+        return `${appToken} Create a new spreadsheet titled "${values.title?.trim() ?? ""}" with headers: ${values.headers?.trim() ?? ""}`;
       }
 
       if (request.variant === "google-drive-search") {
         const itemType = values.itemType?.trim() || "files and folders";
-        return `@${request.appName} Search ${itemType} for "${values.query?.trim() ?? ""}"`;
+        return `${appToken} Search ${itemType} for "${values.query?.trim() ?? ""}"`;
       }
 
       if (request.variant === "telegram-send-message") {
         return [
-          `@${request.appName} Send a Telegram message with these exact fields:`,
+          `${appToken} Send a Telegram message with these exact fields:`,
           `Chat ID: ${values.chat_id?.trim() ?? ""}`,
           "Text:",
           values.text?.trim() ?? "",
         ].join("\n");
       }
 
-      return `@${request.appName} ${request.originalRequest}`;
+      return `${appToken} ${request.originalRequest}`;
     },
-    []
+    [integrationByName]
   );
 
   const submitAppMiniUiRequest = useCallback(
@@ -1499,12 +1526,16 @@ export default function AI_Prompt({
       }
 
       const submittedContent = buildAppMiniUiSubmission(request, values);
+      const submittedStatus =
+        request.variant === "gmail-compose"
+          ? `${request.appName} approved. Sending now.`
+          : `${request.appName} details submitted. Running the request now.`;
       setMessages((prev) =>
         prev.map((message) =>
           message.id === sourceMessageId
             ? {
                 ...message,
-                content: `${request.appName} details submitted. Running the request now.`,
+                content: submittedStatus,
               }
             : message
         )
@@ -1527,17 +1558,20 @@ export default function AI_Prompt({
 
   const isAppRequestResolved = useCallback(
     (messageId: number, appName: string) => {
+      const integration = integrationByName.get(appName.toLowerCase());
+      const appToken = integration ? `[${integration.name}](app://${integration.slug})` : "";
       return messages.some(
         (message) =>
           message.id > messageId &&
           ((message.role === "user" &&
-            message.content.toLowerCase().includes(`@${appName.toLowerCase()}`)) ||
+            appToken.length > 0 &&
+            message.content.toLowerCase().includes(appToken.toLowerCase())) ||
             (message.role === "assistant" &&
               !parseAppApprovalRequest(message.content) &&
               !parseAppMiniUiRequest(message.content)))
       );
     },
-    [messages]
+    [integrationByName, messages]
   );
 
   const uploadMessageAttachments = useCallback(
@@ -2133,17 +2167,14 @@ export default function AI_Prompt({
   ) => {
     const useInlineMentionStyle = options?.plainInline ?? true;
     const preserveComposerCaret = options?.preserveComposerCaret ?? false;
-    const escapedApps = appNames.map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort(
-      (a, b) => b.length - a.length
-    );
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .sort((a, b) => b.length - a.length);
-    const mentionRegex = new RegExp(
-      `(@(${escapedApps.join("|")})|\\/(${escapedSkills.join("|")}))(?=\\s|$|[.,!?;:])`,
-      "gi"
-    );
-    const appByLower = new Map(appNames.map((app) => [app.toLowerCase(), app]));
+    const mentionParts = ["\\[([^\\]]+)\\]\\(app:\\/\\/([a-z0-9-]+)\\)"];
+    if (escapedSkills.length > 0) {
+      mentionParts.push(`\\/(${escapedSkills.join("|")})(?=\\s|$|[.,!?;:])`);
+    }
+    const mentionRegex = new RegExp(mentionParts.join("|"), "gi");
     const skillByLower = new Map(
       mentionableSkills.map((skill) => [skill.toLowerCase(), skill])
     );
@@ -2154,9 +2185,12 @@ export default function AI_Prompt({
 
     while ((match = mentionRegex.exec(content)) !== null) {
       const fullMatch = match[0] ?? "";
-      const appRaw = match[2] ?? "";
+      const appLabel = match[1] ?? "";
+      const appSlug = match[2] ?? "";
       const skillRaw = match[3] ?? "";
-      const appName = appRaw ? appByLower.get(appRaw.toLowerCase()) ?? appRaw : "";
+      const integration =
+        appSlug ? integrationBySlug.get(appSlug) ?? integrationByName.get(appLabel.toLowerCase()) : null;
+      const appName = integration?.name ?? appLabel;
       const skillName = skillRaw
         ? skillByLower.get(skillRaw.toLowerCase()) ?? skillRaw
         : "";
@@ -2278,6 +2312,130 @@ export default function AI_Prompt({
     return nodes.length > 0 ? nodes : content;
   };
 
+  const renderInlineAssistantMarkdown = (content: string, keyPrefix: string) => {
+    const nodes: React.ReactNode[] = [];
+    const inlineRegex = /(\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\))/g;
+    let cursor = 0;
+    let inlineIndex = 0;
+    let match: RegExpExecArray | null;
+
+    const pushMentionNodes = (value: string, key: string) => {
+      const rendered = renderTextWithAppMentions(value, key);
+      if (Array.isArray(rendered)) {
+        nodes.push(...rendered);
+      } else {
+        nodes.push(rendered);
+      }
+    };
+
+    while ((match = inlineRegex.exec(content)) !== null) {
+      if (match.index > cursor) {
+        pushMentionNodes(
+          content.slice(cursor, match.index),
+          `${keyPrefix}-text-${inlineIndex}`
+        );
+      }
+
+      const boldText = match[2];
+      const linkText = match[3];
+      const href = match[4];
+
+      if (boldText) {
+        nodes.push(
+          <strong
+            key={`${keyPrefix}-bold-${inlineIndex}`}
+            className="font-medium text-foreground"
+          >
+            {renderTextWithAppMentions(boldText, `${keyPrefix}-bold-text-${inlineIndex}`)}
+          </strong>
+        );
+      } else if (linkText && href) {
+        nodes.push(
+          <a
+            key={`${keyPrefix}-link-${inlineIndex}`}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary underline-offset-4 hover:underline"
+          >
+            {renderTextWithAppMentions(linkText, `${keyPrefix}-link-text-${inlineIndex}`)}
+          </a>
+        );
+      }
+
+      inlineIndex += 1;
+      cursor = match.index + match[0].length;
+    }
+
+    if (cursor < content.length) {
+      pushMentionNodes(content.slice(cursor), `${keyPrefix}-text-${inlineIndex}`);
+    }
+
+    return nodes.length > 0 ? nodes : renderTextWithAppMentions(content, keyPrefix);
+  };
+
+  const renderAssistantMarkdownText = (content: string, keyPrefix: string) => {
+    const lines = content.split("\n");
+    const blocks: React.ReactNode[] = [];
+    let paragraph: string[] = [];
+    let listItems: string[] = [];
+
+    const flushParagraph = () => {
+      if (paragraph.length === 0) return;
+      const value = paragraph.join("\n");
+      blocks.push(
+        <p
+          key={`${keyPrefix}-p-${blocks.length}`}
+          className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-0.5 py-1 text-sm text-foreground"
+        >
+          {renderInlineAssistantMarkdown(value, `${keyPrefix}-p-${blocks.length}`)}
+        </p>
+      );
+      paragraph = [];
+    };
+
+    const flushList = () => {
+      if (listItems.length === 0) return;
+      blocks.push(
+        <ul
+          key={`${keyPrefix}-ul-${blocks.length}`}
+          className="my-1 list-disc space-y-1 pl-5 text-sm text-foreground"
+        >
+          {listItems.map((item, index) => (
+            <li key={`${keyPrefix}-li-${blocks.length}-${index}`} className="pl-1">
+              {renderInlineAssistantMarkdown(item, `${keyPrefix}-li-${blocks.length}-${index}`)}
+            </li>
+          ))}
+        </ul>
+      );
+      listItems = [];
+    };
+
+    lines.forEach((line) => {
+      const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+
+      if (listMatch?.[1]) {
+        flushParagraph();
+        listItems.push(listMatch[1]);
+        return;
+      }
+
+      if (line.trim().length === 0) {
+        flushParagraph();
+        flushList();
+        return;
+      }
+
+      flushList();
+      paragraph.push(line);
+    });
+
+    flushParagraph();
+    flushList();
+
+    return <div className="space-y-1">{blocks}</div>;
+  };
+
   const renderComposerValue = () => {
     const hasOnlyLockedPrefix =
       !!lockedComposerPrefix &&
@@ -2311,6 +2469,15 @@ export default function AI_Prompt({
   };
 
   const renderAppApprovalCard = (approval: AppApprovalRequest, messageId: number) => {
+    const isGmailSendApproval =
+      approval.appName.toLowerCase() === "gmail" &&
+      /\b(send|compose|write)\b/i.test(approval.originalRequest) &&
+      /\b(email|mail|message)\b/i.test(approval.originalRequest);
+    const approvalTitle = isGmailSendApproval
+      ? `Approve ${approval.appName}?`
+      : `Add ${approval.appName}?`;
+    const approvalActionLabel = isGmailSendApproval ? "Approve and send" : "Add";
+
     return (
       <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
         <div className="flex items-start gap-3 px-4 py-4">
@@ -2319,7 +2486,7 @@ export default function AI_Prompt({
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-base font-medium leading-6 text-foreground">
-              Add {approval.appName}?
+              {approvalTitle}
             </div>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               {approval.reason}
@@ -2342,7 +2509,7 @@ export default function AI_Prompt({
             disabled={isResponding}
           >
             <Check className="h-3.5 w-3.5" />
-            Add
+            {approvalActionLabel}
           </Button>
         </div>
       </div>
@@ -2416,11 +2583,7 @@ export default function AI_Prompt({
     const hasCodeSegment = segments.some((segment) => segment.type === "code");
 
     if (!hasCodeSegment) {
-      return (
-        <p className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-0.5 py-1 text-sm text-foreground">
-          {renderTextWithAppMentions(content, `assistant-inline-${messageId}`)}
-        </p>
-      );
+      return renderAssistantMarkdownText(content, `assistant-inline-${messageId}`);
     }
 
     return (
@@ -2430,15 +2593,14 @@ export default function AI_Prompt({
             if (segment.value.trim().length === 0) return null;
 
             return (
-              <p
+              <div
                 key={`assistant-text-${messageId}-${index}`}
-                className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-0.5 py-1 text-sm text-foreground"
               >
-                {renderTextWithAppMentions(
+                {renderAssistantMarkdownText(
                   segment.value,
                   `assistant-segment-${messageId}-${index}`
                 )}
-              </p>
+              </div>
             );
           }
 
@@ -3108,8 +3270,20 @@ export default function AI_Prompt({
             </div>
           ) : null}
           {isResponding && (
-            <div className="text-sm text-muted-foreground">
-              <span>Typing...</span>
+            <div className="flex items-center px-0.5 py-1">
+              <GradientSpin
+                gradient="sunrise"
+                pattern="snake"
+                rows={3}
+                cols={3}
+                cellSize={4}
+                cellGap={2}
+                cellRadius={1}
+                period={750}
+                dim={0.1}
+                colorBy="row"
+                label="Thinking"
+              />
             </div>
           )}
           <div ref={messagesEndRef} />

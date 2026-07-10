@@ -177,6 +177,29 @@ function mentionsGoogleSheets(content: string) {
   )
 }
 
+function mentionsGoogleCalendar(content: string) {
+  return /\b(google\s*calendar|calendar|meeting|meetings|event|events|appointment|appointments|schedule|scheduled|scheduling)\b/i.test(
+    content
+  )
+}
+
+function asksToCreateCalendarEvent(content: string) {
+  return (
+    mentionsGoogleCalendar(content) &&
+    /\b(schedule|book|create|add|insert|set\s+up|make)\b/i.test(content) &&
+    /\b(meeting|event|appointment|calendar)\b/i.test(content)
+  )
+}
+
+function asksToListCalendarEvents(content: string) {
+  return (
+    mentionsGoogleCalendar(content) &&
+    /\b(show|list|get|find|see|what|check|events?|meetings?|appointments?)\b/i.test(
+      content
+    )
+  )
+}
+
 function asksToSearchOrList(content: string) {
   return /\b(search|find|list|show|get|last|recent|used|opened|modified)\b/i.test(
     content
@@ -194,6 +217,17 @@ function asksToAddColumn(content: string) {
   return (
     /\b(column|columns)\b/i.test(content) &&
     /\b(add|append|insert|create|write|update|set|new|random)\b/i.test(content)
+  )
+}
+
+function asksToSetSheetHeaders(content: string) {
+  return (
+    /\b(header|headers|heading|headings|first\s+row|cell\s+a1|a1\s*:)\b/i.test(
+      content
+    ) &&
+    /\b(add|insert|create|write|update|set|enter|type|fill|put|make)\b/i.test(
+      content
+    )
   )
 }
 
@@ -281,7 +315,7 @@ function cleanSpreadsheetTargetName(value: string | null | undefined) {
     .replace(/[*`]/g, "")
     .replace(/^[\s"'.,:;-]+|[\s"'.,:;-]+$/g, "")
     .replace(
-      /^(?:try\s+(?:for\s+)?|for\s+)?(?:this\s+)?(?:one|sheet|spreadsheet)\s+/i,
+      /^(?:try\s+(?:for\s+)?|for\s+|open\s+|locate\s+)?(?:this\s+)?(?:one|sheet|spreadsheet|google\s+sheet\s+titled|google\s+sheet\s+named)\s+/i,
       ""
     )
     .replace(/^(?:the|a|an)\s+/i, "")
@@ -289,6 +323,126 @@ function cleanSpreadsheetTargetName(value: string | null | undefined) {
     .trim()
 
   return cleaned.length >= 2 ? cleaned : null
+}
+
+function extractSheetHeaders(content: string) {
+  const fromCells = Array.from(
+    content.matchAll(/\bcell\s+[A-Z]{1,3}1\s*:\s*["“”']?([^"\n“”'.]+)["“”']?/gi)
+  )
+    .map((match) => match[1]?.trim())
+    .filter((value): value is string => Boolean(value))
+
+  if (fromCells.length > 0) return Array.from(new Set(fromCells))
+
+  const labeled = content.match(/\bheaders?\s*:?\s*([^\n.]+)/i)?.[1]
+  if (labeled) {
+    const headers = labeled
+      .split(/,|\||;|\band\b/i)
+      .map((value) => cleanSpreadsheetTargetName(value))
+      .filter((value): value is string => Boolean(value))
+    if (headers.length > 0) return headers
+  }
+
+  const quotedList = Array.from(
+    content.matchAll(/["“”]([^"“”]{1,80})["“”]/g)
+  )
+    .map((match) => match[1]?.trim())
+    .filter(
+      (value): value is string =>
+        Boolean(value) &&
+        !/\bgoogle\s*sheets?\b/i.test(value) &&
+        !extractEmailAddress(value)
+    )
+
+  if (quotedList.length >= 2) return Array.from(new Set(quotedList))
+
+  const knownHeaders = ["Name", "Age", "Sex", "Phone", "Email", "Address"]
+  const matchedKnownHeaders = knownHeaders.filter((header) =>
+    new RegExp(`\\b${header}\\b`, "i").test(content)
+  )
+
+  return matchedKnownHeaders.length > 0 ? matchedKnownHeaders : []
+}
+
+function extractEmailAddress(content: string) {
+  return (
+    content
+      .replace(/\s*@\s*/g, "@")
+      .match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? null
+  )
+}
+
+function extractCalendarIntentText(content: string) {
+  const latestMessage = latestUserMessageFromToolRequest(content)
+  if (mentionsGoogleCalendar(latestMessage)) return latestMessage
+
+  const userLines = Array.from(
+    content.matchAll(/user:\s*([^\n]+(?:\n(?!assistant:|user:|system:).*)*)/gi)
+  ).map((match) => match[1]?.trim() ?? "")
+
+  return (
+    [...userLines]
+      .reverse()
+      .find((line) => mentionsGoogleCalendar(line) || extractEmailAddress(line)) ??
+    latestMessage
+  )
+}
+
+function extractCalendarDurationMinutes(content: string) {
+  const explicit = content.match(
+    /\b(\d{1,3})\s*(?:minutes?|mins?|min)\b/i
+  )?.[1]
+  if (explicit) return Number(explicit)
+
+  const hours = content.match(/\b(\d{1,2})\s*(?:hours?|hrs?|hr)\b/i)?.[1]
+  if (hours) return Number(hours) * 60
+
+  return 30
+}
+
+function extractCalendarTitle(content: string) {
+  const labeled = content.match(/\b(?:title|summary)\s*:\s*([^\n]+)/i)?.[1]
+  if (labeled) return labeled.replace(/[*`"“”]/g, "").trim()
+
+  const quoted = content.match(/["“”]([^"“”]{3,120})["“”]/)?.[1]
+  if (quoted && !extractEmailAddress(quoted)) return quoted.trim()
+
+  return "Meeting"
+}
+
+function buildCalendarQuickAddText(content: string) {
+  const intentText = extractCalendarIntentText(content)
+  const email = extractEmailAddress(content)
+  const duration = extractCalendarDurationMinutes(content)
+  const title = extractCalendarTitle(content)
+  const normalized = intentText
+    .replace(/@\s*Google\s*Calendar/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  if (/schedule|book|create|add|meeting|event/i.test(normalized)) {
+    return `${normalized} for ${duration} minutes${email ? ` with ${email}` : ""}`.trim()
+  }
+
+  return `${title}${email ? ` with ${email}` : ""} ${normalized} for ${duration} minutes`.trim()
+}
+
+function calendarDayBounds(content: string) {
+  const now = new Date()
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+
+  if (/\btomorrow\b/i.test(content)) {
+    start.setDate(start.getDate() + 1)
+  }
+
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+
+  return {
+    timeMin: start.toISOString(),
+    timeMax: end.toISOString(),
+  }
 }
 
 function extractSpreadsheetName(content: string) {
@@ -339,9 +493,11 @@ function asksToSetColumnHeader(content: string) {
 
 function looksLikeSheetsFollowUp(content: string) {
   return (
-    /\b(try|same|this\s+one|that\s+one|for\s+["“”']?|go\s+ahead|yes)\b/i.test(
+    /\b(try|same|this\s+one|that\s+one|for\s+["“”']?|go\s+ahead|yes|do\s+it|you\s+do\s+it|you\s+can|gave\s+you\s+access|access|proceed|continue)\b/i.test(
       content
-    ) || asksToEditSheetGrid(content)
+    ) ||
+    asksToEditSheetGrid(content) ||
+    asksToSetSheetHeaders(content)
   )
 }
 
@@ -527,11 +683,136 @@ async function getActiveComposioSession(input: {
 }
 
 function detectGenericConnectedApp(content: string) {
-  return (
-    GENERIC_CONNECTED_APPS.find((app) =>
-      app.aliases.some((alias) => alias.test(content))
-    ) ?? null
+  const matches = GENERIC_CONNECTED_APPS.filter((app) =>
+    app.aliases.some((alias) => alias.test(content))
   )
+  if (matches.length === 0) return null
+
+  const request = content.toLowerCase()
+  return matches
+    .map((app) => {
+      let score = 0
+      if (request.includes(`app://${app.provider}`)) score += 30
+      if (request.includes(`app://${app.toolkit}`)) score += 30
+      if (request.includes(`@${app.label.toLowerCase()}`)) score += 20
+      if (request.includes(app.label.toLowerCase())) score += 10
+      if (
+        app.provider === "google-calendar" &&
+        /\b(schedule|meeting|calendar|event|appointment|tomorrow|today)\b/i.test(
+          content
+        )
+      ) {
+        score += 15
+      }
+      if (
+        app.provider === "gmail" &&
+        /\b(send|reply|compose|inbox|email|mailbox)\b/i.test(content)
+      ) {
+        score += 8
+      }
+      if (app.provider === "gmail" && /[A-Z0-9._%+-]+@gmail\.com/i.test(content)) {
+        score -= 6
+      }
+      return { app, score }
+    })
+    .sort((left, right) => right.score - left.score)[0]?.app ?? null
+}
+
+async function runGoogleCalendarChatTool(input: {
+  workspaceId: string
+  userId: string
+  content: string
+}): Promise<ComposioChatToolResult> {
+  const calendar = await getActiveComposioSession({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    toolkit: "googlecalendar",
+  })
+
+  if (!calendar.ok) {
+    return {
+      ok: false,
+      provider: "google-calendar",
+      operation: "connection",
+      summary:
+        "Google Calendar was mentioned, but there is no active Google Calendar connection for this workspace user yet.",
+      error: calendar.error,
+    }
+  }
+
+  if (asksToCreateCalendarEvent(input.content)) {
+    const text = buildCalendarQuickAddText(input.content)
+    const result = await calendar.session.execute("GOOGLECALENDAR_QUICK_ADD", {
+      calendar_id: "primary",
+      text,
+      send_updates: "all",
+    })
+
+    if (result.error) {
+      return {
+        ok: false,
+        provider: "google-calendar",
+        operation: "GOOGLECALENDAR_QUICK_ADD",
+        summary:
+          "Google Calendar event creation ran but Composio returned an error.",
+        error: result.error,
+      }
+    }
+
+    return {
+      ok: true,
+      provider: "google-calendar",
+      operation: "GOOGLECALENDAR_QUICK_ADD",
+      summary: "The Google Calendar meeting was created through Composio.",
+      data: {
+        tool: "GOOGLECALENDAR_QUICK_ADD",
+        connectedAccountId: calendar.activeAccount.id,
+        args: {
+          calendar_id: "primary",
+          text,
+          send_updates: "all",
+        },
+        result: result.data,
+      },
+    }
+  }
+
+  const bounds = calendarDayBounds(input.content)
+  const result = await calendar.session.execute("GOOGLECALENDAR_EVENTS_LIST", {
+    calendarId: "primary",
+    timeMin: bounds.timeMin,
+    timeMax: bounds.timeMax,
+    timeZone: DEFAULT_TIME_ZONE,
+    orderBy: "startTime",
+    singleEvents: true,
+  })
+
+  if (result.error) {
+    return {
+      ok: false,
+      provider: "google-calendar",
+      operation: "GOOGLECALENDAR_EVENTS_LIST",
+      summary: "Google Calendar event lookup ran but Composio returned an error.",
+      error: result.error,
+    }
+  }
+
+  return {
+    ok: true,
+    provider: "google-calendar",
+    operation: "GOOGLECALENDAR_EVENTS_LIST",
+    summary: "Google Calendar events were retrieved through Composio.",
+    data: {
+      tool: "GOOGLECALENDAR_EVENTS_LIST",
+      connectedAccountId: calendar.activeAccount.id,
+      args: {
+        calendarId: "primary",
+        ...bounds,
+        timeZone: DEFAULT_TIME_ZONE,
+      },
+      result: result.data,
+    },
+  }
 }
 
 function looksLikeConnectedAppFollowUp(content: string) {
@@ -861,6 +1142,24 @@ export async function runComposioChatTool(input: {
     input.content,
     input.contextMessages
   )
+  const currentMentionsCalendar = mentionsGoogleCalendar(input.content)
+  const calendarFollowUp =
+    !currentMentionsCalendar &&
+    looksLikeConnectedAppFollowUp(input.content) &&
+    mentionsGoogleCalendar(toolRequestContent)
+
+  if (
+    (currentMentionsCalendar || calendarFollowUp) &&
+    (asksToCreateCalendarEvent(toolRequestContent) ||
+      asksToListCalendarEvents(toolRequestContent))
+  ) {
+    return await runGoogleCalendarChatTool({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      content: currentMentionsCalendar ? input.content : toolRequestContent,
+    })
+  }
+
   const currentMentionsSheets = mentionsGoogleSheets(input.content)
   const sheetsFollowUp =
     !currentMentionsSheets &&
@@ -877,6 +1176,9 @@ export async function runComposioChatTool(input: {
   const shouldAddColumn =
     (currentMentionsSheets && asksToAddColumn(input.content)) ||
     (sheetsFollowUp && asksToAddColumn(toolRequestContent))
+  const shouldSetHeaders =
+    (currentMentionsSheets && asksToSetSheetHeaders(input.content)) ||
+    (sheetsFollowUp && asksToSetSheetHeaders(toolRequestContent))
   const currentGenericApp = detectGenericConnectedApp(input.content)
   const genericApp =
     currentGenericApp ??
@@ -884,12 +1186,24 @@ export async function runComposioChatTool(input: {
       ? detectGenericConnectedApp(toolRequestContent)
       : null)
 
-  if (!shouldSearch && !shouldAppend && !shouldAddColumn && !genericApp) {
+  if (
+    !shouldSearch &&
+    !shouldAppend &&
+    !shouldAddColumn &&
+    !shouldSetHeaders &&
+    !genericApp
+  ) {
     return null
   }
 
   try {
-    if (!shouldSearch && !shouldAppend && !shouldAddColumn && genericApp) {
+    if (
+      !shouldSearch &&
+      !shouldAppend &&
+      !shouldAddColumn &&
+      !shouldSetHeaders &&
+      genericApp
+    ) {
       return await runGenericComposioAppTool({
         workspaceId: input.workspaceId,
         userId: input.userId,
@@ -909,12 +1223,142 @@ export async function runComposioChatTool(input: {
         provider: "google-sheets",
         operation: shouldAddColumn
           ? "add-column"
-          : shouldAppend
-            ? "append-row"
-            : "search",
+          : shouldSetHeaders
+            ? "set-headers"
+            : shouldAppend
+              ? "append-row"
+              : "search",
         summary:
           "Google Sheets is mentioned, but Composio does not report an active Google Sheets connection for this workspace user yet.",
         error: sheets.error,
+      }
+    }
+
+    if (shouldSetHeaders) {
+      const targetContent =
+        extractSpreadsheetId(input.content) ||
+        extractSpreadsheetName(input.content)
+          ? input.content
+          : sheetsIntentContent
+      const spreadsheetId = extractSpreadsheetId(targetContent)
+      const spreadsheetName = extractSpreadsheetName(targetContent)
+      const headers = extractSheetHeaders(sheetsIntentContent)
+
+      if (!spreadsheetId && !spreadsheetName) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "set-headers",
+          summary:
+            "A Google Sheets header edit was requested, but no spreadsheet name or URL was provided.",
+          error: "Ask the user for the spreadsheet name or URL before writing.",
+        }
+      }
+
+      if (headers.length === 0) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "set-headers",
+          summary:
+            "A Google Sheets header edit was requested, but no header names were found.",
+          error: "Ask the user which headers to write into the first row.",
+        }
+      }
+
+      let target: SheetLookup | null = spreadsheetId
+        ? { id: spreadsheetId }
+        : null
+      let searchResult: unknown = null
+
+      if (!target && spreadsheetName) {
+        searchResult = await sheets.session.execute(
+          "GOOGLESHEETS_SEARCH_SPREADSHEETS",
+          buildNamedSearchArgs(spreadsheetName)
+        )
+        const matches = spreadsheetsFromSearch(searchResult)
+        target = matches[0] ?? null
+      }
+
+      if (!target) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "set-headers",
+          summary:
+            "A Google Sheets header edit was requested, but the target spreadsheet could not be found.",
+          error: spreadsheetName
+            ? `No spreadsheet matched "${spreadsheetName}".`
+            : "No spreadsheet matched the provided target.",
+        }
+      }
+
+      const namesResult = await sheets.session.execute(
+        "GOOGLESHEETS_GET_SHEET_NAMES",
+        {
+          spreadsheet_id: target.id,
+          exclude_hidden: true,
+        }
+      )
+      const sheetNames = sheetNamesFromResult(namesResult)
+      const firstSheetName = sheetNames[0]
+
+      if (!firstSheetName) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "set-headers",
+          summary:
+            "The target spreadsheet was found, but no writable sheet tab was discovered.",
+          error: "No sheet names were returned.",
+        }
+      }
+
+      const endColumn = columnName(headers.length)
+      const range = `${firstSheetName}!A1:${endColumn}1`
+      const updateResult = await sheets.session.execute(
+        "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+        {
+          spreadsheet_id: target.id,
+          valueInputOption: "USER_ENTERED",
+          includeValuesInResponse: true,
+          data: [
+            {
+              range,
+              majorDimension: "ROWS",
+              values: [headers],
+            },
+          ],
+        }
+      )
+
+      if (updateResult.error) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "set-headers",
+          summary:
+            "Google Sheets header update ran but Composio returned an error.",
+          error: updateResult.error,
+        }
+      }
+
+      return {
+        ok: true,
+        provider: "google-sheets",
+        operation: "set-headers",
+        summary: `Headers were written to ${range} in the target Google Sheet through Composio.`,
+        data: {
+          tool: "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+          connectedAccountId: sheets.activeAccount.id,
+          spreadsheet: target,
+          sheetName: firstSheetName,
+          range,
+          headers,
+          searchResult,
+          sheetNames,
+          result: updateResult.data,
+        },
       }
     }
 
@@ -1266,6 +1710,8 @@ export async function runComposioChatTool(input: {
       provider,
       operation: genericApp
         ? "connected-app"
+        : asksToSetSheetHeaders(input.content)
+          ? "set-headers"
         : asksToAddColumn(input.content)
           ? "add-column"
           : asksToAppendRow(input.content)

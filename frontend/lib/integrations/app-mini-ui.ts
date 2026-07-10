@@ -7,7 +7,7 @@ import {
 export type AppMiniUiField = {
   id: string
   label: string
-  type: "text" | "textarea" | "select"
+  type: "text" | "email" | "textarea" | "select" | "date" | "time" | "number"
   placeholder?: string
   value?: string
   required?: boolean
@@ -19,6 +19,7 @@ export type AppMiniUiRequest = {
   appName: string
   appSlug: string
   variant:
+    | "google-calendar-event"
     | "gmail-compose"
     | "google-sheets-create"
     | "google-drive-search"
@@ -45,6 +46,7 @@ function appEnabled(input: {
 
 function stripAppMentions(content: string) {
   return content
+    .replace(/\[[^\]]+\]\(app:\/\/[a-z0-9-]+\)/gi, " ")
     .replace(/(^|\s)@[A-Za-z][A-Za-z0-9 &_-]+(?=\s|$|[.,!?;:])/g, " ")
     .trim()
 }
@@ -150,6 +152,82 @@ function extractNaturalEmailSubject(content: string) {
   )
 }
 
+function extractAllEmails(content: string) {
+  return Array.from(
+    new Set(
+      normalizeEmailWhitespace(content).match(
+        /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
+      ) ?? []
+    )
+  ).join(", ")
+}
+
+function padTwo(value: number) {
+  return String(value).padStart(2, "0")
+}
+
+function dateInputValueFor(content: string) {
+  const explicit = content.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1]
+  if (explicit) return explicit
+
+  const date = new Date()
+  if (/\btomorrow\b/i.test(content)) {
+    date.setDate(date.getDate() + 1)
+  } else if (!/\btoday\b/i.test(content)) {
+    return ""
+  }
+
+  return `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}-${padTwo(date.getDate())}`
+}
+
+function timeInputValueFor(content: string) {
+  const timeMatch = content.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i)
+  if (!timeMatch) return ""
+
+  let hour = Number(timeMatch[1])
+  const minute = Number(timeMatch[2] ?? "0")
+  const meridiem = timeMatch[3]?.toLowerCase()
+
+  if (meridiem === "pm" && hour < 12) hour += 12
+  if (meridiem === "am" && hour === 12) hour = 0
+  if (hour > 23 || minute > 59) return ""
+
+  return `${padTwo(hour)}:${padTwo(minute)}`
+}
+
+function extractDurationMinutes(content: string) {
+  const minutes = content.match(/\b(\d{1,3})\s*(?:minutes?|mins?|min)\b/i)?.[1]
+  if (minutes) return minutes
+
+  const hours = content.match(/\b(\d{1,2})\s*(?:hours?|hrs?|hr)\b/i)?.[1]
+  if (hours) return String(Number(hours) * 60)
+
+  return "30"
+}
+
+function extractCalendarTitle(content: string) {
+  return (
+    extractLabeledValue(content, "title") ||
+    extractLabeledValue(content, "summary") ||
+    extractQuotedAfter(content, ["called", "named", "titled"]) ||
+    (/\bmeeting\b/i.test(content) ? "Meeting" : "")
+  )
+}
+
+function extractCalendarDescription(content: string) {
+  return (
+    extractLabeledValue(content, "description") ||
+    extractLabeledValue(content, "agenda") ||
+    extractQuotedAfter(content, ["description", "agenda"]) ||
+    ""
+  )
+}
+
+function extractCalendarTimezone(content: string) {
+  if (/\b(amman|jordan)\b/i.test(content)) return "Asia/Amman"
+  return ""
+}
+
 function extractHeaders(content: string) {
   const explicit = extractLabeledValue(content, "headers?")
   if (explicit) return explicit
@@ -206,6 +284,91 @@ export function detectAppMiniUiRequest(input: {
 }): AppMiniUiRequest | null {
   const content = input.content.trim()
   const normalized = stripAppMentions(content)
+  if (/\bwith\s+these\s+exact\s+fields\s*:/i.test(normalized)) return null
+
+  const calendar = connectedCatalogApp("google-calendar")
+  if (
+    calendar &&
+    appEnabled({ ...input, appName: calendar.name }) &&
+    /\b(schedule|book|create|add|set\s+up|make)\b/i.test(normalized) &&
+    /\b(meeting|event|appointment|calendar)\b/i.test(normalized)
+  ) {
+    return {
+      type: "app_mini_ui",
+      appName: calendar.name,
+      appSlug: calendar.slug,
+      variant: "google-calendar-event",
+      title: "Schedule meeting",
+      description: "Review the event details before Atmet creates it in Calendar.",
+      originalRequest: content,
+      submitLabel: "Create event",
+      fields: [
+        {
+          id: "title",
+          label: "Title",
+          type: "text",
+          placeholder: "Meeting title",
+          value: extractCalendarTitle(normalized),
+          required: true,
+        },
+        {
+          id: "description",
+          label: "Description",
+          type: "textarea",
+          placeholder: "Optional notes or agenda",
+          value: extractCalendarDescription(normalized),
+        },
+        {
+          id: "invitees",
+          label: "Invited emails",
+          type: "email",
+          placeholder: "name@example.com, teammate@example.com",
+          value: extractAllEmails(normalized),
+          required: true,
+        },
+        {
+          id: "date",
+          label: "Date",
+          type: "date",
+          placeholder: "Select date",
+          value: dateInputValueFor(normalized),
+          required: true,
+        },
+        {
+          id: "time",
+          label: "Time",
+          type: "time",
+          placeholder: "Select time",
+          value: timeInputValueFor(normalized),
+          required: true,
+        },
+        {
+          id: "duration",
+          label: "Duration",
+          type: "number",
+          placeholder: "30",
+          value: extractDurationMinutes(normalized),
+          required: true,
+        },
+        {
+          id: "timezone",
+          label: "Timezone",
+          type: "select",
+          placeholder: "Select timezone",
+          value: extractCalendarTimezone(normalized),
+          options: [
+            "Asia/Amman",
+            "UTC",
+            "America/New_York",
+            "Europe/London",
+            "Europe/Berlin",
+            "Asia/Dubai",
+            "Asia/Riyadh",
+          ],
+        },
+      ],
+    }
+  }
 
   const gmail = connectedCatalogApp("gmail")
   if (
@@ -225,13 +388,13 @@ export function detectAppMiniUiRequest(input: {
       appName: gmail.name,
       appSlug: gmail.slug,
       variant: "gmail-compose",
-      title: to && subject && body ? "Review email" : "Complete email details",
+      title: to && subject && body ? "Approve Gmail send" : "Complete email details",
       description:
         to && subject && body
-          ? "Confirm the details before Atmet sends from Gmail."
+          ? "Approve these details and Atmet will send from Gmail."
           : "Fill the missing fields before Atmet sends from Gmail.",
       originalRequest: content,
-      submitLabel: "Send email",
+      submitLabel: "Approve and send",
       fields: [
         {
           id: "to",

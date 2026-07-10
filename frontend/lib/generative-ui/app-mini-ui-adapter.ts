@@ -17,14 +17,7 @@ export function appMiniUiToAtmetUi(
       fields: request.fields.map((field) => ({
         id: field.id,
         label: field.label,
-        type:
-          field.type === "textarea"
-            ? "textarea"
-            : field.type === "select"
-              ? "select"
-              : field.id === "to"
-                ? "email"
-                : "text",
+        type: field.type === "text" && field.id === "to" ? "email" : field.type,
         placeholder: field.placeholder,
         value: field.value,
         required: field.required,

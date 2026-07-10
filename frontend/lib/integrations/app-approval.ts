@@ -85,12 +85,15 @@ function prioritizeCatalogForContent(content: string) {
   ]
 }
 
-function appMentionPattern(appName: string) {
-  return new RegExp(`(^|\\s)@${escapeRegExp(appName)}(?=\\s|$|[.,!?;:])`, "i")
+function appLinkPattern(appName: string) {
+  return new RegExp(
+    `\\[${escapeRegExp(appName)}\\]\\(app:\\/\\/[a-z0-9-]+\\)`,
+    "i"
+  )
 }
 
 export function hasExplicitAppMention(content: string, appName: string) {
-  return appMentionPattern(appName).test(content)
+  return appLinkPattern(appName).test(content)
 }
 
 export function hasAppInConversation(
@@ -151,6 +154,7 @@ export function detectAppApprovalRequest(input: {
     const isMentioned = aliases.some((alias) => alias.test(content))
 
     if (!isMentioned) continue
+    if (hasExplicitAppMention(content, integration.name)) continue
     if (hasAppInConversation(input.conversationMessages, integration.name))
       continue
 

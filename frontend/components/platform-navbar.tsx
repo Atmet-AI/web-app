@@ -83,6 +83,7 @@ type StoredChatItem = {
 }
 
 type WorkspaceUser = ChatParticipant & {
+  id: string
   email: string
 }
 
@@ -128,7 +129,7 @@ const defaultWorkflowControlState: WorkflowControlState = {
 
 const routeTitles: Record<string, string> = {
   "/ai-core": "New Chat",
-  "/workflow": "Workflow",
+  "/workflow": "Agents",
   "/automations": "Automations",
   "/skills": "Skills",
   "/integrations": "Apps",
@@ -138,7 +139,7 @@ const routeTitles: Record<string, string> = {
 
 function getPageTitle(pathname: string) {
   if (pathname.startsWith("/workflow")) {
-    return "Workflow"
+    return "Agents"
   }
   return routeTitles[pathname] ?? "Platform"
 }
@@ -279,8 +280,10 @@ export function PlatformNavbar() {
   const manageUsersLabel = isWorkflowProject ? "Invite users" : "Manage chat users"
   const isChatOwner = true
   const [liveUser, setLiveUser] = useState<{
+    id: string
     full_name: string | null
     email: string | null
+    avatar_url?: string | null
   } | null>(null)
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
   const [isLoadingInvitations, setIsLoadingInvitations] = useState(false)
@@ -288,13 +291,12 @@ export function PlatformNavbar() {
   const [invitationError, setInvitationError] = useState<string | null>(null)
   const [declineInvitation, setDeclineInvitation] = useState<PendingInvitation | null>(null)
   const [workspaceUserRows, setWorkspaceUserRows] = useState<WorkspaceUser[]>([])
-  const currentUserFullName = liveUser?.full_name || liveUser?.email || "You"
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false)
   const [userSearchQuery, setUserSearchQuery] = useState("")
   const refreshLiveUser = useCallback(() => {
     fetch("/api/users/me", { cache: "no-store", credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { user?: { full_name: string | null; email: string | null } } } | null) => {
+      .then((payload: { data?: { user?: { id: string; full_name: string | null; email: string | null; avatar_url?: string | null } } } | null) => {
         if (payload?.data?.user) setLiveUser(payload.data.user)
       })
       .catch(() => undefined)
@@ -389,54 +391,119 @@ export function PlatformNavbar() {
         (payload: {
           data?: {
             members?: Array<{
-              user?: { email: string | null; full_name: string | null } | null
+              user?: {
+                id: string
+                email: string | null
+                full_name: string | null
+                avatar_url: string | null
+                status: string | null
+              } | null
             }>
           }
         } | null) => {
           setWorkspaceUserRows(
-            (payload?.data?.members ?? []).map((member) => {
-              const name =
-                member.user?.full_name || member.user?.email || "Workspace user"
+            (payload?.data?.members ?? []).flatMap((member) => {
+              const user = member.user
+              if (!user?.id || user.status !== "active") return []
+              if (liveUser?.email && user.email === liveUser.email) return []
+
+              const name = user.full_name || user.email || "Workspace user"
               return {
+                id: user.id,
                 name,
                 fallback: buildFallbackFromName(name),
-                email: member.user?.email ?? "",
+                email: user.email ?? "",
+                src: user.avatar_url ?? undefined,
               }
             })
           )
         }
       )
       .catch(() => setWorkspaceUserRows([]))
-  }, [activeWorkspaceId, apiFetch])
+  }, [activeWorkspaceId, apiFetch, liveUser?.email])
   const workspaceUsers = useMemo<WorkspaceUser[]>(
-    () => {
-      const users = new Map<string, WorkspaceUser>()
-      users.set(currentUserFullName, {
-        name: currentUserFullName,
-        fallback: buildFallbackFromName(currentUserFullName),
-        email: liveUser?.email ?? "",
+    () => workspaceUserRows,
+    [workspaceUserRows]
+  )
+  const [aiCoreParticipants, setAiCoreParticipants] = useState<WorkspaceUser[]>([])
+  const [chatParticipantError, setChatParticipantError] = useState<string | null>(null)
+  const [updatingParticipantId, setUpdatingParticipantId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isAiCore || !activeChatId) {
+      setAiCoreParticipants([])
+      setChatParticipantError(null)
+      return
+    }
+
+    let cancelled = false
+
+    apiFetch(`/api/chats/${activeChatId}/users`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              data?: {
+                users?: Array<{
+                  user?:
+                    | {
+                        id: string
+                        email: string | null
+                        full_name: string | null
+                        avatar_url?: string | null
+                        status?: string | null
+                      }
+                    | Array<{
+                        id: string
+                        email: string | null
+                        full_name: string | null
+                        avatar_url?: string | null
+                        status?: string | null
+                      }>
+                    | null
+                }>
+              }
+              error?: { message?: string }
+            }
+          | null
+
+        if (!response.ok) {
+          throw new Error(payload?.error?.message ?? "Unable to load chat users.")
+        }
+
+        return payload?.data?.users ?? []
+      })
+      .then((rows) => {
+        if (cancelled) return
+
+        const participants = rows.flatMap((row) => {
+          const user = unwrapRelation(row.user)
+          if (!user?.id) return []
+          if (user.status && user.status !== "active") return []
+          if (liveUser?.email && user.email === liveUser.email) return []
+
+          const name = user.full_name || user.email || "Workspace user"
+          return {
+            id: user.id,
+            name,
+            fallback: buildFallbackFromName(name),
+            email: user.email ?? "",
+            src: user.avatar_url ?? undefined,
+          }
+        })
+
+        setAiCoreParticipants(participants)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setAiCoreParticipants([])
+        setChatParticipantError(
+          error instanceof Error ? error.message : "Unable to load chat users."
+        )
       })
 
-      workspaceUserRows.forEach((member) => users.set(member.name, member))
-
-      return Array.from(users.values())
-    },
-    [currentUserFullName, liveUser?.email, workspaceUserRows]
-  )
-  const [aiCoreParticipants, setAiCoreParticipants] = useState<ChatParticipant[]>([
-    { name: currentUserFullName, fallback: buildFallbackFromName(currentUserFullName) },
-  ])
-  useEffect(() => {
-    setAiCoreParticipants((previous) => {
-      if (previous.length > 1) return previous
-      return [
-        {
-          name: currentUserFullName,
-          fallback: buildFallbackFromName(currentUserFullName),
-        },
-      ]
-    })
-  }, [currentUserFullName])
+    return () => {
+      cancelled = true
+    }
+  }, [activeChatId, apiFetch, isAiCore, liveUser?.email])
   const [workflowParticipantsByProject, setWorkflowParticipantsByProject] = useState<
     Record<string, ChatParticipant[]>
   >({})
@@ -463,6 +530,15 @@ export function PlatformNavbar() {
   ])
   const activeParticipantNames = useMemo(
     () => new Set(activeParticipants.map((participant) => participant.name)),
+    [activeParticipants]
+  )
+  const activeParticipantEmails = useMemo(
+    () =>
+      new Set(
+        (activeParticipants as WorkspaceUser[])
+          .map((participant) => participant.email)
+          .filter(Boolean)
+      ),
     [activeParticipants]
   )
   const shouldShowParticipantsTrigger = isWorkflowProject || isAiCore
@@ -568,6 +644,93 @@ export function PlatformNavbar() {
   }, [workflowParticipantsByProject])
 
   useEffect(() => {
+    if (!isWorkflowProject || !workflowProjectId) return
+    if (
+      Object.prototype.hasOwnProperty.call(
+        workflowParticipantsByProject,
+        workflowProjectId
+      )
+    ) {
+      return
+    }
+
+    let cancelled = false
+
+    apiFetch(`/api/automations/${workflowProjectId}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (
+          payload: {
+            data?: {
+              chatUsers?: Array<{
+                user?:
+                  | {
+                      id: string
+                      email: string | null
+                      full_name: string | null
+                      avatar_url?: string | null
+                      status?: string | null
+                    }
+                  | Array<{
+                      id: string
+                      email: string | null
+                      full_name: string | null
+                      avatar_url?: string | null
+                      status?: string | null
+                    }>
+                  | null
+              }>
+            }
+          } | null
+        ) => {
+          if (cancelled) return
+
+          const participants = (payload?.data?.chatUsers ?? []).flatMap((row) => {
+            const user = unwrapRelation(row.user)
+            if (!user?.id) return []
+            if (user.status && user.status !== "active") return []
+            if (liveUser?.email && user.email === liveUser.email) return []
+
+            const name = user.full_name || user.email || "Workspace user"
+            return {
+              id: user.id,
+              name,
+              fallback: buildFallbackFromName(name),
+              email: user.email ?? "",
+              src: user.avatar_url ?? undefined,
+            }
+          })
+
+          if (participants.length === 0) return
+
+          setWorkflowParticipantsByProject((previous) => {
+            if (
+              Object.prototype.hasOwnProperty.call(previous, workflowProjectId)
+            ) {
+              return previous
+            }
+
+            return {
+              ...previous,
+              [workflowProjectId]: participants,
+            }
+          })
+        }
+      )
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    apiFetch,
+    isWorkflowProject,
+    liveUser?.email,
+    workflowParticipantsByProject,
+    workflowProjectId,
+  ])
+
+  useEffect(() => {
     if (isUserPickerOpen && !canManageUsersFromNavbar) {
       setIsUserPickerOpen(false)
     }
@@ -658,20 +821,50 @@ export function PlatformNavbar() {
     [workflowProjectId]
   )
 
-  const handleAddUser = useCallback((user: ChatParticipant) => {
-    const nextParticipant: ChatParticipant = {
+  const handleAddUser = useCallback(async (user: WorkspaceUser) => {
+    const nextParticipant: WorkspaceUser = {
+      id: user.id,
       name: user.name,
       fallback: user.fallback,
+      email: user.email,
       src: user.src,
     }
 
     if (isAiCore) {
-      setAiCoreParticipants((previous) => {
-        if (previous.some((participant) => participant.name === nextParticipant.name)) {
-          return previous
+      if (!activeChatId) {
+        setChatParticipantError("Send a message first to create this chat, then add people.")
+        return
+      }
+
+      setChatParticipantError(null)
+      setUpdatingParticipantId(user.id)
+      try {
+        const response = await apiFetch(`/api/chats/${activeChatId}/users`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: user.id }),
+        })
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null
+
+        if (!response.ok) {
+          throw new Error(payload?.error?.message ?? "Unable to add this user.")
         }
-        return [...previous, nextParticipant]
-      })
+
+        setAiCoreParticipants((previous) => {
+          if (previous.some((participant) => participant.id === nextParticipant.id)) {
+            return previous
+          }
+          return [...previous, nextParticipant]
+        })
+      } catch (error) {
+        setChatParticipantError(
+          error instanceof Error ? error.message : "Unable to add this user."
+        )
+      } finally {
+        setUpdatingParticipantId(null)
+      }
       return
     }
 
@@ -685,7 +878,11 @@ export function PlatformNavbar() {
         ? previous[workflowProjectId] ?? []
         : getDefaultParticipantsForProject(activeWorkflowProject)
 
-      if (currentParticipants.some((participant) => participant.name === nextParticipant.name)) {
+      if (
+        currentParticipants.some(
+          (participant) => participant.name === nextParticipant.name
+        )
+      ) {
         return previous
       }
 
@@ -694,13 +891,43 @@ export function PlatformNavbar() {
         [workflowProjectId]: [...currentParticipants, nextParticipant],
       }
     })
-  }, [isAiCore, isWorkflowProject, workflowProjectId, activeWorkflowProject])
+  }, [activeChatId, activeWorkflowProject, apiFetch, isAiCore, isWorkflowProject, workflowProjectId])
 
-  const handleRemoveUser = useCallback((user: ChatParticipant) => {
+  const handleRemoveUser = useCallback(async (user: WorkspaceUser) => {
     if (isAiCore) {
-      setAiCoreParticipants((previous) =>
-        previous.filter((participant) => participant.name !== user.name)
-      )
+      if (!activeChatId) {
+        setAiCoreParticipants((previous) =>
+          previous.filter((participant) => participant.id !== user.id)
+        )
+        return
+      }
+
+      setChatParticipantError(null)
+      setUpdatingParticipantId(user.id)
+      try {
+        const response = await apiFetch(`/api/chats/${activeChatId}/users`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: user.id }),
+        })
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null
+
+        if (!response.ok) {
+          throw new Error(payload?.error?.message ?? "Unable to remove this user.")
+        }
+
+        setAiCoreParticipants((previous) =>
+          previous.filter((participant) => participant.id !== user.id)
+        )
+      } catch (error) {
+        setChatParticipantError(
+          error instanceof Error ? error.message : "Unable to remove this user."
+        )
+      } finally {
+        setUpdatingParticipantId(null)
+      }
       return
     }
 
@@ -721,7 +948,7 @@ export function PlatformNavbar() {
         ),
       }
     })
-  }, [isAiCore, isWorkflowProject, workflowProjectId, activeWorkflowProject])
+  }, [activeChatId, activeWorkflowProject, apiFetch, isAiCore, isWorkflowProject, workflowProjectId])
 
   useEffect(() => {
     const handleOpenEvent = () => {
@@ -784,7 +1011,7 @@ export function PlatformNavbar() {
                       render={<button type="button" />}
                       onClick={() => router.push("/workflow")}
                     >
-                      Workflow
+                      Agents
                     </BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
@@ -1268,16 +1495,29 @@ export function PlatformNavbar() {
                 placeholder="Search by name or email"
                 className="h-8"
               />
+              {isAiCore && !activeChatId ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Send a message first to create this chat, then add teammates.
+                </p>
+              ) : null}
+              {chatParticipantError ? (
+                <p className="mt-2 text-xs text-destructive">
+                  {chatParticipantError}
+                </p>
+              ) : null}
             </div>
             <div className="max-h-[70vh] space-y-1 overflow-y-auto">
               {filteredWorkspaceUsers.map((workspaceUser) => {
-                const isIncluded = activeParticipantNames.has(workspaceUser.name)
-                const isCurrentUser = workspaceUser.name === currentUserFullName
-                const canRemove = isChatOwner && isIncluded && !isCurrentUser
+                const isIncluded =
+                  activeParticipantEmails.has(workspaceUser.email) ||
+                  activeParticipantNames.has(workspaceUser.name)
+                const canRemove = isChatOwner && isIncluded
+                const isUpdating = updatingParticipantId === workspaceUser.id
+                const canAdd = !isAiCore || Boolean(activeChatId)
 
                 return (
                   <div
-                    key={workspaceUser.name}
+                    key={workspaceUser.id}
                     className="flex items-center justify-between gap-2 rounded-md px-1 py-1"
                   >
                     <div className="flex min-w-0 items-center gap-2">
@@ -1297,22 +1537,24 @@ export function PlatformNavbar() {
                     {canRemove ? (
                       <button
                         type="button"
-                        onClick={() => handleRemoveUser(workspaceUser)}
+                        disabled={isUpdating}
+                        onClick={() => void handleRemoveUser(workspaceUser)}
                         className="px-2 text-xs font-medium text-red-500 hover:text-red-600"
                       >
-                        Remove
+                        {isUpdating ? "Removing" : "Remove"}
                       </button>
                     ) : isIncluded ? (
                       <Button size="xs" variant="secondary" disabled>
-                        Added
+                        {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Added"}
                       </Button>
                     ) : (
                       <Button
                         size="xs"
                         variant="outline"
-                        onClick={() => handleAddUser(workspaceUser)}
+                        disabled={!canAdd || isUpdating}
+                        onClick={() => void handleAddUser(workspaceUser)}
                       >
-                        Add
+                        {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
                       </Button>
                     )}
                   </div>
