@@ -3,7 +3,6 @@ import { getUser } from "@/lib/api/auth"
 import { getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
-import { formatTelegramBotAccount, getTelegramBotInfo } from "@/lib/integrations/telegram"
 import { testApiKeySchema } from "@/lib/validations/integration"
 
 export async function POST(
@@ -34,18 +33,11 @@ export async function POST(
   const parsed = testApiKeySchema.safeParse(body)
   if (!parsed.success) return Errors.validationError(parsed.error.issues[0].message)
 
-  if (slug === "telegram") {
-    try {
-      const bot = await getTelegramBotInfo(parsed.data.apiKey)
-
-      return ok({
-        success: true,
-        message: `Connected to ${formatTelegramBotAccount(bot)}.`,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Telegram connection failed."
-      return Errors.badRequest(message)
-    }
+  if (catalog.connectorProvider === "composio") {
+    return ok({
+      success: true,
+      message: "Composio will create and validate this connection when you save.",
+    })
   }
 
   return ok({ success: true, message: "Connection successful." })

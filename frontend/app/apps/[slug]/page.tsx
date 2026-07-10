@@ -113,6 +113,11 @@ export default function AppDetailsPage() {
   const handleConnectClick = React.useCallback(() => {
     if (!integration) return
 
+    if (integration.authType === "apikey") {
+      setApiDrawerOpen(true)
+      return
+    }
+
     if (integration.connectorProvider === "composio" || integration.authType === "oauth") {
       setOauthError(null)
       setOauthModalOpen(true)
@@ -149,6 +154,11 @@ export default function AppDetailsPage() {
 
   const handleReconnect = React.useCallback(() => {
     if (!integration) return
+
+    if (integration.authType === "apikey") {
+      setApiDrawerOpen(true)
+      return
+    }
 
     if (integration.connectorProvider === "composio" || integration.authType === "oauth") {
       setOauthError(null)
