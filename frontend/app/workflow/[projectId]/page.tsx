@@ -30,7 +30,10 @@ import { ContextMenu5Wrapper } from "@/components/examples/c-context-menu-5"
 import { Badge } from "@/registry/spell-ui/badge"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import { getWorkflowProject, type WorkflowProject } from "@/lib/workflow-projects"
+import {
+  getWorkflowProject,
+  type WorkflowProject,
+} from "@/lib/workflow-projects"
 import {
   WORKFLOW_OPEN_LOG_EVENT,
   WORKFLOW_PUBLISH_EVENT,
@@ -73,6 +76,101 @@ type WorkflowNode = {
   chatId?: string
   x: number
   y: number
+}
+
+type ComposioTriggerRegistration = {
+  slug: string
+  appLabel: string
+  triggerSlug: string
+  triggerConfig: Record<string, unknown>
+}
+
+const COMPOSIO_TRIGGER_APPS = [
+  { provider: "Gmail", slug: "gmail", prefix: "GMAIL_", appLabel: "Gmail" },
+  {
+    provider: "Google Calendar",
+    slug: "google-calendar",
+    prefix: "GOOGLECALENDAR_",
+    appLabel: "Google Calendar",
+  },
+  {
+    provider: "Google Drive",
+    slug: "google-drive",
+    prefix: "GOOGLEDRIVE_",
+    appLabel: "Google Drive",
+  },
+  {
+    provider: "Google Sheets",
+    slug: "google-sheets",
+    prefix: "GOOGLESHEETS_",
+    appLabel: "Google Sheets",
+  },
+  {
+    provider: "Google Docs",
+    slug: "google-docs",
+    prefix: "GOOGLEDOCS_",
+    appLabel: "Google Docs",
+  },
+  { provider: "GitHub", slug: "github", prefix: "GITHUB_", appLabel: "GitHub" },
+] as const
+
+function getDefaultComposioTriggerConfig(
+  triggerSlug: string
+): Record<string, unknown> {
+  if (triggerSlug.startsWith("GMAIL_")) {
+    return { userId: "me", labelIds: "INBOX", interval: 2 }
+  }
+
+  if (triggerSlug.startsWith("GOOGLECALENDAR_")) {
+    return { calendarId: "primary", interval: 2 }
+  }
+
+  if (triggerSlug.startsWith("GOOGLEDRIVE_")) {
+    return { interval: 2, max_results: 10, include_items_from_all_drives: true }
+  }
+
+  if (triggerSlug.startsWith("GOOGLESHEETS_")) {
+    return {
+      interval: 2,
+      max_results: 10,
+      include_shared_drives: true,
+      query: "",
+    }
+  }
+
+  if (triggerSlug.startsWith("GOOGLEDOCS_")) {
+    return {
+      interval: 2,
+      max_results: 10,
+      include_shared_drives: true,
+      query: "",
+    }
+  }
+
+  if (triggerSlug.startsWith("GITHUB_")) {
+    return { interval: 2 }
+  }
+
+  return { interval: 2 }
+}
+
+function getComposioTriggerRegistration(
+  node: WorkflowNode
+): ComposioTriggerRegistration | null {
+  if (node.nodeType !== "Trigger") return null
+
+  const app = COMPOSIO_TRIGGER_APPS.find(
+    (entry) =>
+      node.provider === entry.provider && node.model.startsWith(entry.prefix)
+  )
+  if (!app) return null
+
+  return {
+    slug: app.slug,
+    appLabel: app.appLabel,
+    triggerSlug: node.model,
+    triggerConfig: getDefaultComposioTriggerConfig(node.model),
+  }
 }
 
 type WorkflowEdge = {
@@ -225,7 +323,11 @@ function getOrthogonalWirePath(
   const toVector = getHandleVector(toSide)
 
   // Keep perfectly aligned vertical/horizontal links fully straight.
-  if (fromVector.dx === 0 && toVector.dx === 0 && Math.abs(fromX - toX) < 0.01) {
+  if (
+    fromVector.dx === 0 &&
+    toVector.dx === 0 &&
+    Math.abs(fromX - toX) < 0.01
+  ) {
     const topY = Math.min(fromY, toY)
     const bottomY = Math.max(fromY, toY)
     return {
@@ -234,7 +336,11 @@ function getOrthogonalWirePath(
       midY: (topY + bottomY) / 2,
     }
   }
-  if (fromVector.dy === 0 && toVector.dy === 0 && Math.abs(fromY - toY) < 0.01) {
+  if (
+    fromVector.dy === 0 &&
+    toVector.dy === 0 &&
+    Math.abs(fromY - toY) < 0.01
+  ) {
     const leftX = Math.min(fromX, toX)
     const rightX = Math.max(fromX, toX)
     return {
@@ -300,9 +406,7 @@ function getOrthogonalWirePath(
   })
 
   const path = dedupedPoints
-    .map((point, index) =>
-      `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`
-    )
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ")
 
   const segmentLengths = dedupedPoints.slice(0, -1).map((point, index) => {
@@ -396,7 +500,9 @@ function getStepsFromAutomationBlueprint(scriptKey: string | null | undefined) {
   const telegramBlueprint = getTelegramAgentBlueprint(scriptKey)
   if (telegramBlueprint) {
     const brainLabel =
-      telegramBlueprint.brain?.mode === "agent_api" ? "Agent API" : "Atmet model"
+      telegramBlueprint.brain?.mode === "agent_api"
+        ? "Agent API"
+        : "Atmet model"
     return [
       {
         name: telegramBlueprint.agentName ?? "Telegram agent",
@@ -451,42 +557,62 @@ export default function WorkflowProjectPage() {
     () => (projectId ? getWorkflowProject(projectId) : undefined),
     [projectId]
   )
-  const [databaseProject, setDatabaseProject] = useState<WorkflowProject | null>(null)
+  const [databaseProject, setDatabaseProject] =
+    useState<WorkflowProject | null>(null)
   const [telegramAgentBlueprint, setTelegramAgentBlueprint] =
     useState<TelegramAgentBlueprint | null>(null)
   const [telegramWebhookStatus, setTelegramWebhookStatus] =
     useState<TelegramWebhookStatus | null>(null)
-  const [telegramWebhookError, setTelegramWebhookError] = useState<string | null>(null)
-  const [isTelegramWebhookLoading, setIsTelegramWebhookLoading] = useState(false)
-  const [isActivatingTelegramWebhook, setIsActivatingTelegramWebhook] = useState(false)
+  const [telegramWebhookError, setTelegramWebhookError] = useState<
+    string | null
+  >(null)
+  const [isTelegramWebhookLoading, setIsTelegramWebhookLoading] =
+    useState(false)
+  const [isActivatingTelegramWebhook, setIsActivatingTelegramWebhook] =
+    useState(false)
+  const [composioTriggerError, setComposioTriggerError] = useState<
+    string | null
+  >(null)
+  const [isActivatingComposioTrigger, setIsActivatingComposioTrigger] =
+    useState(false)
   const [isLoadingProject, setIsLoadingProject] = useState(false)
   const project = fixtureProject ?? databaseProject
 
   const [nodes, setNodes] = useState<WorkflowNode[]>([])
   const [edges, setEdges] = useState<WorkflowEdge[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string>("")
-  const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null)
-  const [connectingSourceHandle, setConnectingSourceHandle] = useState<AnchorSide | null>(null)
-  const [wireCursor, setWireCursor] = useState<{ x: number; y: number } | null>(null)
+  const [connectingSourceId, setConnectingSourceId] = useState<string | null>(
+    null
+  )
+  const [connectingSourceHandle, setConnectingSourceHandle] =
+    useState<AnchorSide | null>(null)
+  const [wireCursor, setWireCursor] = useState<{ x: number; y: number } | null>(
+    null
+  )
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null)
   const [filesDialogOpen, setFilesDialogOpen] = useState(false)
   const [executionLogOpen, setExecutionLogOpen] = useState(false)
-  const [editingTitleNodeId, setEditingTitleNodeId] = useState<string | null>(null)
+  const [editingTitleNodeId, setEditingTitleNodeId] = useState<string | null>(
+    null
+  )
   const [titleDraft, setTitleDraft] = useState("")
   const [copiedNode, setCopiedNode] = useState<WorkflowNode | null>(null)
   const [historyPast, setHistoryPast] = useState<WorkflowSnapshot[]>([])
   const [historyFuture, setHistoryFuture] = useState<WorkflowSnapshot[]>([])
-  const [contextMenuPoint, setContextMenuPoint] = useState<{ x: number; y: number } | null>(
-    null
-  )
+  const [contextMenuPoint, setContextMenuPoint] = useState<{
+    x: number
+    y: number
+  } | null>(null)
   const [zoom, setZoom] = useState(1)
   const [isSpacePressed, setIsSpacePressed] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null)
   const [isRunningWorkflow, setIsRunningWorkflow] = useState(false)
   const [isPublishingWorkflow, setIsPublishingWorkflow] = useState(false)
-  const [publishState, setPublishState] = useState<"Draft" | "Published">("Draft")
+  const [publishState, setPublishState] = useState<"Draft" | "Published">(
+    "Draft"
+  )
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false)
   const [lastExecutionLabel, setLastExecutionLabel] = useState("Not run yet")
   const [activeChatNodeId, setActiveChatNodeId] = useState<string>("")
@@ -527,6 +653,7 @@ export default function WorkflowProjectPage() {
       setTelegramAgentBlueprint(null)
       setTelegramWebhookStatus(null)
       setTelegramWebhookError(null)
+      setComposioTriggerError(null)
       setIsLoadingProject(false)
       return
     }
@@ -535,28 +662,35 @@ export default function WorkflowProjectPage() {
     apiFetch(`/api/automations/${projectId}`)
       .then((response) => (response.ok ? response.json() : null))
       .then(
-        (payload: {
-          data?: {
-            automation?: {
-              id: string
-              name: string
-              description: string | null
-              status: "active" | "inactive" | "draft"
-              created_by: string
-              script_key: string | null
+        (
+          payload: {
+            data?: {
+              automation?: {
+                id: string
+                name: string
+                description: string | null
+                status: "active" | "inactive" | "draft"
+                created_by: string
+                script_key: string | null
+              }
             }
-          }
-        } | null) => {
+          } | null
+        ) => {
           const automation = payload?.data?.automation
           if (!automation) {
             setDatabaseProject(null)
             setTelegramAgentBlueprint(null)
             setTelegramWebhookStatus(null)
+            setComposioTriggerError(null)
             return
           }
 
-          const telegramBlueprint = getTelegramAgentBlueprint(automation.script_key)
-          const blueprintSteps = getStepsFromAutomationBlueprint(automation.script_key)
+          const telegramBlueprint = getTelegramAgentBlueprint(
+            automation.script_key
+          )
+          const blueprintSteps = getStepsFromAutomationBlueprint(
+            automation.script_key
+          )
           setTelegramAgentBlueprint(telegramBlueprint)
 
           setDatabaseProject({
@@ -591,19 +725,23 @@ export default function WorkflowProjectPage() {
         setDatabaseProject(null)
         setTelegramAgentBlueprint(null)
         setTelegramWebhookStatus(null)
+        setComposioTriggerError(null)
       })
       .finally(() => setIsLoadingProject(false))
   }, [apiFetch, fixtureProject, projectId])
 
-  const setNodeHeightRef = useCallback((nodeId: string, element: HTMLDivElement | null) => {
-    if (!element) return
-    const measuredHeight = element.offsetHeight
-    setNodeHeights((previous) =>
-      previous[nodeId] === measuredHeight
-        ? previous
-        : { ...previous, [nodeId]: measuredHeight }
-    )
-  }, [])
+  const setNodeHeightRef = useCallback(
+    (nodeId: string, element: HTMLDivElement | null) => {
+      if (!element) return
+      const measuredHeight = element.offsetHeight
+      setNodeHeights((previous) =>
+        previous[nodeId] === measuredHeight
+          ? previous
+          : { ...previous, [nodeId]: measuredHeight }
+      )
+    },
+    []
+  )
 
   useEffect(() => {
     if (!project) return
@@ -679,7 +817,8 @@ export default function WorkflowProjectPage() {
   const showTelegramAgentPanel = Boolean(telegramAgentBlueprint && selectedNode)
   const telegramBotLink = useMemo(() => {
     if (telegramWebhookStatus?.botLink) return telegramWebhookStatus.botLink
-    const bot = telegramWebhookStatus?.bot ?? telegramAgentBlueprint?.channel?.bot
+    const bot =
+      telegramWebhookStatus?.bot ?? telegramAgentBlueprint?.channel?.bot
     if (!bot) return null
     const username = bot.replace(/^@/, "").trim()
     return username && projectId
@@ -688,7 +827,8 @@ export default function WorkflowProjectPage() {
         ? `https://t.me/${username}`
         : null
   }, [projectId, telegramAgentBlueprint, telegramWebhookStatus])
-  const telegramAgentAvatarUrl = telegramAgentBlueprint?.channel?.avatarUrl ?? null
+  const telegramAgentAvatarUrl =
+    telegramAgentBlueprint?.channel?.avatarUrl ?? null
 
   const refreshTelegramWebhookStatus = useCallback(async () => {
     if (!projectId || !telegramAgentBlueprint) return
@@ -696,20 +836,26 @@ export default function WorkflowProjectPage() {
     setIsTelegramWebhookLoading(true)
     setTelegramWebhookError(null)
     try {
-      const response = await apiFetch(`/api/automations/${projectId}/telegram/webhook`)
+      const response = await apiFetch(
+        `/api/automations/${projectId}/telegram/webhook`
+      )
       const payload = (await response.json()) as {
         data?: TelegramWebhookStatus
         error?: { message?: string }
       }
 
       if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Unable to load Telegram webhook status.")
+        throw new Error(
+          payload.error?.message ?? "Unable to load Telegram webhook status."
+        )
       }
 
       setTelegramWebhookStatus(payload.data)
     } catch (error) {
       setTelegramWebhookError(
-        error instanceof Error ? error.message : "Unable to load Telegram webhook status."
+        error instanceof Error
+          ? error.message
+          : "Unable to load Telegram webhook status."
       )
     } finally {
       setIsTelegramWebhookLoading(false)
@@ -722,27 +868,79 @@ export default function WorkflowProjectPage() {
     setIsActivatingTelegramWebhook(true)
     setTelegramWebhookError(null)
     try {
-      const response = await apiFetch(`/api/automations/${projectId}/telegram/webhook`, {
-        method: "POST",
-      })
+      const response = await apiFetch(
+        `/api/automations/${projectId}/telegram/webhook`,
+        {
+          method: "POST",
+        }
+      )
       const payload = (await response.json()) as {
         data?: TelegramWebhookStatus
         error?: { message?: string }
       }
 
       if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Unable to activate Telegram webhook.")
+        throw new Error(
+          payload.error?.message ?? "Unable to activate Telegram webhook."
+        )
       }
 
       setTelegramWebhookStatus(payload.data)
     } catch (error) {
       setTelegramWebhookError(
-        error instanceof Error ? error.message : "Unable to activate Telegram webhook."
+        error instanceof Error
+          ? error.message
+          : "Unable to activate Telegram webhook."
       )
     } finally {
       setIsActivatingTelegramWebhook(false)
     }
   }, [apiFetch, projectId, telegramAgentBlueprint])
+
+  const activateComposioTriggers = useCallback(
+    async (registrations: ComposioTriggerRegistration[]) => {
+      if (!projectId || registrations.length === 0) return
+
+      setIsActivatingComposioTrigger(true)
+      setComposioTriggerError(null)
+      try {
+        for (const registration of registrations) {
+          const response = await apiFetch(
+            `/api/integrations/${registration.slug}/triggers`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                automationId: projectId,
+                triggerSlug: registration.triggerSlug,
+                triggerConfig: registration.triggerConfig,
+              }),
+            }
+          )
+          const payload = (await response.json()) as {
+            data?: { composioTriggerId?: string }
+            error?: { message?: string }
+          }
+
+          if (!response.ok || !payload.data?.composioTriggerId) {
+            throw new Error(
+              payload.error?.message ??
+                `Unable to activate ${registration.appLabel} trigger.`
+            )
+          }
+        }
+      } catch (error) {
+        setComposioTriggerError(
+          error instanceof Error
+            ? error.message
+            : "Unable to activate Composio trigger."
+        )
+      } finally {
+        setIsActivatingComposioTrigger(false)
+      }
+    },
+    [apiFetch, projectId]
+  )
 
   useEffect(() => {
     if (!telegramAgentBlueprint) return
@@ -760,7 +958,8 @@ export default function WorkflowProjectPage() {
     }
 
     window.addEventListener("pointerdown", handlePointerDown, true)
-    return () => window.removeEventListener("pointerdown", handlePointerDown, true)
+    return () =>
+      window.removeEventListener("pointerdown", handlePointerDown, true)
   }, [isChatOpen])
 
   const doneSteps = useMemo(
@@ -819,6 +1018,16 @@ export default function WorkflowProjectPage() {
     () => nodes.filter((node) => node.nodeType === "Trigger").length,
     [nodes]
   )
+  const composioTriggerRegistrations = useMemo(
+    () =>
+      nodes
+        .map((node) => getComposioTriggerRegistration(node))
+        .filter((registration): registration is ComposioTriggerRegistration =>
+          Boolean(registration)
+        ),
+    [nodes]
+  )
+  const hasComposioTriggerNode = composioTriggerRegistrations.length > 0
   const orderedNodes = useMemo(
     () => [...nodes].sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x)),
     [nodes]
@@ -841,7 +1050,8 @@ export default function WorkflowProjectPage() {
         },
         {
           title: "Publish state",
-          detail: publishState === "Published" ? "Published and active" : "Draft",
+          detail:
+            publishState === "Published" ? "Published and active" : "Draft",
         },
         {
           title: "Scheduler",
@@ -919,19 +1129,22 @@ export default function WorkflowProjectPage() {
     setHistoryFuture([])
   }, [getCurrentSnapshot])
 
-  const applySnapshot = useCallback((snapshot: WorkflowSnapshot) => {
-    const next = cloneSnapshot(snapshot)
-    setNodes(next.nodes)
-    setEdges(next.edges)
-    setSelectedNodeId(next.selectedNodeId)
-    setConnectingSourceId(null)
-    setConnectingSourceHandle(null)
-    setWireCursor(null)
-    setHoveredNodeId(null)
-    setHoveredEdgeId(null)
-    setEditingTitleNodeId(null)
-    setTitleDraft("")
-  }, [cloneSnapshot])
+  const applySnapshot = useCallback(
+    (snapshot: WorkflowSnapshot) => {
+      const next = cloneSnapshot(snapshot)
+      setNodes(next.nodes)
+      setEdges(next.edges)
+      setSelectedNodeId(next.selectedNodeId)
+      setConnectingSourceId(null)
+      setConnectingSourceHandle(null)
+      setWireCursor(null)
+      setHoveredNodeId(null)
+      setHoveredEdgeId(null)
+      setEditingTitleNodeId(null)
+      setTitleDraft("")
+    },
+    [cloneSnapshot]
+  )
 
   const markProjectChanged = useCallback(() => {
     setHasUnpublishedChanges(true)
@@ -981,17 +1194,31 @@ export default function WorkflowProjectPage() {
           targetHandle
         )
 
-        return { ...edge, path, fromX: from.x, fromY: from.y, toX: to.x, toY: to.y, midX, midY }
+        return {
+          ...edge,
+          path,
+          fromX: from.x,
+          fromY: from.y,
+          toX: to.x,
+          toY: to.y,
+          midX,
+          midY,
+        }
       })
       .filter((edge): edge is EdgeGeometry => edge !== null)
   }, [edges, nodeHeights, nodeMap])
 
   const draftWirePath = useMemo(() => {
-    if (!connectingSourceId || !connectingSourceHandle || !wireCursor) return null
+    if (!connectingSourceId || !connectingSourceHandle || !wireCursor)
+      return null
     const sourceNode = nodeMap.get(connectingSourceId)
     if (!sourceNode) return null
     const sourceHeight = nodeHeights[sourceNode.id] ?? DEFAULT_NODE_HEIGHT
-    const from = getNodeAnchorPoint(sourceNode, sourceHeight, connectingSourceHandle)
+    const from = getNodeAnchorPoint(
+      sourceNode,
+      sourceHeight,
+      connectingSourceHandle
+    )
     const toX = wireCursor.x
     const toY = wireCursor.y
     return getOrthogonalWirePath(
@@ -1002,7 +1229,13 @@ export default function WorkflowProjectPage() {
       toY,
       "top"
     ).path
-  }, [connectingSourceHandle, connectingSourceId, nodeHeights, nodeMap, wireCursor])
+  }, [
+    connectingSourceHandle,
+    connectingSourceId,
+    nodeHeights,
+    nodeMap,
+    wireCursor,
+  ])
 
   const handleRunWorkflow = useCallback(() => {
     if (isRunningWorkflow) return
@@ -1016,6 +1249,15 @@ export default function WorkflowProjectPage() {
 
     if (telegramAgentBlueprint && !telegramWebhookStatus?.webhookConfigured) {
       void activateTelegramWebhook()
+    }
+
+    const composioRegistrations = nodesRef.current
+      .map((node) => getComposioTriggerRegistration(node))
+      .filter((registration): registration is ComposioTriggerRegistration =>
+        Boolean(registration)
+      )
+    if (composioRegistrations.length > 0) {
+      void activateComposioTriggers(composioRegistrations)
     }
 
     setIsRunningWorkflow(true)
@@ -1074,6 +1316,7 @@ export default function WorkflowProjectPage() {
 
     executeNodeAt(0)
   }, [
+    activateComposioTriggers,
     activateTelegramWebhook,
     isRunningWorkflow,
     telegramAgentBlueprint,
@@ -1287,7 +1530,9 @@ export default function WorkflowProjectPage() {
       ? {
           ...template,
           id: newId,
-          stepName: preserveStepName ? template.stepName : `${template.stepName} Copy`,
+          stepName: preserveStepName
+            ? template.stepName
+            : `${template.stepName} Copy`,
           status: "Pending",
           executionStatus: "idle",
           lastRan: "Never",
@@ -1345,8 +1590,19 @@ export default function WorkflowProjectPage() {
     }
 
     addNodeAtPosition(
-      Math.max(16, Math.round((viewport.scrollLeft + viewport.clientWidth / 2) / zoom - NODE_WIDTH / 2)),
-      Math.max(16, Math.round((viewport.scrollTop + viewport.clientHeight / 2) / zoom - 120))
+      Math.max(
+        16,
+        Math.round(
+          (viewport.scrollLeft + viewport.clientWidth / 2) / zoom -
+            NODE_WIDTH / 2
+        )
+      ),
+      Math.max(
+        16,
+        Math.round(
+          (viewport.scrollTop + viewport.clientHeight / 2) / zoom - 120
+        )
+      )
     )
   }
 
@@ -1397,8 +1653,19 @@ export default function WorkflowProjectPage() {
     const viewport = viewportRef.current
     if (!viewport) return
     addNodeAtPosition(
-      Math.max(16, Math.round((viewport.scrollLeft + viewport.clientWidth / 2) / zoom - NODE_WIDTH / 2)),
-      Math.max(16, Math.round((viewport.scrollTop + viewport.clientHeight / 2) / zoom - 120)),
+      Math.max(
+        16,
+        Math.round(
+          (viewport.scrollLeft + viewport.clientWidth / 2) / zoom -
+            NODE_WIDTH / 2
+        )
+      ),
+      Math.max(
+        16,
+        Math.round(
+          (viewport.scrollTop + viewport.clientHeight / 2) / zoom - 120
+        )
+      ),
       { template: copiedNode, preserveStepName: true }
     )
   }, [addNodeAtPosition, contextMenuPoint, copiedNode, zoom])
@@ -1558,11 +1825,17 @@ export default function WorkflowProjectPage() {
       const canvasRect = canvas.getBoundingClientRect()
       const nextX = Math.max(
         CANVAS_GRID_STEP,
-        snapToGrid(event.clientX - canvasRect.left - dragState.pointerOffsetX, CANVAS_GRID_STEP)
+        snapToGrid(
+          event.clientX - canvasRect.left - dragState.pointerOffsetX,
+          CANVAS_GRID_STEP
+        )
       )
       const nextY = Math.max(
         CANVAS_GRID_STEP,
-        snapToGrid(event.clientY - canvasRect.top - dragState.pointerOffsetY, CANVAS_GRID_STEP)
+        snapToGrid(
+          event.clientY - canvasRect.top - dragState.pointerOffsetY,
+          CANVAS_GRID_STEP
+        )
       )
       if (!movedNode) {
         pushHistorySnapshot()
@@ -1669,7 +1942,10 @@ export default function WorkflowProjectPage() {
         return
       }
 
-      if ((event.ctrlKey && key === "y") || (hasPrimaryModifier && key === "y")) {
+      if (
+        (event.ctrlKey && key === "y") ||
+        (hasPrimaryModifier && key === "y")
+      ) {
         if (!canRedo) return
         event.preventDefault()
         handleRedo()
@@ -1897,7 +2173,8 @@ export default function WorkflowProjectPage() {
 
     const onSetAutoRun = (event: Event) => {
       try {
-        const detail = (event as CustomEvent<WorkflowSetAutoRunEventDetail>).detail
+        const detail = (event as CustomEvent<WorkflowSetAutoRunEventDetail>)
+          .detail
         if (!detail || detail.projectId !== projectId) return
         setRunSchedule(detail.schedule)
       } catch (error) {
@@ -1906,15 +2183,24 @@ export default function WorkflowProjectPage() {
     }
 
     window.addEventListener(WORKFLOW_RUN_EVENT, onRunWorkflow as EventListener)
-    window.addEventListener(WORKFLOW_PUBLISH_EVENT, onPublishWorkflow as EventListener)
+    window.addEventListener(
+      WORKFLOW_PUBLISH_EVENT,
+      onPublishWorkflow as EventListener
+    )
     window.addEventListener(
       WORKFLOW_OPEN_LOG_EVENT,
       onOpenExecutionLog as EventListener
     )
-    window.addEventListener(WORKFLOW_SET_AUTORUN_EVENT, onSetAutoRun as EventListener)
+    window.addEventListener(
+      WORKFLOW_SET_AUTORUN_EVENT,
+      onSetAutoRun as EventListener
+    )
 
     return () => {
-      window.removeEventListener(WORKFLOW_RUN_EVENT, onRunWorkflow as EventListener)
+      window.removeEventListener(
+        WORKFLOW_RUN_EVENT,
+        onRunWorkflow as EventListener
+      )
       window.removeEventListener(
         WORKFLOW_PUBLISH_EVENT,
         onPublishWorkflow as EventListener
@@ -2007,7 +2293,9 @@ export default function WorkflowProjectPage() {
     return (
       <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 items-center justify-center bg-background px-4 py-10">
         <div className="rounded-xl border border-border bg-card px-5 py-4 text-center">
-          <p className="text-sm font-medium text-foreground">Loading workflow...</p>
+          <p className="text-sm font-medium text-foreground">
+            Loading workflow...
+          </p>
         </div>
       </div>
     )
@@ -2017,7 +2305,9 @@ export default function WorkflowProjectPage() {
     return (
       <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 items-center justify-center bg-background px-4 py-10">
         <div className="rounded-xl border border-border bg-card px-5 py-4 text-center">
-          <p className="text-sm font-medium text-foreground">Project not found.</p>
+          <p className="text-sm font-medium text-foreground">
+            Project not found.
+          </p>
           <Link
             href="/workflow"
             className="mt-2 inline-flex text-sm text-primary hover:underline"
@@ -2030,9 +2320,9 @@ export default function WorkflowProjectPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-2.5rem)] w-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="flex h-[calc(100dvh-2.5rem)] min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
       <div
-        className="min-h-0 min-w-0 flex flex-1 overflow-hidden"
+        className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
         style={{
           backgroundColor: "var(--background)",
           backgroundImage:
@@ -2050,7 +2340,7 @@ export default function WorkflowProjectPage() {
           onWheel={handleViewportWheel}
           onPointerDownCapture={handleViewportPointerDownCapture}
           className={cn(
-            "no-scrollbar relative h-full min-w-0 flex-1 overflow-auto overscroll-none",
+            "relative no-scrollbar h-full min-w-0 flex-1 overflow-auto overscroll-none",
             isPanning
               ? "cursor-grabbing"
               : isSpacePressed
@@ -2125,385 +2415,406 @@ export default function WorkflowProjectPage() {
                 zoom,
               }}
             >
-            <svg
-              className="absolute inset-0 h-full w-full"
-              aria-hidden="true"
-            >
-              {edgeGeometries.map((edge) => {
-                return (
-                  <g key={edge.id}>
-                    <path
-                      d={edge.path}
-                      fill="none"
-                      stroke="transparent"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={10}
-                      pointerEvents="stroke"
-                      onPointerEnter={() => showEdgeDelete(edge.id)}
-                      onPointerLeave={() => hideEdgeDeleteSoon(edge.id)}
-                    />
-                    <path
-                      d={edge.path}
-                      fill="none"
-                      style={{ stroke: "var(--muted-foreground)" }}
-                      strokeOpacity={0.45}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.6}
-                      pointerEvents="none"
-                    />
-                  </g>
-                )
-              })}
-              {draftWirePath && (
-                <path
-                  d={draftWirePath}
-                  fill="none"
-                  style={{ stroke: "var(--muted-foreground)" }}
-                  strokeOpacity={0.55}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.4}
-                  strokeDasharray="6 6"
-                />
-              )}
-            </svg>
+              <svg
+                className="absolute inset-0 h-full w-full"
+                aria-hidden="true"
+              >
+                {edgeGeometries.map((edge) => {
+                  return (
+                    <g key={edge.id}>
+                      <path
+                        d={edge.path}
+                        fill="none"
+                        stroke="transparent"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={10}
+                        pointerEvents="stroke"
+                        onPointerEnter={() => showEdgeDelete(edge.id)}
+                        onPointerLeave={() => hideEdgeDeleteSoon(edge.id)}
+                      />
+                      <path
+                        d={edge.path}
+                        fill="none"
+                        style={{ stroke: "var(--muted-foreground)" }}
+                        strokeOpacity={0.45}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.6}
+                        pointerEvents="none"
+                      />
+                    </g>
+                  )
+                })}
+                {draftWirePath && (
+                  <path
+                    d={draftWirePath}
+                    fill="none"
+                    style={{ stroke: "var(--muted-foreground)" }}
+                    strokeOpacity={0.55}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.4}
+                    strokeDasharray="6 6"
+                  />
+                )}
+              </svg>
 
-            {hoveredEdgeId && (() => {
-              const hoveredEdge = edgeGeometries.find((edge) => edge.id === hoveredEdgeId)
-              if (!hoveredEdge) return null
-              return (
-                <button
-                  type="button"
-                  onPointerEnter={() => showEdgeDelete(hoveredEdge.id)}
-                  onPointerLeave={() => hideEdgeDeleteSoon(hoveredEdge.id)}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    pushHistorySnapshot()
-                    markProjectChanged()
-                    setEdges((previous) =>
-                      previous.filter((edge) => edge.id !== hoveredEdge.id)
-                    )
-                    setHoveredEdgeId(null)
-                  }}
-                  className="absolute z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-popover text-muted-foreground shadow-sm transition-colors hover:text-destructive"
-                  style={{
-                    left: hoveredEdge.midX - 12,
-                    top: hoveredEdge.midY - 12,
-                  }}
-                  aria-label="Delete wire"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )
-            })()}
-
-            {nodes.map((node) => {
-              const isSelected = node.id === selectedNodeId
-              const isHovered = node.id === hoveredNodeId
-              const shouldShowHandles =
-                isSelected || isHovered || connectingSourceId === node.id
-              const executionState = EXECUTION_STATUS_META[node.executionStatus]
-              const handleConfig: Array<{ side: AnchorSide; className: string }> = [
-                {
-                  side: "top",
-                  className:
-                    "absolute -top-2 left-1/2 -translate-x-1/2 inline-flex h-4 w-4 items-center justify-center rounded-full border shadow-sm",
-                },
-                {
-                  side: "right",
-                  className:
-                    "absolute -right-2 top-1/2 -translate-y-1/2 inline-flex h-4 w-4 items-center justify-center rounded-full border shadow-sm",
-                },
-                {
-                  side: "bottom",
-                  className:
-                    "absolute -bottom-2 left-1/2 -translate-x-1/2 inline-flex h-4 w-4 items-center justify-center rounded-full border shadow-sm",
-                },
-                {
-                  side: "left",
-                  className:
-                    "absolute -left-2 top-1/2 -translate-y-1/2 inline-flex h-4 w-4 items-center justify-center rounded-full border shadow-sm",
-                },
-              ]
-
-              return (
-                <div
-                  key={node.id}
-                  ref={(element) => setNodeHeightRef(node.id, element)}
-                  role="button"
-                  tabIndex={0}
-                  data-workflow-node-card="true"
-                  onContextMenu={(event) => {
-                    const point = getCanvasPoint(event.clientX, event.clientY)
-                    if (point) setContextMenuPoint(point)
-                    setSelectedNodeId(node.id)
-                    activateNodeChat(node.id)
-                  }}
-                  onPointerEnter={() => setHoveredNodeId(node.id)}
-                  onPointerLeave={() =>
-                    setHoveredNodeId((previous) =>
-                      previous === node.id ? null : previous
-                    )
-                  }
-                  onPointerDown={(event) => handleNodePointerDown(node.id, event)}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    if (connectingSourceId) {
-                      if (connectingSourceId !== node.id) {
-                        toggleConnection(
-                          connectingSourceId,
-                          node.id,
-                          connectingSourceHandle ?? "bottom",
-                          "top"
+              {hoveredEdgeId &&
+                (() => {
+                  const hoveredEdge = edgeGeometries.find(
+                    (edge) => edge.id === hoveredEdgeId
+                  )
+                  if (!hoveredEdge) return null
+                  return (
+                    <button
+                      type="button"
+                      onPointerEnter={() => showEdgeDelete(hoveredEdge.id)}
+                      onPointerLeave={() => hideEdgeDeleteSoon(hoveredEdge.id)}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        pushHistorySnapshot()
+                        markProjectChanged()
+                        setEdges((previous) =>
+                          previous.filter((edge) => edge.id !== hoveredEdge.id)
                         )
-                      }
-                      clearWireDraft()
-                      return
-                    }
-                    setSelectedNodeId(node.id)
-                    activateNodeChat(node.id)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault()
+                        setHoveredEdgeId(null)
+                      }}
+                      className="absolute z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-popover text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+                      style={{
+                        left: hoveredEdge.midX - 12,
+                        top: hoveredEdge.midY - 12,
+                      }}
+                      aria-label="Delete wire"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )
+                })()}
+
+              {nodes.map((node) => {
+                const isSelected = node.id === selectedNodeId
+                const isHovered = node.id === hoveredNodeId
+                const shouldShowHandles =
+                  isSelected || isHovered || connectingSourceId === node.id
+                const executionState =
+                  EXECUTION_STATUS_META[node.executionStatus]
+                const handleConfig: Array<{
+                  side: AnchorSide
+                  className: string
+                }> = [
+                  {
+                    side: "top",
+                    className:
+                      "absolute -top-2 left-1/2 -translate-x-1/2 inline-flex h-4 w-4 items-center justify-center rounded-full border shadow-sm",
+                  },
+                  {
+                    side: "right",
+                    className:
+                      "absolute -right-2 top-1/2 -translate-y-1/2 inline-flex h-4 w-4 items-center justify-center rounded-full border shadow-sm",
+                  },
+                  {
+                    side: "bottom",
+                    className:
+                      "absolute -bottom-2 left-1/2 -translate-x-1/2 inline-flex h-4 w-4 items-center justify-center rounded-full border shadow-sm",
+                  },
+                  {
+                    side: "left",
+                    className:
+                      "absolute -left-2 top-1/2 -translate-y-1/2 inline-flex h-4 w-4 items-center justify-center rounded-full border shadow-sm",
+                  },
+                ]
+
+                return (
+                  <div
+                    key={node.id}
+                    ref={(element) => setNodeHeightRef(node.id, element)}
+                    role="button"
+                    tabIndex={0}
+                    data-workflow-node-card="true"
+                    onContextMenu={(event) => {
+                      const point = getCanvasPoint(event.clientX, event.clientY)
+                      if (point) setContextMenuPoint(point)
                       setSelectedNodeId(node.id)
                       activateNodeChat(node.id)
+                    }}
+                    onPointerEnter={() => setHoveredNodeId(node.id)}
+                    onPointerLeave={() =>
+                      setHoveredNodeId((previous) =>
+                        previous === node.id ? null : previous
+                      )
                     }
-                  }}
-                  className={cn(
-                    "absolute select-none !rounded-[12px] border bg-card p-2.5 text-left transition-colors touch-none",
-                    executionState.borderClass,
-                    "hover:border-border",
-                    connectingSourceId &&
-                      connectingSourceId !== node.id &&
-                      "ring-1 ring-border/70"
-                  )}
-                  style={{
-                    left: node.x,
-                    top: node.y,
-                    width: NODE_WIDTH,
-                    cursor: draggingNodeId === node.id ? "grabbing" : "default",
-                  }}
-                >
-                  {shouldShowHandles &&
-                    handleConfig.map((handle) => {
-                      const hasWire = edges.some((edge) => {
-                        if (edge.sourceId === node.id) {
-                          return getEdgeSourceHandle(edge) === handle.side
+                    onPointerDown={(event) =>
+                      handleNodePointerDown(node.id, event)
+                    }
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (connectingSourceId) {
+                        if (connectingSourceId !== node.id) {
+                          toggleConnection(
+                            connectingSourceId,
+                            node.id,
+                            connectingSourceHandle ?? "bottom",
+                            "top"
+                          )
                         }
-                        if (edge.targetId === node.id) {
-                          return getEdgeTargetHandle(edge) === handle.side
-                        }
-                        return false
-                      })
-                      const isCurrentSourceHandle =
-                        connectingSourceId === node.id &&
-                        connectingSourceHandle === handle.side
-                      return (
-                        <button
-                          key={`${node.id}-${handle.side}`}
-                          type="button"
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            if (connectingSourceId && connectingSourceHandle) {
+                        clearWireDraft()
+                        return
+                      }
+                      setSelectedNodeId(node.id)
+                      activateNodeChat(node.id)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        setSelectedNodeId(node.id)
+                        activateNodeChat(node.id)
+                      }
+                    }}
+                    className={cn(
+                      "absolute touch-none !rounded-[12px] border bg-card p-2.5 text-left transition-colors select-none",
+                      executionState.borderClass,
+                      "hover:border-border",
+                      connectingSourceId &&
+                        connectingSourceId !== node.id &&
+                        "ring-1 ring-border/70"
+                    )}
+                    style={{
+                      left: node.x,
+                      top: node.y,
+                      width: NODE_WIDTH,
+                      cursor:
+                        draggingNodeId === node.id ? "grabbing" : "default",
+                    }}
+                  >
+                    {shouldShowHandles &&
+                      handleConfig.map((handle) => {
+                        const hasWire = edges.some((edge) => {
+                          if (edge.sourceId === node.id) {
+                            return getEdgeSourceHandle(edge) === handle.side
+                          }
+                          if (edge.targetId === node.id) {
+                            return getEdgeTargetHandle(edge) === handle.side
+                          }
+                          return false
+                        })
+                        const isCurrentSourceHandle =
+                          connectingSourceId === node.id &&
+                          connectingSourceHandle === handle.side
+                        return (
+                          <button
+                            key={`${node.id}-${handle.side}`}
+                            type="button"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation()
                               if (
-                                connectingSourceId === node.id &&
-                                connectingSourceHandle === handle.side
+                                connectingSourceId &&
+                                connectingSourceHandle
                               ) {
+                                if (
+                                  connectingSourceId === node.id &&
+                                  connectingSourceHandle === handle.side
+                                ) {
+                                  clearWireDraft()
+                                  return
+                                }
+                                toggleConnection(
+                                  connectingSourceId,
+                                  node.id,
+                                  connectingSourceHandle,
+                                  handle.side
+                                )
                                 clearWireDraft()
                                 return
                               }
-                              toggleConnection(
-                                connectingSourceId,
-                                node.id,
-                                connectingSourceHandle,
-                                handle.side
-                              )
-                              clearWireDraft()
-                              return
-                            }
-                            handleStartConnectionMode(node.id, handle.side)
-                          }}
-                          className={cn(
-                            handle.className,
-                            "border-border bg-background text-muted-foreground",
-                            hasWire && "border-border text-foreground/75",
-                            isCurrentSourceHandle &&
-                              "border-border bg-muted text-foreground"
-                          )}
-                          aria-label={`Connect ${handle.side} of ${node.stepName}`}
-                        >
-                          {hasWire ? (
-                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          ) : (
-                            <Plus className="h-2.5 w-2.5" />
-                          )}
-                        </button>
-                      )
-                    })}
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <button
-                          type="button"
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={(event) => event.stopPropagation()}
-                          className={cn(
-                            "absolute -top-[26px] left-0 inline-flex h-5 items-center gap-1 rounded-[8px] border px-1.5 py-0.5 text-xs font-medium transition-colors",
-                            node.nodeType === "Action"
-                              ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-500/40 dark:bg-blue-500/12 dark:text-blue-300 dark:hover:bg-blue-500/22"
-                              : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/12 dark:text-emerald-300 dark:hover:bg-emerald-500/22"
-                          )}
-                          aria-label={`Node type for ${node.stepName}`}
-                        />
-                      }
-                    >
-                      {node.nodeType === "Action" ? (
-                        <PlayCircle className="h-2.5 w-2.5 fill-current/25" />
-                      ) : (
-                        <Zap className="h-2.5 w-2.5" />
-                      )}
-                      {node.nodeType}
-                      <ChevronDown className="h-2.5 w-2.5" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="min-w-36">
-                      <DropdownMenuItem
-                        onClick={() => setNodeType(node.id, "Action")}
-                        className="justify-between"
-                      >
-                        <span className="inline-flex items-center gap-1.5 text-blue-700 dark:text-blue-300">
-                          <PlayCircle className="h-3.5 w-3.5 fill-current/25" />
-                          Action
-                        </span>
-                        {node.nodeType === "Action" && <Check className="h-3.5 w-3.5" />}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => setNodeType(node.id, "Trigger")}
-                        className="justify-between"
-                      >
-                        <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
-                          <Zap className="h-3.5 w-3.5" />
-                          Trigger
-                        </span>
-                        {node.nodeType === "Trigger" && <Check className="h-3.5 w-3.5" />}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      {editingTitleNodeId === node.id ? (
-                        <div className="flex items-center gap-1">
-                          <Input
-                            value={titleDraft}
-                            onChange={(event) => setTitleDraft(event.target.value)}
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => event.stopPropagation()}
-                            onBlur={() => commitTitleEdit(node.id)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault()
-                                commitTitleEdit(node.id)
-                              }
-                              if (event.key === "Escape") {
-                                event.preventDefault()
-                                setEditingTitleNodeId(null)
-                                setTitleDraft("")
-                              }
+                              handleStartConnectionMode(node.id, handle.side)
                             }}
-                            className="h-6 rounded-md border-input bg-transparent px-2 text-sm font-semibold focus-visible:border-ring"
-                            autoFocus
-                          />
+                            className={cn(
+                              handle.className,
+                              "border-border bg-background text-muted-foreground",
+                              hasWire && "border-border text-foreground/75",
+                              isCurrentSourceHandle &&
+                                "border-border bg-muted text-foreground"
+                            )}
+                            aria-label={`Connect ${handle.side} of ${node.stepName}`}
+                          >
+                            {hasWire ? (
+                              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                            ) : (
+                              <Plus className="h-2.5 w-2.5" />
+                            )}
+                          </button>
+                        )
+                      })}
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
                           <button
                             type="button"
                             onPointerDown={(event) => event.stopPropagation()}
-                            onMouseDown={(event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                            }}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              commitTitleEdit(node.id)
-                            }}
-                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-input bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-                            aria-label={`Save title for ${node.stepName}`}
-                          >
-                            <Check className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          className="flex items-center gap-1"
-                          onDoubleClick={(event) => {
-                            event.stopPropagation()
-                            startTitleEdit(node)
-                          }}
-                        >
-                          <p className="line-clamp-1 text-base leading-none font-semibold text-foreground">
-                            {node.stepName}
-                          </p>
-                          <span
-                            className={cn("inline-flex h-2.5 w-2.5 rounded-full", executionState.dotClass)}
-                            title={`Status: ${executionState.label}`}
-                            aria-label={`Status: ${executionState.label}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className={cn(
+                              "absolute -top-[26px] left-0 inline-flex h-5 items-center gap-1 rounded-[8px] border px-1.5 py-0.5 text-xs font-medium transition-colors",
+                              node.nodeType === "Action"
+                                ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-500/40 dark:bg-blue-500/12 dark:text-blue-300 dark:hover:bg-blue-500/22"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/12 dark:text-emerald-300 dark:hover:bg-emerald-500/22"
+                            )}
+                            aria-label={`Node type for ${node.stepName}`}
                           />
-                        </div>
-                      )}
+                        }
+                      >
+                        {node.nodeType === "Action" ? (
+                          <PlayCircle className="h-2.5 w-2.5 fill-current/25" />
+                        ) : (
+                          <Zap className="h-2.5 w-2.5" />
+                        )}
+                        {node.nodeType}
+                        <ChevronDown className="h-2.5 w-2.5" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="min-w-36">
+                        <DropdownMenuItem
+                          onClick={() => setNodeType(node.id, "Action")}
+                          className="justify-between"
+                        >
+                          <span className="inline-flex items-center gap-1.5 text-blue-700 dark:text-blue-300">
+                            <PlayCircle className="h-3.5 w-3.5 fill-current/25" />
+                            Action
+                          </span>
+                          {node.nodeType === "Action" && (
+                            <Check className="h-3.5 w-3.5" />
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setNodeType(node.id, "Trigger")}
+                          className="justify-between"
+                        >
+                          <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                            <Zap className="h-3.5 w-3.5" />
+                            Trigger
+                          </span>
+                          {node.nodeType === "Trigger" && (
+                            <Check className="h-3.5 w-3.5" />
+                          )}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        {editingTitleNodeId === node.id ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              value={titleDraft}
+                              onChange={(event) =>
+                                setTitleDraft(event.target.value)
+                              }
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onClick={(event) => event.stopPropagation()}
+                              onBlur={() => commitTitleEdit(node.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault()
+                                  commitTitleEdit(node.id)
+                                }
+                                if (event.key === "Escape") {
+                                  event.preventDefault()
+                                  setEditingTitleNodeId(null)
+                                  setTitleDraft("")
+                                }
+                              }}
+                              className="h-6 rounded-md border-input bg-transparent px-2 text-sm font-semibold focus-visible:border-ring"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onPointerDown={(event) => event.stopPropagation()}
+                              onMouseDown={(event) => {
+                                event.preventDefault()
+                                event.stopPropagation()
+                              }}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                commitTitleEdit(node.id)
+                              }}
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-input bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+                              aria-label={`Save title for ${node.stepName}`}
+                            >
+                              <Check className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            className="flex items-center gap-1"
+                            onDoubleClick={(event) => {
+                              event.stopPropagation()
+                              startTitleEdit(node)
+                            }}
+                          >
+                            <p className="line-clamp-1 text-base leading-none font-semibold text-foreground">
+                              {node.stepName}
+                            </p>
+                            <span
+                              className={cn(
+                                "inline-flex h-2.5 w-2.5 rounded-full",
+                                executionState.dotClass
+                              )}
+                              title={`Status: ${executionState.label}`}
+                              aria-label={`Status: ${executionState.label}`}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="mt-1.5 !rounded-[8px] bg-muted/40 p-2">
-                    <p className="line-clamp-4 text-[13px] leading-[1.45] text-muted-foreground">
-                      {node.prompt}
-                    </p>
-                  </div>
-
-                  {isSelected && (
-                    <div className="absolute -top-[34px] right-0 z-10 flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        className="h-7 bg-background shadow-sm"
-                        onClick={() => addNodeNextTo(node.id)}
-                        aria-label="Add node"
-                      >
-                        <Plus className="h-3 w-3" />
-                        Add
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        className="h-7 bg-background shadow-sm"
-                        onClick={() => setFilesDialogOpen(true)}
-                        aria-label="Open node files"
-                      >
-                        <Files className="h-3 w-3" />
-                        Files
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        className="h-7 border-destructive/30 bg-background text-destructive shadow-sm hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => deleteNode(node.id)}
-                        aria-label="Delete node"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        Delete
-                      </Button>
+                    <div className="mt-1.5 !rounded-[8px] bg-muted/40 p-2">
+                      <p className="line-clamp-4 text-[13px] leading-[1.45] text-muted-foreground">
+                        {node.prompt}
+                      </p>
                     </div>
-                  )}
 
-                </div>
-              )
-            })}
+                    {isSelected && (
+                      <div className="absolute -top-[34px] right-0 z-10 flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          className="h-7 bg-background shadow-sm"
+                          onClick={() => addNodeNextTo(node.id)}
+                          aria-label="Add node"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Add
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          className="h-7 bg-background shadow-sm"
+                          onClick={() => setFilesDialogOpen(true)}
+                          aria-label="Open node files"
+                        >
+                          <Files className="h-3 w-3" />
+                          Files
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          className="h-7 border-destructive/30 bg-background text-destructive shadow-sm hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => deleteNode(node.id)}
+                          aria-label="Delete node"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Delete
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </ContextMenu5Wrapper>
         </section>
@@ -2551,7 +2862,9 @@ export default function WorkflowProjectPage() {
               <div className="rounded-lg border border-border bg-background px-3 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">Bot</p>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Bot
+                    </p>
                     <p className="mt-1 text-sm font-medium text-foreground">
                       {telegramWebhookStatus?.bot ??
                         telegramAgentBlueprint?.channel?.bot ??
@@ -2571,7 +2884,8 @@ export default function WorkflowProjectPage() {
                   ) : null}
                 </div>
                 <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                  Telegram keeps one chat per bot. This opens the same bot and starts this agent context.
+                  Telegram keeps one chat per bot. This opens the same bot and
+                  starts this agent context.
                 </p>
               </div>
 
@@ -2629,10 +2943,16 @@ export default function WorkflowProjectPage() {
                 <Button
                   type="button"
                   className="mt-3 w-full"
-                  disabled={isRunningWorkflow || isActivatingTelegramWebhook}
+                  disabled={
+                    isRunningWorkflow ||
+                    isActivatingTelegramWebhook ||
+                    isActivatingComposioTrigger
+                  }
                   onClick={() => handleRunWorkflow()}
                 >
-                  {isRunningWorkflow || isActivatingTelegramWebhook ? (
+                  {isRunningWorkflow ||
+                  isActivatingTelegramWebhook ||
+                  isActivatingComposioTrigger ? (
                     <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <PlayCircle className="h-3.5 w-3.5" />
@@ -2642,7 +2962,9 @@ export default function WorkflowProjectPage() {
               </div>
 
               <div className="rounded-lg border border-border bg-background px-3 py-3">
-                <p className="text-xs font-medium text-muted-foreground">Brain</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Brain
+                </p>
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <p className="text-sm font-medium text-foreground">
                     {telegramAgentBlueprint?.brain?.mode === "agent_api"
@@ -2657,7 +2979,7 @@ export default function WorkflowProjectPage() {
                 </div>
                 {telegramAgentBlueprint?.brain?.mode === "agent_api" &&
                 telegramAgentBlueprint.brain.agentApiUrl ? (
-                  <p className="mt-2 break-all text-xs text-muted-foreground">
+                  <p className="mt-2 text-xs break-all text-muted-foreground">
                     {telegramAgentBlueprint.brain.agentApiUrl}
                   </p>
                 ) : null}
@@ -2667,7 +2989,7 @@ export default function WorkflowProjectPage() {
                 <p className="text-xs font-medium text-muted-foreground">
                   Instructions
                 </p>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
+                <p className="mt-2 text-sm leading-6 whitespace-pre-wrap text-foreground">
                   {telegramAgentBlueprint?.behavior?.instructions ??
                     selectedNode?.prompt}
                 </p>
@@ -2678,8 +3000,9 @@ export default function WorkflowProjectPage() {
                   Test
                 </p>
                 <p className="mt-1 text-sm leading-6 text-foreground">
-                  Open the bot, press Start, then send a message. The reply should
-                  come from this automation while the webhook badge is Live.
+                  Open the bot, press Start, then send a message. The reply
+                  should come from this automation while the webhook badge is
+                  Live.
                 </p>
               </div>
             </div>
@@ -2696,11 +3019,15 @@ export default function WorkflowProjectPage() {
               const chatNode = nodes.find((node) => node.id === nodeId)
               if (!chatNode) return null
               return (
-                <div key={nodeId} className={nodeId === activeChatNodeId ? "block" : "hidden"}>
+                <div
+                  key={nodeId}
+                  className={nodeId === activeChatNodeId ? "block" : "hidden"}
+                >
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-x-3 top-2 z-20 flex items-center justify-between text-xs text-foreground">
                       <span className="truncate">
-                        Chatting with <span className="font-medium">{chatNode.stepName}</span>
+                        Chatting with{" "}
+                        <span className="font-medium">{chatNode.stepName}</span>
                       </span>
                       <button
                         type="button"
@@ -2748,8 +3075,12 @@ export default function WorkflowProjectPage() {
                   key={fileName}
                   className="flex items-center justify-between rounded-lg border border-border/70 bg-card px-3 py-2"
                 >
-                  <span className="truncate text-sm text-foreground">{fileName}</span>
-                  <span className="text-xs text-muted-foreground">Attached</span>
+                  <span className="truncate text-sm text-foreground">
+                    {fileName}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Attached
+                  </span>
                 </div>
               ))
             ) : (
@@ -2764,9 +3095,12 @@ export default function WorkflowProjectPage() {
       <Dialog open={executionLogOpen} onOpenChange={setExecutionLogOpen}>
         <DialogContent className="max-h-[85vh] w-[min(980px,calc(100vw-2rem))] overflow-hidden p-0 sm:max-w-[980px]">
           <DialogHeader className="border-b border-border px-5 py-4">
-            <DialogTitle className="text-lg">Execution Log · {project.title}</DialogTitle>
+            <DialogTitle className="text-lg">
+              Execution Log · {project.title}
+            </DialogTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              Runtime visibility for the current workflow graph and latest node activity.
+              Runtime visibility for the current workflow graph and latest node
+              activity.
             </p>
           </DialogHeader>
           <div className="max-h-[calc(85vh-72px)] space-y-5 overflow-y-auto px-5 py-4">
@@ -2775,7 +3109,9 @@ export default function WorkflowProjectPage() {
                 <p className="text-xs font-medium text-muted-foreground">
                   Latest run
                 </p>
-                <p className="mt-1 text-sm font-medium text-foreground">{lastExecutionLabel}</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {lastExecutionLabel}
+                </p>
               </div>
               <div className="rounded-lg border border-border bg-card px-3 py-3">
                 <p className="text-xs font-medium text-muted-foreground">
@@ -2805,14 +3141,20 @@ export default function WorkflowProjectPage() {
 
             <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
               <div className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm font-semibold text-foreground">Execution timeline</p>
+                <p className="text-sm font-semibold text-foreground">
+                  Execution timeline
+                </p>
                 <div className="mt-3 space-y-3">
                   {executionTimeline.map((event) => (
                     <div key={event.title} className="flex gap-2">
                       <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-muted-foreground/60" />
                       <div>
-                        <p className="text-xs font-medium text-foreground">{event.title}</p>
-                        <p className="text-xs text-muted-foreground">{event.detail}</p>
+                        <p className="text-xs font-medium text-foreground">
+                          {event.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {event.detail}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -2820,20 +3162,34 @@ export default function WorkflowProjectPage() {
               </div>
 
               <div className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm font-semibold text-foreground">Run metadata</p>
+                <p className="text-sm font-semibold text-foreground">
+                  Run metadata
+                </p>
                 <div className="mt-3 space-y-2 text-xs text-muted-foreground">
                   <p>
-                    Execution mix: {idleNodeCount} idle · {runningNodeCount} running ·{" "}
-                    {successNodeCount} success · {errorNodeCount} error
+                    Execution mix: {idleNodeCount} idle · {runningNodeCount}{" "}
+                    running · {successNodeCount} success · {errorNodeCount}{" "}
+                    error
                   </p>
                   <p>Publish state: {publishState}</p>
                   <p>Auto-run: {runScheduleLabel}</p>
                   <p>
-                    Node types: {actionNodeCount} action · {triggerNodeCount} trigger
+                    Node types: {actionNodeCount} action · {triggerNodeCount}{" "}
+                    trigger
                   </p>
+                  {hasComposioTriggerNode ? (
+                    <p>
+                      Composio triggers:{" "}
+                      {composioTriggerError
+                        ? composioTriggerError
+                        : isActivatingComposioTrigger
+                          ? "Activating..."
+                          : `${composioTriggerRegistrations.length} ready to register on Run`}
+                    </p>
+                  ) : null}
                   <p>
-                    Coverage: {uniqueAppsCount} apps · {uniqueSkillsCount} skills ·{" "}
-                    {totalFileCount} files
+                    Coverage: {uniqueAppsCount} apps · {uniqueSkillsCount}{" "}
+                    skills · {totalFileCount} files
                   </p>
                 </div>
               </div>
@@ -2841,8 +3197,12 @@ export default function WorkflowProjectPage() {
 
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-foreground">Node run details</p>
-                <p className="text-xs text-muted-foreground">{orderedNodes.length} nodes</p>
+                <p className="text-sm font-semibold text-foreground">
+                  Node run details
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {orderedNodes.length} nodes
+                </p>
               </div>
               <div className="mt-3 space-y-2">
                 {orderedNodes.map((node, index) => (
@@ -2855,7 +3215,13 @@ export default function WorkflowProjectPage() {
                         {index + 1}. {node.stepName}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {[node.provider, node.owner, node.tokenCount ? `${node.tokenCount} tokens` : null].filter(Boolean).join(" · ")}
+                        {[
+                          node.provider,
+                          node.owner,
+                          node.tokenCount ? `${node.tokenCount} tokens` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -2878,17 +3244,17 @@ export default function WorkflowProjectPage() {
                               ? "Error"
                               : "Idle"}
                       </Badge>
-                      <span className="text-[11px] text-muted-foreground">{node.lastRan}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {node.lastRan}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-
           </div>
         </DialogContent>
       </Dialog>
-
     </div>
   )
 }

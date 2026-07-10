@@ -11,8 +11,12 @@ type ConnectedAppProvider =
   | "gmail"
   | "google-contacts"
   | "telegram"
+  | "github"
+  | "instagram"
+  | "google-calendar"
   | "google-drive"
   | "google-sheets"
+  | "google-docs"
   | "chatgpt"
 
 type ComposioChatToolResult =
@@ -64,12 +68,19 @@ type ContextMessage = {
   content: string
 }
 
+const COMPOSIO_TOOL_SEARCH_QUERY_MAX_LENGTH = 900
+
 const GENERIC_CONNECTED_APPS: GenericConnectedApp[] = [
   {
     provider: "google-contacts",
     toolkit: "googlecontacts",
     label: "Google Contacts",
-    aliases: [/\bgoogle\s*contacts?\b/i, /\bgmail\s*contacts?\b/i, /\bcontacts?\b/i, /\baddress\s*book\b/i],
+    aliases: [
+      /\bgoogle\s*contacts?\b/i,
+      /\bgmail\s*contacts?\b/i,
+      /\bcontacts?\b/i,
+      /\baddress\s*book\b/i,
+    ],
   },
   {
     provider: "gmail",
@@ -84,45 +95,115 @@ const GENERIC_CONNECTED_APPS: GenericConnectedApp[] = [
     aliases: [/\btelegram\b/i],
   },
   {
+    provider: "github",
+    toolkit: "github",
+    label: "GitHub",
+    aliases: [
+      /\bgithub\b/i,
+      /\bpull\s*request(s)?\b/i,
+      /\bPRs?\b/,
+      /\bissues?\b/i,
+      /\brepositor(y|ies)\b/i,
+      /\bbranches?\b/i,
+      /\bcommits?\b/i,
+      /\bworkflow\s*runs?\b/i,
+      /\bgit\b/i,
+    ],
+  },
+  {
+    provider: "instagram",
+    toolkit: "instagram",
+    label: "Instagram",
+    aliases: [
+      /\binstagram\b/i,
+      /\big\b/i,
+      /\breels?\b/i,
+      /\bstor(y|ies)\b/i,
+      /\bIG\s*comments?\b/i,
+      /\binstagram\s*messages?\b/i,
+    ],
+  },
+  {
+    provider: "google-calendar",
+    toolkit: "googlecalendar",
+    label: "Google Calendar",
+    aliases: [
+      /\bgoogle\s*calendar\b/i,
+      /\bcalendar\b/i,
+      /\bevents?\b/i,
+      /\bmeetings?\b/i,
+    ],
+  },
+  {
     provider: "google-sheets",
     toolkit: "googlesheets",
     label: "Google Sheets",
-    aliases: [/\bgoogle\s*sheets?\b/i, /\bsheets?\b/i, /\bspreadsheet(s)?\b/i, /\bworksheet(s)?\b/i],
+    aliases: [
+      /\bgoogle\s*sheets?\b/i,
+      /\bsheets?\b/i,
+      /\bspreadsheet(s)?\b/i,
+      /\bworksheet(s)?\b/i,
+    ],
   },
   {
     provider: "google-drive",
     toolkit: "googledrive",
     label: "Google Drive",
-    aliases: [/\bgoogle\s*drive\b/i, /\bgdrive\b/i, /\bdrive\s+file(s)?\b/i, /\bgoogle\s*doc(s)?\b/i],
+    aliases: [/\bgoogle\s*drive\b/i, /\bgdrive\b/i, /\bdrive\s+file(s)?\b/i],
+  },
+  {
+    provider: "google-docs",
+    toolkit: "googledocs",
+    label: "Google Docs",
+    aliases: [/\bgoogle\s*doc(s)?\b/i, /\bdoc(s|ument|uments)?\b/i],
   },
   {
     provider: "chatgpt",
     toolkit: "openai",
     label: "ChatGPT/OpenAI",
-    aliases: [/\bchatgpt\b/i, /\bopenai\b/i, /\bgpt\b/i, /\bvector\s*store(s)?\b/i],
+    aliases: [
+      /\bchatgpt\b/i,
+      /\bopenai\b/i,
+      /\bgpt\b/i,
+      /\bvector\s*store(s)?\b/i,
+    ],
   },
 ]
 
 function mentionsGoogleSheets(content: string) {
-  return /\b(google\s*sheets?|sheets?|spreadsheet|spreadsheets|worksheet)\b/i.test(content)
+  return /\b(google\s*sheets?|sheets?|spreadsheet|spreadsheets|worksheet)\b/i.test(
+    content
+  )
 }
 
 function asksToSearchOrList(content: string) {
-  return /\b(search|find|list|show|get|last|recent|used|opened|modified)\b/i.test(content)
+  return /\b(search|find|list|show|get|last|recent|used|opened|modified)\b/i.test(
+    content
+  )
 }
 
 function asksToAppendRow(content: string) {
-  return /\b(add|append|insert|create|write)\b/i.test(content) && /\b(record|row|entry|line|data)\b/i.test(content)
+  return (
+    /\b(add|append|insert|create|write)\b/i.test(content) &&
+    /\b(record|row|entry|line|data)\b/i.test(content)
+  )
 }
 
 function asksToAddColumn(content: string) {
-  return /\b(column|columns)\b/i.test(content) && /\b(add|append|insert|create|write|update|set|new|random)\b/i.test(content)
+  return (
+    /\b(column|columns)\b/i.test(content) &&
+    /\b(add|append|insert|create|write|update|set|new|random)\b/i.test(content)
+  )
 }
 
 function asksToEditSheetGrid(content: string) {
   return (
-    /\b(column|columns|row|rows|cell|cells|range|header|heading)\b/i.test(content) &&
-    /\b(add|append|insert|create|write|update|set|new|called|named|change)\b/i.test(content)
+    /\b(column|columns|row|rows|cell|cells|range|header|heading)\b/i.test(
+      content
+    ) &&
+    /\b(add|append|insert|create|write|update|set|new|called|named|change)\b/i.test(
+      content
+    )
   )
 }
 
@@ -168,6 +249,16 @@ function stringifyForModel(value: unknown) {
   return JSON.stringify(value, null, 2).slice(0, 12000)
 }
 
+function compactForComposioLimit(
+  value: string,
+  maxLength = COMPOSIO_TOOL_SEARCH_QUERY_MAX_LENGTH
+) {
+  const compacted = value.replace(/\s+/g, " ").trim()
+  if (compacted.length <= maxLength) return compacted
+
+  return compacted.slice(0, maxLength - 3).trimEnd() + "..."
+}
+
 function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -184,11 +275,14 @@ function extractSpreadsheetId(content: string) {
 
 function cleanSpreadsheetTargetName(value: string | null | undefined) {
   const cleaned = (value ?? "")
-    .replace(/[“”]/g, "\"")
+    .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/[*`]/g, "")
     .replace(/^[\s"'.,:;-]+|[\s"'.,:;-]+$/g, "")
-    .replace(/^(?:try\s+(?:for\s+)?|for\s+)?(?:this\s+)?(?:one|sheet|spreadsheet)\s+/i, "")
+    .replace(
+      /^(?:try\s+(?:for\s+)?|for\s+)?(?:this\s+)?(?:one|sheet|spreadsheet)\s+/i,
+      ""
+    )
     .replace(/^(?:the|a|an)\s+/i, "")
     .replace(/\s+(?:google\s*)?(?:sheet|spreadsheet)$/i, "")
     .trim()
@@ -202,8 +296,14 @@ function extractSpreadsheetName(content: string) {
   )
   if (explicitQuoted?.[1]) return cleanSpreadsheetTargetName(explicitQuoted[1])
 
-  const quotedMatches = Array.from(content.matchAll(/["“”']([^"“”']{2,})["“”']/g))
-    .filter((match) => !/\b(?:called|named|name)\s*$/i.test(content.slice(0, match.index).slice(-24)))
+  const quotedMatches = Array.from(
+    content.matchAll(/["“”']([^"“”']{2,})["“”']/g)
+  ).filter(
+    (match) =>
+      !/\b(?:called|named|name)\s*$/i.test(
+        content.slice(0, match.index).slice(-24)
+      )
+  )
   const quoted = quotedMatches[0]
   if (quoted?.[1]) return cleanSpreadsheetTargetName(quoted[1])
 
@@ -221,7 +321,9 @@ function extractRequestedColumnName(content: string) {
   )
   if (named?.[1]) return cleanSpreadsheetTargetName(named[1])
 
-  const column = content.match(/\bcolumn\s+["“”']?([A-Za-z0-9 _-]{2,})["“”']?\s*$/i)
+  const column = content.match(
+    /\bcolumn\s+["“”']?([A-Za-z0-9 _-]{2,})["“”']?\s*$/i
+  )
   return column?.[1] ? cleanSpreadsheetTargetName(column[1]) : null
 }
 
@@ -236,8 +338,9 @@ function asksToSetColumnHeader(content: string) {
 
 function looksLikeSheetsFollowUp(content: string) {
   return (
-    /\b(try|same|this\s+one|that\s+one|for\s+["“”']?|go\s+ahead|yes)\b/i.test(content) ||
-    asksToEditSheetGrid(content)
+    /\b(try|same|this\s+one|that\s+one|for\s+["“”']?|go\s+ahead|yes)\b/i.test(
+      content
+    ) || asksToEditSheetGrid(content)
   )
 }
 
@@ -255,7 +358,10 @@ function spreadsheetsFromSearch(value: unknown): SheetLookup[] {
       {
         id,
         name: typeof record.name === "string" ? record.name : undefined,
-        url: typeof record.webViewLink === "string" ? record.webViewLink : undefined,
+        url:
+          typeof record.webViewLink === "string"
+            ? record.webViewLink
+            : undefined,
       },
     ]
   })
@@ -265,7 +371,9 @@ function sheetNamesFromResult(value: unknown) {
   const data = recordValue(recordValue(value)?.data)
   const sheetNames = data?.sheet_names ?? data?.sheets
   if (!Array.isArray(sheetNames)) return []
-  return sheetNames.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+  return sheetNames.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0
+  )
 }
 
 function firstHeaderRow(value: unknown) {
@@ -274,7 +382,9 @@ function firstHeaderRow(value: unknown) {
   if (!Array.isArray(values)) return []
   const firstRow = values[0]
   if (!Array.isArray(firstRow)) return []
-  return firstRow.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+  return firstRow.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0
+  )
 }
 
 function valueRows(value: unknown) {
@@ -314,26 +424,36 @@ function columnName(index: number) {
 
 function valueForHeader(header: string, index: number) {
   const normalized = header.toLowerCase()
-  if (/\b(coupon|code|promo)\b/.test(normalized)) return `ATMET-${randomSuffix()}`
+  if (/\b(coupon|code|promo)\b/.test(normalized))
+    return `ATMET-${randomSuffix()}`
   if (/\b(vendor|brand|company|store)\b/.test(normalized)) return "Atmet Test"
   if (/\b(type|category|status)\b/.test(normalized)) return "Test"
   if (/\b(name|person|influencer|owner)\b/.test(normalized)) return "Atmet"
   if (/\b(email)\b/.test(normalized)) return "test@atmet.local"
-  if (/\b(date|time|created|updated)\b/.test(normalized)) return new Date().toISOString()
+  if (/\b(date|time|created|updated)\b/.test(normalized))
+    return new Date().toISOString()
   if (/\b(url|link|website)\b/.test(normalized)) return "https://atmetai.com"
-  if (/\b(note|description|comment)\b/.test(normalized)) return "Random test record created by Atmet"
+  if (/\b(note|description|comment)\b/.test(normalized))
+    return "Random test record created by Atmet"
   return index === 0 ? `Atmet test ${randomSuffix()}` : "Test"
 }
 
 function buildRandomRow(headers: string[]) {
   if (headers.length === 0) {
-    return [`Atmet test ${randomSuffix()}`, "Random test record created by Atmet", new Date().toISOString()]
+    return [
+      `Atmet test ${randomSuffix()}`,
+      "Random test record created by Atmet",
+      new Date().toISOString(),
+    ]
   }
 
   return headers.map((header, index) => valueForHeader(header, index))
 }
 
-function buildRandomColumn(existingRows: unknown[][], requestedHeader?: string | null) {
+function buildRandomColumn(
+  existingRows: unknown[][],
+  requestedHeader?: string | null
+) {
   const maxUsedColumns = Math.max(0, ...existingRows.map((row) => row.length))
   const rowCount = Math.max(existingRows.length, 10)
   const nextColumnIndex = Math.max(maxUsedColumns + 1, 1)
@@ -384,7 +504,9 @@ async function getActiveComposioSession(input: {
 
     return {
       ok: false as const,
-      error: statusList ? `Composio account status: ${statusList}` : "No active connection",
+      error: statusList
+        ? `Composio account status: ${statusList}`
+        : "No active connection",
     }
   }
 
@@ -404,16 +526,34 @@ async function getActiveComposioSession(input: {
 }
 
 function detectGenericConnectedApp(content: string) {
-  return GENERIC_CONNECTED_APPS.find((app) =>
-    app.aliases.some((alias) => alias.test(content))
-  ) ?? null
+  return (
+    GENERIC_CONNECTED_APPS.find((app) =>
+      app.aliases.some((alias) => alias.test(content))
+    ) ?? null
+  )
 }
 
 function looksLikeConnectedAppFollowUp(content: string) {
-  return /\b(subject|body|to|recipient|message|send it|go ahead|yes|chat id|chat_id|file|folder|label|thread|reply)\b/i.test(content)
+  return /\b(subject|body|to|recipient|message|send it|go ahead|yes|chat id|chat_id|file|folder|label|thread|reply)\b/i.test(
+    content
+  )
 }
 
-function buildToolRequestContent(content: string, contextMessages?: ContextMessage[]) {
+function looksLikeTriggerAutomationRequest(content: string) {
+  return (
+    /\b(when|whenever|every\s+time|trigger|watch|listen|monitor|on\s+new|received|arrives?|incoming)\b/i.test(
+      content
+    ) &&
+    /\b(workflow|automation|automate|agent|then|if|reply|send|label|add|create|notify|message|email)\b/i.test(
+      content
+    )
+  )
+}
+
+function buildToolRequestContent(
+  content: string,
+  contextMessages?: ContextMessage[]
+) {
   const recentContext = (contextMessages ?? [])
     .slice(-8)
     .map((message) => `${message.role}: ${message.content}`)
@@ -424,7 +564,9 @@ function buildToolRequestContent(content: string, contextMessages?: ContextMessa
   const gmailIds = Array.from(
     new Set(
       Array.from(
-        recentContext.matchAll(/mail\.google\.com\/mail\/[^\s)]*?#\w+\/([a-f0-9]{12,})/gi)
+        recentContext.matchAll(
+          /mail\.google\.com\/mail\/[^\s)]*?#\w+\/([a-f0-9]{12,})/gi
+        )
       )
         .map((match) => match[1])
         .filter((id): id is string => Boolean(id))
@@ -441,6 +583,41 @@ function buildToolRequestContent(content: string, contextMessages?: ContextMessa
     "Latest user message:",
     content,
   ].join("\n")
+}
+
+function latestUserMessageFromToolRequest(content: string) {
+  const latest = content
+    .match(/Latest user message:\s*([\s\S]+)$/i)?.[1]
+    ?.trim()
+  return latest && latest.length > 0 ? latest : content
+}
+
+function buildComposioToolSearchQuery(
+  content: string,
+  app: GenericConnectedApp
+) {
+  const latestUserMessage = latestUserMessageFromToolRequest(content)
+  const searchIntent = `${app.label}: ${latestUserMessage}`
+
+  return compactForComposioLimit(searchIntent)
+}
+
+function sanitizeComposioToolArguments(args: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(args).map(([key, value]) => {
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "")
+      if (
+        typeof value === "string" &&
+        (normalizedKey === "usecase" ||
+          normalizedKey === "query" ||
+          normalizedKey === "searchquery")
+      ) {
+        return [key, compactForComposioLimit(value)]
+      }
+
+      return [key, value]
+    })
+  )
 }
 
 function parseJsonObject(content: string): Record<string, unknown> | null {
@@ -478,7 +655,7 @@ async function planComposioToolExecution(input: {
         role: "system",
         content: [
           "You choose one connected-app tool and build JSON arguments from the user's request.",
-          "Return only JSON with this shape: {\"execute\":boolean,\"toolSlug\":string|null,\"arguments\":object,\"reason\":string,\"question\":string|null}.",
+          'Return only JSON with this shape: {"execute":boolean,"toolSlug":string|null,"arguments":object,"reason":string,"question":string|null}.',
           "Use only the provided tool schemas. Do not invent tool names or fields.",
           "If a required target is missing, set execute=false and put a short question in question.",
           "For destructive actions like delete, trash, revoke, remove, or permanent changes, execute only when the user explicitly names the target and asks for that destructive action.",
@@ -547,12 +724,18 @@ async function runGenericComposioAppTool(input: {
     }
   }
 
+  const searchQuery = buildComposioToolSearchQuery(input.content, input.app)
   const search = await connected.session.search({
-    query: input.content,
+    query: searchQuery,
     toolkits: [input.app.toolkit],
   })
-  const schemas = Object.values((recordValue(search)?.toolSchemas ?? {}) as Record<string, ToolSchema>)
-    .filter((schema) => schema?.toolSlug && schema.hasFullSchema !== false && schema.inputSchema)
+  const schemas = Object.values(
+    (recordValue(search)?.toolSchemas ?? {}) as Record<string, ToolSchema>
+  )
+    .filter(
+      (schema) =>
+        schema?.toolSlug && schema.hasFullSchema !== false && schema.inputSchema
+    )
     .slice(0, 6)
 
   if (schemas.length === 0) {
@@ -577,12 +760,17 @@ async function runGenericComposioAppTool(input: {
       ok: false,
       provider: input.app.provider,
       operation: "tool-planning",
-      summary: plan.reason ?? `Atmet needs more information before using ${input.app.label}.`,
-      error: plan.question ?? "The request did not include enough information to execute safely.",
+      summary:
+        plan.reason ??
+        `Atmet needs more information before using ${input.app.label}.`,
+      error:
+        plan.question ??
+        "The request did not include enough information to execute safely.",
     }
   }
 
-  const result = await connected.session.execute(plan.toolSlug, plan.arguments ?? {})
+  const planArguments = sanitizeComposioToolArguments(plan.arguments ?? {})
+  const result = await connected.session.execute(plan.toolSlug, planArguments)
 
   if (result.error) {
     return {
@@ -602,7 +790,7 @@ async function runGenericComposioAppTool(input: {
     data: {
       tool: plan.toolSlug,
       connectedAccountId: connected.activeAccount.id,
-      args: plan.arguments ?? {},
+      args: planArguments,
       plannerReason: plan.reason ?? null,
       result: result.data,
     },
@@ -615,14 +803,24 @@ export async function runComposioChatTool(input: {
   content: string
   contextMessages?: ContextMessage[]
 }): Promise<ComposioChatToolResult | null> {
-  const toolRequestContent = buildToolRequestContent(input.content, input.contextMessages)
+  if (looksLikeTriggerAutomationRequest(input.content)) {
+    return null
+  }
+
+  const toolRequestContent = buildToolRequestContent(
+    input.content,
+    input.contextMessages
+  )
   const currentMentionsSheets = mentionsGoogleSheets(input.content)
   const sheetsFollowUp =
     !currentMentionsSheets &&
     looksLikeSheetsFollowUp(input.content) &&
     mentionsGoogleSheets(toolRequestContent)
-  const sheetsIntentContent = currentMentionsSheets ? input.content : toolRequestContent
-  const shouldSearch = currentMentionsSheets && asksToSearchOrList(input.content)
+  const sheetsIntentContent = currentMentionsSheets
+    ? input.content
+    : toolRequestContent
+  const shouldSearch =
+    currentMentionsSheets && asksToSearchOrList(input.content)
   const shouldAppend =
     (currentMentionsSheets && asksToAppendRow(input.content)) ||
     (sheetsFollowUp && asksToAppendRow(toolRequestContent))
@@ -630,7 +828,8 @@ export async function runComposioChatTool(input: {
     (currentMentionsSheets && asksToAddColumn(input.content)) ||
     (sheetsFollowUp && asksToAddColumn(toolRequestContent))
   const currentGenericApp = detectGenericConnectedApp(input.content)
-  const genericApp = currentGenericApp ??
+  const genericApp =
+    currentGenericApp ??
     (looksLikeConnectedAppFollowUp(input.content)
       ? detectGenericConnectedApp(toolRequestContent)
       : null)
@@ -658,7 +857,11 @@ export async function runComposioChatTool(input: {
       return {
         ok: false,
         provider: "google-sheets",
-        operation: shouldAddColumn ? "add-column" : shouldAppend ? "append-row" : "search",
+        operation: shouldAddColumn
+          ? "add-column"
+          : shouldAppend
+            ? "append-row"
+            : "search",
         summary:
           "Google Sheets is mentioned, but Composio does not report an active Google Sheets connection for this workspace user yet.",
         error: sheets.error,
@@ -667,27 +870,33 @@ export async function runComposioChatTool(input: {
 
     if (shouldAddColumn) {
       const targetContent =
-        extractSpreadsheetId(input.content) || extractSpreadsheetName(input.content)
+        extractSpreadsheetId(input.content) ||
+        extractSpreadsheetName(input.content)
           ? input.content
           : sheetsIntentContent
       const spreadsheetId = extractSpreadsheetId(targetContent)
       const spreadsheetName = extractSpreadsheetName(targetContent)
       const requestedColumnName =
-        extractRequestedColumnName(input.content) ?? extractRequestedColumnName(sheetsIntentContent)
+        extractRequestedColumnName(input.content) ??
+        extractRequestedColumnName(sheetsIntentContent)
       const requestedColumnLetter =
-        extractRequestedColumnLetter(input.content) ?? extractRequestedColumnLetter(sheetsIntentContent)
+        extractRequestedColumnLetter(input.content) ??
+        extractRequestedColumnLetter(sheetsIntentContent)
 
       if (!spreadsheetId && !spreadsheetName) {
         return {
           ok: false,
           provider: "google-sheets",
           operation: "add-column",
-          summary: "A Google Sheets column edit was requested, but no spreadsheet name or URL was provided.",
+          summary:
+            "A Google Sheets column edit was requested, but no spreadsheet name or URL was provided.",
           error: "Ask the user for the spreadsheet name or URL before writing.",
         }
       }
 
-      let target: SheetLookup | null = spreadsheetId ? { id: spreadsheetId } : null
+      let target: SheetLookup | null = spreadsheetId
+        ? { id: spreadsheetId }
+        : null
       let searchResult: unknown = null
 
       if (!target && spreadsheetName) {
@@ -704,17 +913,21 @@ export async function runComposioChatTool(input: {
           ok: false,
           provider: "google-sheets",
           operation: "add-column",
-          summary: "A Google Sheets column edit was requested, but the target spreadsheet could not be found.",
+          summary:
+            "A Google Sheets column edit was requested, but the target spreadsheet could not be found.",
           error: spreadsheetName
             ? `No spreadsheet matched "${spreadsheetName}".`
             : "No spreadsheet matched the provided target.",
         }
       }
 
-      const namesResult = await sheets.session.execute("GOOGLESHEETS_GET_SHEET_NAMES", {
-        spreadsheet_id: target.id,
-        exclude_hidden: true,
-      })
+      const namesResult = await sheets.session.execute(
+        "GOOGLESHEETS_GET_SHEET_NAMES",
+        {
+          spreadsheet_id: target.id,
+          exclude_hidden: true,
+        }
+      )
       const sheetNames = sheetNamesFromResult(namesResult)
       const firstSheetName = sheetNames[0]
 
@@ -723,7 +936,8 @@ export async function runComposioChatTool(input: {
           ok: false,
           provider: "google-sheets",
           operation: "add-column",
-          summary: "The target spreadsheet was found, but no writable sheet tab was discovered.",
+          summary:
+            "The target spreadsheet was found, but no writable sheet tab was discovered.",
           error: "No sheet names were returned.",
         }
       }
@@ -734,31 +948,36 @@ export async function runComposioChatTool(input: {
             ok: false,
             provider: "google-sheets",
             operation: "set-column-header",
-            summary: "A Google Sheets column header edit was requested, but no header name was provided.",
+            summary:
+              "A Google Sheets column header edit was requested, but no header name was provided.",
             error: "Ask the user what header name to write.",
           }
         }
 
         const range = `${firstSheetName}!${requestedColumnLetter}1:${requestedColumnLetter}1`
-        const updateResult = await sheets.session.execute("GOOGLESHEETS_UPDATE_VALUES_BATCH", {
-          spreadsheet_id: target.id,
-          valueInputOption: "USER_ENTERED",
-          includeValuesInResponse: true,
-          data: [
-            {
-              range,
-              majorDimension: "ROWS",
-              values: [[requestedColumnName]],
-            },
-          ],
-        })
+        const updateResult = await sheets.session.execute(
+          "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+          {
+            spreadsheet_id: target.id,
+            valueInputOption: "USER_ENTERED",
+            includeValuesInResponse: true,
+            data: [
+              {
+                range,
+                majorDimension: "ROWS",
+                values: [[requestedColumnName]],
+              },
+            ],
+          }
+        )
 
         if (updateResult.error) {
           return {
             ok: false,
             provider: "google-sheets",
             operation: "set-column-header",
-            summary: "Google Sheets header update ran but Composio returned an error.",
+            summary:
+              "Google Sheets header update ran but Composio returned an error.",
             error: updateResult.error,
           }
         }
@@ -782,32 +1001,39 @@ export async function runComposioChatTool(input: {
         }
       }
 
-      const existingValuesResult = await sheets.session.execute("GOOGLESHEETS_VALUES_GET", {
-        spreadsheet_id: target.id,
-        range: `${firstSheetName}!A1:ZZ1000`,
-      })
+      const existingValuesResult = await sheets.session.execute(
+        "GOOGLESHEETS_VALUES_GET",
+        {
+          spreadsheet_id: target.id,
+          range: `${firstSheetName}!A1:ZZ1000`,
+        }
+      )
       const existingRows = valueRows(existingValuesResult)
       const randomColumn = buildRandomColumn(existingRows, requestedColumnName)
       const range = `${firstSheetName}!${randomColumn.nextColumn}1:${randomColumn.nextColumn}${randomColumn.values.length}`
-      const updateResult = await sheets.session.execute("GOOGLESHEETS_UPDATE_VALUES_BATCH", {
-        spreadsheet_id: target.id,
-        valueInputOption: "USER_ENTERED",
-        includeValuesInResponse: true,
-        data: [
-          {
-            range,
-            majorDimension: "ROWS",
-            values: randomColumn.values,
-          },
-        ],
-      })
+      const updateResult = await sheets.session.execute(
+        "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+        {
+          spreadsheet_id: target.id,
+          valueInputOption: "USER_ENTERED",
+          includeValuesInResponse: true,
+          data: [
+            {
+              range,
+              majorDimension: "ROWS",
+              values: randomColumn.values,
+            },
+          ],
+        }
+      )
 
       if (updateResult.error) {
         return {
           ok: false,
           provider: "google-sheets",
           operation: "add-column",
-          summary: "Google Sheets column update ran but Composio returned an error.",
+          summary:
+            "Google Sheets column update ran but Composio returned an error.",
           error: updateResult.error,
         }
       }
@@ -836,7 +1062,8 @@ export async function runComposioChatTool(input: {
 
     if (shouldAppend) {
       const targetContent =
-        extractSpreadsheetId(input.content) || extractSpreadsheetName(input.content)
+        extractSpreadsheetId(input.content) ||
+        extractSpreadsheetName(input.content)
           ? input.content
           : sheetsIntentContent
       const spreadsheetId = extractSpreadsheetId(targetContent)
@@ -847,12 +1074,15 @@ export async function runComposioChatTool(input: {
           ok: false,
           provider: "google-sheets",
           operation: "append-row",
-          summary: "A Google Sheets append was requested, but no spreadsheet name or URL was provided.",
+          summary:
+            "A Google Sheets append was requested, but no spreadsheet name or URL was provided.",
           error: "Ask the user for the spreadsheet name or URL before writing.",
         }
       }
 
-      let target: SheetLookup | null = spreadsheetId ? { id: spreadsheetId } : null
+      let target: SheetLookup | null = spreadsheetId
+        ? { id: spreadsheetId }
+        : null
       let searchResult: unknown = null
 
       if (!target && spreadsheetName) {
@@ -869,17 +1099,21 @@ export async function runComposioChatTool(input: {
           ok: false,
           provider: "google-sheets",
           operation: "append-row",
-          summary: "A Google Sheets append was requested, but the target spreadsheet could not be found.",
+          summary:
+            "A Google Sheets append was requested, but the target spreadsheet could not be found.",
           error: spreadsheetName
             ? `No spreadsheet matched "${spreadsheetName}".`
             : "No spreadsheet matched the provided target.",
         }
       }
 
-      const namesResult = await sheets.session.execute("GOOGLESHEETS_GET_SHEET_NAMES", {
-        spreadsheet_id: target.id,
-        exclude_hidden: true,
-      })
+      const namesResult = await sheets.session.execute(
+        "GOOGLESHEETS_GET_SHEET_NAMES",
+        {
+          spreadsheet_id: target.id,
+          exclude_hidden: true,
+        }
+      )
       const sheetNames = sheetNamesFromResult(namesResult)
       const firstSheetName = sheetNames[0]
 
@@ -888,15 +1122,19 @@ export async function runComposioChatTool(input: {
           ok: false,
           provider: "google-sheets",
           operation: "append-row",
-          summary: "The target spreadsheet was found, but no writable sheet tab was discovered.",
+          summary:
+            "The target spreadsheet was found, but no writable sheet tab was discovered.",
           error: "No sheet names were returned.",
         }
       }
 
-      const headersResult = await sheets.session.execute("GOOGLESHEETS_VALUES_GET", {
-        spreadsheet_id: target.id,
-        range: `${firstSheetName}!A1:Z1`,
-      })
+      const headersResult = await sheets.session.execute(
+        "GOOGLESHEETS_VALUES_GET",
+        {
+          spreadsheet_id: target.id,
+          range: `${firstSheetName}!A1:Z1`,
+        }
+      )
       const headers = firstHeaderRow(headersResult)
       const row = buildRandomRow(headers)
       const appendResult = await sheets.session.execute(
@@ -926,7 +1164,8 @@ export async function runComposioChatTool(input: {
         ok: true,
         provider: "google-sheets",
         operation: "append-row",
-        summary: "A row was appended to the target Google Sheet through Composio.",
+        summary:
+          "A row was appended to the target Google Sheet through Composio.",
         data: {
           tool: "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
           connectedAccountId: sheets.activeAccount.id,
@@ -942,7 +1181,10 @@ export async function runComposioChatTool(input: {
     }
 
     const args = buildSearchArgs(sheetsIntentContent)
-    const result = await sheets.session.execute("GOOGLESHEETS_SEARCH_SPREADSHEETS", args)
+    const result = await sheets.session.execute(
+      "GOOGLESHEETS_SEARCH_SPREADSHEETS",
+      args
+    )
 
     if (result.error) {
       return {

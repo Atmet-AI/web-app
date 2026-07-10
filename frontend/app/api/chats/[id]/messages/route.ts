@@ -4,7 +4,10 @@ import { ok, Errors } from "@/lib/api/response"
 import { sendMessageSchema } from "@/lib/validations/chat"
 import { getOpenAIClient } from "@/lib/openai"
 import { supabaseAdmin } from "@/lib/supabase/admin"
-import { buildComposioToolContext, runComposioChatTool } from "@/lib/integrations/composio-chat"
+import {
+  buildComposioToolContext,
+  runComposioChatTool,
+} from "@/lib/integrations/composio-chat"
 import {
   detectAppApprovalRequest,
   parseAppApprovalRequest,
@@ -34,7 +37,11 @@ function streamAssistantText(input: {
   const readable = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder()
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: input.content })}\n\n`))
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({ content: input.content })}\n\n`
+        )
+      )
       controller.enqueue(encoder.encode("data: [DONE]\n\n"))
       controller.close()
 
@@ -72,10 +79,10 @@ function attachmentRecord(value: unknown): StoredAttachment[] {
   return raw.filter((item): item is StoredAttachment => {
     return Boolean(
       item &&
-        typeof item === "object" &&
-        typeof (item as Record<string, unknown>).id === "string" &&
-        typeof (item as Record<string, unknown>).name === "string" &&
-        typeof (item as Record<string, unknown>).kind === "string"
+      typeof item === "object" &&
+      typeof (item as Record<string, unknown>).id === "string" &&
+      typeof (item as Record<string, unknown>).name === "string" &&
+      typeof (item as Record<string, unknown>).kind === "string"
     )
   })
 }
@@ -111,12 +118,19 @@ export async function GET(
 
   const messages = data ?? []
   const messageIds = messages.map((message) => message.id)
-  const { data: files } = messageIds.length > 0
-    ? await supabaseAdmin
-        .from("file")
-        .select("id, message_id, storage_path")
-        .in("message_id", messageIds)
-    : { data: [] as Array<{ id: string; message_id: string; storage_path: string }> }
+  const { data: files } =
+    messageIds.length > 0
+      ? await supabaseAdmin
+          .from("file")
+          .select("id, message_id, storage_path")
+          .in("message_id", messageIds)
+      : {
+          data: [] as Array<{
+            id: string
+            message_id: string
+            storage_path: string
+          }>,
+        }
 
   const signedUrlsByFileId = new Map<string, string>()
   await Promise.all(
@@ -129,17 +143,21 @@ export async function GET(
   )
 
   const hydratedMessages = messages.map((message) => {
-    const attachments = attachmentRecord(message.metadata).map((attachment) => ({
-      ...attachment,
-      previewUrl: attachment.fileId
-        ? signedUrlsByFileId.get(attachment.fileId) ?? attachment.previewUrl
-        : attachment.previewUrl,
-    }))
+    const attachments = attachmentRecord(message.metadata).map(
+      (attachment) => ({
+        ...attachment,
+        previewUrl: attachment.fileId
+          ? (signedUrlsByFileId.get(attachment.fileId) ?? attachment.previewUrl)
+          : attachment.previewUrl,
+      })
+    )
 
     return {
       ...message,
       metadata: {
-        ...(message.metadata && typeof message.metadata === "object" && !Array.isArray(message.metadata)
+        ...(message.metadata &&
+        typeof message.metadata === "object" &&
+        !Array.isArray(message.metadata)
           ? message.metadata
           : {}),
         attachments,
@@ -266,8 +284,14 @@ export async function POST(
       messages: [
         {
           role: "system",
-          content:
-            "You are Atmet, the AI assistant built for Atmet. Your product identity is Atmet, not OpenAI, ChatGPT, Claude, Gemini, or any other provider. Do not describe yourself as being based on OpenAI or any third-party model. If earlier conversation history says otherwise, correct it and continue as Atmet. You help users turn conversations into practical workplace automations, workflows, agents, and productivity actions. When asked who you are or what model you are, say you are Atmet, built for Atmet. Be concise, capable, and action-oriented.",
+          content: [
+            "You are Atmet, the AI assistant built for Atmet. Your product identity is Atmet, not OpenAI, ChatGPT, Claude, Gemini, or any other provider. Do not describe yourself as being based on OpenAI or any third-party model. If earlier conversation history says otherwise, correct it and continue as Atmet.",
+            "You help users turn conversations into practical workplace automations, workflows, agents, and productivity actions. When asked who you are or what model you are, say you are Atmet, built for Atmet. Be concise, capable, and action-oriented.",
+            "For connected-app trigger requests, prepare a workflow plan instead of claiming you cannot monitor the app.",
+            "Use real Composio trigger slugs when a user names a trigger: Gmail uses GMAIL_NEW_GMAIL_MESSAGE and GMAIL_EMAIL_SENT_TRIGGER; Google Calendar trigger slugs start with GOOGLECALENDAR_; Google Drive trigger slugs start with GOOGLEDRIVE_; Google Sheets trigger slugs start with GOOGLESHEETS_; Google Docs trigger slugs start with GOOGLEDOCS_; GitHub trigger slugs start with GITHUB_.",
+            "Telegram and Instagram currently expose Composio actions but no Composio triggers in this SDK version; for trigger-like Telegram behavior use polling tools or a future webhook-specific workflow UI.",
+            "Mention useful config fields when relevant: interval is in minutes, Gmail userId defaults to me and labelIds can default to INBOX, Calendar calendarId can default to primary, GitHub triggers usually need owner and repo, Drive and Docs query fields support search filtering, and Sheets spreadsheet_id/range/sheet_name should be requested when needed.",
+          ].join(" "),
         },
         ...(composioToolResult
           ? [
@@ -304,7 +328,9 @@ export async function POST(
           const delta = chunk.choices[0]?.delta?.content ?? ""
           if (delta) {
             fullContent += delta
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: delta })}\n\n`))
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ content: delta })}\n\n`)
+            )
           }
           if (chunk.usage) {
             promptTokens = chunk.usage.prompt_tokens

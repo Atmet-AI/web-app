@@ -1,3 +1,5 @@
+import { GMAIL_ACTIONS, GMAIL_TRIGGERS } from "@/lib/integrations-catalog"
+
 export type IntegrationCategory =
   | "communication"
   | "productivity"
@@ -69,47 +71,42 @@ const INITIAL_INTEGRATIONS: Integration[] = [
     description: "Send and organize email activity directly from workflows.",
     category: "communication",
     authType: "oauth",
+    connectorProvider: "composio",
+    composioToolkit: "gmail",
     setupInstructions: [
       "Click Connect Gmail.",
-      "Sign in to your Google account and review the requested scopes.",
-      "Approve access and return to Atmet to finish setup.",
+      "A secure Google authorization page will open.",
+      "Choose the mailbox Atmet should automate and approve the requested access.",
+      "Return to Atmet and use Gmail triggers or actions inside workflows.",
     ],
     scopes: [
       {
         name: "gmail.modify",
-        description: "Read, send, label, archive, and move Gmail messages to trash when workflows run.",
+        description:
+          "Read, send, label, archive, and move Gmail messages to trash when workflows run.",
+      },
+      {
+        name: "gmail.compose",
+        description: "Create, update, and send drafts or composed messages.",
+      },
+      {
+        name: "gmail.settings.basic",
+        description:
+          "Read and update mailbox settings such as labels, filters, POP, IMAP, language, and vacation replies where approved.",
+      },
+      {
+        name: "gmail.settings.sharing",
+        description:
+          "Read and update forwarding and send-as settings where Google allows it.",
       },
       {
         name: "userinfo.email",
-        description: "Identify which mailbox should be linked to this workspace.",
+        description:
+          "Identify which mailbox should be linked to this workspace.",
       },
     ],
-    triggers: [
-      {
-        id: "gmail-new-email",
-        name: "New email received",
-        description: "Starts a workflow when a new email arrives in the inbox.",
-      },
-      {
-        id: "gmail-labeled-email",
-        name: "Email labeled",
-        description: "Runs when a chosen Gmail label is applied to a message.",
-      },
-    ],
-    actions: [
-      {
-        id: "gmail-send-email",
-        name: "Send email",
-        description: "Send a message from the connected Gmail account.",
-        inputFields: ["to", "subject", "body"],
-      },
-      {
-        id: "gmail-add-label",
-        name: "Add label",
-        description: "Attach one or more labels to an existing email.",
-        inputFields: ["messageId", "label"],
-      },
-    ],
+    triggers: GMAIL_TRIGGERS,
+    actions: GMAIL_ACTIONS,
     connected: true,
     connectedAt: "2026-04-22T09:35:00.000Z",
     status: "active",
@@ -118,14 +115,15 @@ const INITIAL_INTEGRATIONS: Integration[] = [
     slug: "google-contacts",
     name: "Google Contacts",
     logo: "https://cdn.simpleicons.org/googlecontacts",
-    description: "Find, create, and update saved Google contacts for communication workflows.",
+    description:
+      "Find, create, and update saved Google contacts for communication workflows.",
     category: "productivity",
     authType: "oauth",
     connectorProvider: "composio",
     composioToolkit: "googlecontacts",
     setupInstructions: [
       "Click Connect Google Contacts.",
-      "Composio will open a secure Google authorization page.",
+      "A secure Google authorization page will open.",
       "Choose the Google account whose contacts Atmet should access.",
       "Return to Atmet and use contacts in chats or workflows.",
     ],
@@ -136,7 +134,8 @@ const INITIAL_INTEGRATIONS: Integration[] = [
       },
       {
         name: "contacts.write",
-        description: "Create or update contacts when an approved workflow asks for it.",
+        description:
+          "Create or update contacts when an approved workflow asks for it.",
       },
     ],
     triggers: [],
@@ -177,11 +176,13 @@ const INITIAL_INTEGRATIONS: Integration[] = [
     scopes: [
       {
         name: "channels:history",
-        description: "Read channel history to trigger workflows from new content.",
+        description:
+          "Read channel history to trigger workflows from new content.",
       },
       {
         name: "chat:write",
-        description: "Send messages to selected channels from workflow actions.",
+        description:
+          "Send messages to selected channels from workflow actions.",
       },
       {
         name: "users:read",
@@ -192,7 +193,8 @@ const INITIAL_INTEGRATIONS: Integration[] = [
       {
         id: "slack-new-message",
         name: "New channel message",
-        description: "Starts when a new message is posted in a selected channel.",
+        description:
+          "Starts when a new message is posted in a selected channel.",
       },
       {
         id: "slack-new-reaction",
@@ -222,50 +224,146 @@ const INITIAL_INTEGRATIONS: Integration[] = [
     slug: "telegram",
     name: "Telegram",
     logo: "https://cdn.simpleicons.org/telegram",
-    description: "Send alerts, workflow updates, and agent replies through a Telegram bot.",
+    description:
+      "Use the Telegram Bot API to send messages, files, polls, and manage accessible chats.",
     category: "communication",
     authType: "apikey",
+    connectorProvider: "composio",
+    composioToolkit: "telegram",
     apiKeyUrl: "https://t.me/BotFather",
     setupInstructions: [
-      "Open @BotFather in Telegram and send /newbot.",
-      "Choose the bot display name and username. The username must end with bot.",
-      "Copy the bot token BotFather sends you. It looks like 123456:ABC-DEF...",
-      "Paste that token here, give this bot a clear brand name, then test and save it.",
+      "Open BotFather in Telegram and create a bot with /newbot, or use /token for an existing bot.",
+      "Copy the bot token BotFather gives you.",
+      "Paste the token here so Atmet can create the connected account.",
+      "Use the connected Telegram account in chats, agents, and workflows.",
     ],
     scopes: [
       {
-        name: "bot token",
-        description: "Send messages and receive updates for chats that interact with the bot.",
+        name: "generic_api_key",
+        description:
+          "Telegram requires a Bot Token from BotFather. This connects a bot, not a personal Telegram account.",
       },
       {
         name: "chat access",
-        description: "Telegram only sends updates after a user starts the bot or the bot is added to a chat.",
+        description:
+          "Telegram Bot API tools can only access chats where the bot is present and permitted.",
       },
     ],
-    triggers: [
-      {
-        id: "telegram-new-message",
-        name: "New bot message",
-        description: "Starts when the connected bot receives a message.",
-      },
-      {
-        id: "telegram-command",
-        name: "Command received",
-        description: "Starts when someone sends a slash command to the bot.",
-      },
-    ],
+    triggers: [],
     actions: [
       {
-        id: "telegram-send-message",
-        name: "Send message",
-        description: "Send a text message to a Telegram chat.",
-        inputFields: ["chatId", "text"],
+        id: "TELEGRAM_GET_ME",
+        name: "Get Bot Info",
+        description:
+          "Verify the connected Telegram bot and inspect its basic capabilities.",
+        inputFields: [],
       },
       {
-        id: "telegram-send-image",
-        name: "Send image",
-        description: "Send a generated image to a Telegram chat.",
-        inputFields: ["chatId", "imageUrl", "caption"],
+        id: "TELEGRAM_GET_UPDATES",
+        name: "Get Updates",
+        description: "Poll recent incoming updates when no webhook is active.",
+        inputFields: ["offset", "limit", "timeout"],
+      },
+      {
+        id: "TELEGRAM_GET_CHAT_HISTORY",
+        name: "Get Chat History",
+        description:
+          "Read accessible updates for a specific chat through polling.",
+        inputFields: ["chat_id"],
+      },
+      {
+        id: "TELEGRAM_GET_CHAT",
+        name: "Get Chat Info",
+        description: "Inspect a chat the bot can access.",
+        inputFields: ["chat_id"],
+      },
+      {
+        id: "TELEGRAM_GET_CHAT_MEMBER",
+        name: "Get Chat Member",
+        description: "Check a member or bot role in a chat.",
+        inputFields: ["chat_id", "user_id"],
+      },
+      {
+        id: "TELEGRAM_GET_CHAT_ADMINISTRATORS",
+        name: "Get Chat Administrators",
+        description: "List administrators for accessible groups or channels.",
+        inputFields: ["chat_id"],
+      },
+      {
+        id: "TELEGRAM_GET_CHAT_MEMBERS_COUNT",
+        name: "Get Chat Members Count",
+        description:
+          "Count members in an accessible chat where permissions allow.",
+        inputFields: ["chat_id"],
+      },
+      {
+        id: "TELEGRAM_SEND_MESSAGE",
+        name: "Send Message",
+        description: "Send a text message to a Telegram chat.",
+        inputFields: ["chat_id", "text"],
+      },
+      {
+        id: "TELEGRAM_SEND_PHOTO",
+        name: "Send Photo",
+        description: "Send a photo to a Telegram chat.",
+        inputFields: ["chat_id", "photo", "caption"],
+      },
+      {
+        id: "TELEGRAM_SEND_DOCUMENT",
+        name: "Send Document",
+        description: "Send a file while preserving its original format.",
+        inputFields: ["chat_id", "document", "caption"],
+      },
+      {
+        id: "TELEGRAM_SEND_LOCATION",
+        name: "Send Location",
+        description: "Send a map location to a chat.",
+        inputFields: ["chat_id", "latitude", "longitude"],
+      },
+      {
+        id: "TELEGRAM_SEND_POLL",
+        name: "Send Poll",
+        description: "Send a native Telegram poll.",
+        inputFields: ["chat_id", "question", "options"],
+      },
+      {
+        id: "TELEGRAM_EDIT_MESSAGE",
+        name: "Edit Message",
+        description:
+          "Edit a bot-authored text message where permissions allow.",
+        inputFields: ["chat_id", "message_id", "text"],
+      },
+      {
+        id: "TELEGRAM_DELETE_MESSAGE",
+        name: "Delete Message",
+        description:
+          "Delete a message where Telegram permissions and age limits allow.",
+        inputFields: ["chat_id", "message_id"],
+      },
+      {
+        id: "TELEGRAM_FORWARD_MESSAGE",
+        name: "Forward Message",
+        description: "Forward a message from one chat to another.",
+        inputFields: ["chat_id", "from_chat_id", "message_id"],
+      },
+      {
+        id: "TELEGRAM_CREATE_CHAT_INVITE_LINK",
+        name: "Create Chat Invite Link",
+        description:
+          "Create a primary invite link for a chat where the bot has admin rights.",
+        inputFields: ["chat_id"],
+      },
+      {
+        id: "TELEGRAM_SET_MY_COMMANDS",
+        name: "Set Bot Commands",
+        description: "Set the command list shown for the connected bot.",
+        inputFields: ["commands"],
+      },
+      {
+        id: "TELEGRAM_ANSWER_CALLBACK_QUERY",
+        name: "Answer Callback Query",
+        description: "Respond to inline keyboard callback queries.",
+        inputFields: ["callback_query_id", "text"],
       },
     ],
     connected: false,
@@ -672,7 +770,11 @@ const integrationStore: Integration[] = structuredClone(INITIAL_INTEGRATIONS)
 type MutableIntegration = Integration & { keyName?: string }
 
 function findMutableIntegration(slug: string): MutableIntegration | null {
-  return (integrationStore.find((integration) => integration.slug === slug) as MutableIntegration) ?? null
+  return (
+    (integrationStore.find(
+      (integration) => integration.slug === slug
+    ) as MutableIntegration) ?? null
+  )
 }
 
 function cloneStoreValue<T>(value: T): T {
@@ -688,7 +790,10 @@ export function getIntegration(slug: string): Integration | null {
   return integration ? cloneStoreValue(integration) : null
 }
 
-export function initOAuthConnection(slug: string, requestUrl: string): { redirectUrl: string } | null {
+export function initOAuthConnection(
+  slug: string,
+  requestUrl: string
+): { redirectUrl: string } | null {
   const integration = findMutableIntegration(slug)
   if (!integration || integration.authType !== "oauth") {
     return null
@@ -701,7 +806,10 @@ export function initOAuthConnection(slug: string, requestUrl: string): { redirec
   return { redirectUrl: callbackUrl.toString() }
 }
 
-export function completeOAuthConnection(slug: string, code: string): { success: boolean } {
+export function completeOAuthConnection(
+  slug: string,
+  code: string
+): { success: boolean } {
   const integration = findMutableIntegration(slug)
   if (!integration || integration.authType !== "oauth") {
     return { success: false }
@@ -718,7 +826,10 @@ export function completeOAuthConnection(slug: string, code: string): { success: 
   return { success: true }
 }
 
-export function testApiKeyConnection(slug: string, apiKey: string): {
+export function testApiKeyConnection(
+  slug: string,
+  apiKey: string
+): {
   success: boolean
   message?: string
 } {
@@ -736,7 +847,10 @@ export function testApiKeyConnection(slug: string, apiKey: string): {
   }
 
   if (apiKey.trim().length < 8 || apiKey.toLowerCase().includes("fail")) {
-    return { success: false, message: "Connection failed. Please verify your API key and try again." }
+    return {
+      success: false,
+      message: "Connection failed. Please verify your API key and try again.",
+    }
   }
 
   return { success: true, message: "Connection successful." }
