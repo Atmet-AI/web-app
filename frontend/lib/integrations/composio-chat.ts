@@ -231,6 +231,14 @@ function asksToSetSheetHeaders(content: string) {
   )
 }
 
+function asksToCreateSpreadsheet(content: string) {
+  return (
+    mentionsGoogleSheets(content) &&
+    /\b(create|new|make)\b/i.test(content) &&
+    /\b(sheet|spreadsheet|worksheet)\b/i.test(content)
+  )
+}
+
 function asksToEditSheetGrid(content: string) {
   return (
     /\b(column|columns|row|rows|cell|cells|range|header|heading)\b/i.test(
@@ -466,6 +474,48 @@ function extractSpreadsheetName(content: string) {
     /\b(?:try\s+for|in|into|to|inside|for)\s+(?:this\s+)?(?:one|sheet|spreadsheet)?\s*([^?.!\n]+?)(?:\s+(?:can|please|add|append|insert|create|write|update|set)\b|$|[?.!])/i
   )
   if (explicitTarget?.[1]) return cleanSpreadsheetTargetName(explicitTarget[1])
+
+  return null
+}
+
+function extractNewSpreadsheetTitle(content: string) {
+  const labeled = content.match(/\btitle\s*:\s*([^\n]+)/i)?.[1]
+  if (labeled) return cleanSpreadsheetTargetName(labeled)
+
+  const named = content.match(
+    /\b(?:called|named|titled|name(?:d)?\s+as)\s+["“”']?([^"“”'?.!\n]+)["“”']?/i
+  )?.[1]
+  if (named) return cleanSpreadsheetTargetName(named)
+
+  const quoted = content.match(/["“”']([^"“”']{2,})["“”']/)?.[1]
+  if (quoted && !extractEmailAddress(quoted)) {
+    return cleanSpreadsheetTargetName(quoted)
+  }
+
+  return null
+}
+
+function findStringByKey(value: unknown, keys: string[]): string | null {
+  if (!value || typeof value !== "object") return null
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findStringByKey(item, keys)
+      if (found) return found
+    }
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  for (const key of keys) {
+    const direct = record[key]
+    if (typeof direct === "string" && direct.trim()) return direct.trim()
+  }
+
+  for (const nested of Object.values(record)) {
+    const found = findStringByKey(nested, keys)
+    if (found) return found
+  }
 
   return null
 }
@@ -1170,6 +1220,9 @@ export async function runComposioChatTool(input: {
     : toolRequestContent
   const shouldSearch =
     currentMentionsSheets && asksToSearchOrList(input.content)
+  const shouldCreateSpreadsheet =
+    (currentMentionsSheets && asksToCreateSpreadsheet(input.content)) ||
+    (sheetsFollowUp && asksToCreateSpreadsheet(toolRequestContent))
   const shouldAppend =
     (currentMentionsSheets && asksToAppendRow(input.content)) ||
     (sheetsFollowUp && asksToAppendRow(toolRequestContent))
@@ -1188,6 +1241,7 @@ export async function runComposioChatTool(input: {
 
   if (
     !shouldSearch &&
+    !shouldCreateSpreadsheet &&
     !shouldAppend &&
     !shouldAddColumn &&
     !shouldSetHeaders &&
@@ -1199,6 +1253,7 @@ export async function runComposioChatTool(input: {
   try {
     if (
       !shouldSearch &&
+      !shouldCreateSpreadsheet &&
       !shouldAppend &&
       !shouldAddColumn &&
       !shouldSetHeaders &&
@@ -1225,12 +1280,101 @@ export async function runComposioChatTool(input: {
           ? "add-column"
           : shouldSetHeaders
             ? "set-headers"
-            : shouldAppend
-              ? "append-row"
-              : "search",
+            : shouldCreateSpreadsheet
+              ? "create-spreadsheet"
+              : shouldAppend
+                ? "append-row"
+                : "search",
         summary:
           "Google Sheets is mentioned, but Composio does not report an active Google Sheets connection for this workspace user yet.",
         error: sheets.error,
+      }
+    }
+
+    if (shouldCreateSpreadsheet) {
+      const title =
+        extractNewSpreadsheetTitle(sheetsIntentContent) ?? "Untitled spreadsheet"
+      const headers = extractSheetHeaders(sheetsIntentContent)
+      const createResult = await sheets.session.execute(
+        "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+        {
+          title,
+        }
+      )
+
+      if (createResult.error) {
+        return {
+          ok: false,
+          provider: "google-sheets",
+          operation: "create-spreadsheet",
+          summary:
+            "Google Sheets spreadsheet creation ran but Composio returned an error.",
+          error: createResult.error,
+        }
+      }
+
+      const spreadsheetId = findStringByKey(createResult, [
+        "spreadsheetId",
+        "spreadsheet_id",
+        "id",
+      ])
+      const spreadsheetUrl = findStringByKey(createResult, [
+        "spreadsheetUrl",
+        "spreadsheet_url",
+        "url",
+        "webViewLink",
+      ])
+      let headerUpdateResult: unknown = null
+      let sheetName: string | null = null
+      let range: string | null = null
+
+      if (spreadsheetId && headers.length > 0) {
+        const namesResult = await sheets.session.execute(
+          "GOOGLESHEETS_GET_SHEET_NAMES",
+          {
+            spreadsheet_id: spreadsheetId,
+            exclude_hidden: true,
+          }
+        )
+        sheetName = sheetNamesFromResult(namesResult)[0] ?? "Sheet1"
+        range = `${sheetName}!A1:${columnName(headers.length)}1`
+        headerUpdateResult = await sheets.session.execute(
+          "GOOGLESHEETS_UPDATE_VALUES_BATCH",
+          {
+            spreadsheet_id: spreadsheetId,
+            valueInputOption: "USER_ENTERED",
+            includeValuesInResponse: true,
+            data: [
+              {
+                range,
+                majorDimension: "ROWS",
+                values: [headers],
+              },
+            ],
+          }
+        )
+      }
+
+      return {
+        ok: true,
+        provider: "google-sheets",
+        operation: "create-spreadsheet",
+        summary:
+          headers.length > 0
+            ? `A Google Sheet titled "${title}" was created and headers were written through Composio.`
+            : `A Google Sheet titled "${title}" was created through Composio.`,
+        data: {
+          tool: "GOOGLESHEETS_CREATE_GOOGLE_SHEET1",
+          connectedAccountId: sheets.activeAccount.id,
+          title,
+          headers,
+          spreadsheetId,
+          spreadsheetUrl,
+          sheetName,
+          range,
+          createResult: createResult.data,
+          headerUpdateResult,
+        },
       }
     }
 

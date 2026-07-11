@@ -523,6 +523,7 @@ CREATE INDEX ON integration_provider (slug);
 CREATE INDEX ON workspace_integration (workspace_id);
 CREATE INDEX ON workspace_integration (provider_id);
 CREATE INDEX ON workspace_integration (workspace_id, provider_id);
+CREATE INDEX ON workspace_integration (workspace_id, provider_id, created_by);
 CREATE INDEX ON workspace_integration (status);
 CREATE INDEX ON integration_secret (workspace_integration_id);
 CREATE INDEX ON oauth_state (state);
@@ -772,9 +773,9 @@ CREATE POLICY "integration_action_definition: everyone can view active actions"
   ON integration_action_definition FOR SELECT
   USING (status = 'active');
 
-CREATE POLICY "workspace_integration: members can view"
+CREATE POLICY "workspace_integration: users can view own and admins can view workspace"
   ON workspace_integration FOR SELECT
-  USING (is_workspace_member(workspace_id));
+  USING (created_by = auth.uid() OR is_workspace_admin(workspace_id));
 
 CREATE POLICY "workspace_integration: admins can connect"
   ON workspace_integration FOR INSERT

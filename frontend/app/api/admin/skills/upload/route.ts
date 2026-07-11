@@ -10,7 +10,23 @@ const MAX_TOTAL_BYTES = 50 * 1024 * 1024
 const MAX_COVER_BYTES = 5 * 1024 * 1024
 const COVER_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"])
 const SKILL_TYPES = new Set(["action", "trigger", "tool", "agent"])
-const STATUSES = new Set(["active", "inactive"])
+const SKILL_CATEGORIES = new Set([
+  "Writing",
+  "Research",
+  "Analysis",
+  "Data",
+  "Automation",
+  "Productivity",
+  "Communication",
+  "Sales",
+  "Marketing",
+  "Support",
+  "Engineering",
+  "Finance",
+  "Operations",
+  "Legal",
+  "HR",
+])
 
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key)
@@ -58,15 +74,13 @@ export async function POST(request: NextRequest) {
   const name = textValue(formData, "name")
   const description = textValue(formData, "description")
   const category = textValue(formData, "category") || "Automation"
-  const section = textValue(formData, "section") || "Operations"
   const type = textValue(formData, "type") || "tool"
-  const status = textValue(formData, "status") || "active"
 
   if (!name) return Errors.badRequest("Skill name is required.")
   if (name.length > 100) return Errors.badRequest("Skill name is too long.")
   if (description.length > 500) return Errors.badRequest("Description is too long.")
+  if (!SKILL_CATEGORIES.has(category)) return Errors.badRequest("Invalid skill category.")
   if (!SKILL_TYPES.has(type)) return Errors.badRequest("Invalid skill type.")
-  if (!STATUSES.has(status)) return Errors.badRequest("Invalid skill status.")
 
   const folderFiles = formData.getAll("files").filter((file): file is File => file instanceof File)
   if (folderFiles.length === 0) return Errors.badRequest("Upload a skill folder.")
@@ -139,7 +153,6 @@ export async function POST(request: NextRequest) {
   const definition = {
     source: "folder_upload",
     category,
-    section,
     package: {
       bucket: BUCKET,
       base_path: `${basePath}/package`,
@@ -161,7 +174,7 @@ export async function POST(request: NextRequest) {
       type,
       scope: "system",
       image_url: imageUrl,
-      status,
+      status: "active",
     })
     .select("id, workspace_id, name, description, definition, type, scope, image_url, status, created_by, created_at, updated_at")
     .single()

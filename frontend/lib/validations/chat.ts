@@ -11,6 +11,7 @@ export const updateChatSchema = z.object({
 
 export const sendMessageSchema = z.object({
   content: z.string().max(20000).default(""),
+  editMessageId: z.string().uuid("Invalid edited message ID").optional(),
   attachments: z
     .array(
       z.object({

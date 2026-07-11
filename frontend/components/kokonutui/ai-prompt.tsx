@@ -39,6 +39,14 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/registry/spell-ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -149,6 +157,7 @@ type AttachmentDraft = {
 
 type ChatMessage = {
   id: number;
+  serverId?: string;
   role: "user" | "assistant";
   content: string;
   attachments?: MessageAttachment[];
@@ -311,6 +320,10 @@ export default function AI_Prompt({
   const [newTelegramBotAvatarUrl, setNewTelegramBotAvatarUrl] = useState<string | null>(null);
   const [newTelegramBotAvatarName, setNewTelegramBotAvatarName] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [pendingEditConfirmation, setPendingEditConfirmation] = useState<{
+    messageId: number;
+    laterCount: number;
+  } | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachmentDraft[]>([]);
   const [assistantFeedback, setAssistantFeedback] = useState<
     Record<number, "like" | "dislike">
@@ -810,6 +823,7 @@ export default function AI_Prompt({
             .filter((message) => message.role === "user" || message.role === "assistant")
             .map((message, index) => ({
               id: index + 1,
+              serverId: message.id,
               role: message.role,
               content: message.content,
               attachments: message.metadata?.attachments ?? undefined,
@@ -1232,30 +1246,6 @@ export default function AI_Prompt({
     });
   };
 
-  const removeConnectedApp = (app: string) => {
-    setValue((prev) => {
-      const integration = integrationByName.get(app.toLowerCase());
-      const escapedApp = app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const escapedSlug = integration?.slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const linkedMentionPattern = escapedSlug
-        ? new RegExp(`(^|\\s)\\[${escapedApp}\\]\\(app:\\/\\/${escapedSlug}\\)(?=\\s|$)`, "g")
-        : new RegExp(`(^|\\s)\\[${escapedApp}\\]\\(app:\\/\\/[a-z0-9-]+\\)(?=\\s|$)`, "g");
-      const atMentionPattern = new RegExp(`(^|\\s)@${escapedApp}(?=\\s|$|[.,!?;:])`, "g");
-
-      return prev
-        .replace(linkedMentionPattern, "$1")
-        .replace(atMentionPattern, "$1")
-        .replace(/[ \t]{2,}/g, " ")
-        .replace(/[ \t]+\n/g, "\n")
-        .replace(/\n[ \t]+/g, "\n")
-        .trim();
-    });
-    setCommandMenu(null);
-    requestAnimationFrame(() => {
-      adjustHeight();
-    });
-  };
-
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -1327,7 +1317,8 @@ export default function AI_Prompt({
   const streamReply = useCallback(async (
     chatId: string,
     userContent: string,
-    attachments: MessageAttachment[] = []
+    attachments: MessageAttachment[] = [],
+    editMessageServerId?: string
   ) => {
     const assistantMsgId = createClientMessageId();
     setMessages((prev) => [
@@ -1339,7 +1330,11 @@ export default function AI_Prompt({
       const resp = await apiFetch(`/api/chats/${chatId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: userContent, attachments }),
+        body: JSON.stringify({
+          content: userContent,
+          attachments,
+          editMessageId: editMessageServerId,
+        }),
       });
 
       if (!resp.ok || !resp.body) {
@@ -1869,7 +1864,7 @@ export default function AI_Prompt({
     telegramBotSetupMode,
   ]);
 
-  const sendMessage = useCallback(async () => {
+  const sendMessage = useCallback(async (options?: { confirmEditPrune?: boolean }) => {
     const content = value.trim();
     const submittedContent = content || (attachedFiles.length > 0 ? "Attached file(s)" : "");
     const hasUserTextBeyondLockedPrefix = lockedComposerPrefix
@@ -1895,13 +1890,25 @@ export default function AI_Prompt({
 
     if (editingMessageId !== null) {
       const targetMessageId = editingMessageId;
+      const editIndex = messages.findIndex(
+        (message) => message.id === targetMessageId && message.role === "user"
+      );
+      const laterCount = editIndex >= 0 ? messages.length - editIndex - 1 : 0;
+
+      if (laterCount > 0 && !options?.confirmEditPrune) {
+        setPendingEditConfirmation({ messageId: targetMessageId, laterCount });
+        return;
+      }
+
+      const targetServerId =
+        editIndex >= 0 ? messages[editIndex]?.serverId : undefined;
 
       setMessages((prev) => {
-        const editIndex = prev.findIndex(
+        const currentEditIndex = prev.findIndex(
           (message) => message.id === targetMessageId && message.role === "user"
         );
 
-        if (editIndex === -1) {
+        if (currentEditIndex === -1) {
           return [
             ...prev,
             { id: createClientMessageId(), role: "user", content: submittedContent, attachments: attachmentData },
@@ -1909,17 +1916,23 @@ export default function AI_Prompt({
         }
 
         const updated = [...prev];
-        updated[editIndex] = { ...updated[editIndex], content: submittedContent, attachments: attachmentData };
-        return updated.slice(0, editIndex + 1);
+        updated[currentEditIndex] = { ...updated[currentEditIndex], content: submittedContent, attachments: attachmentData };
+        return updated.slice(0, currentEditIndex + 1);
       });
 
+      setPendingEditConfirmation(null);
       setValue(lockedComposerPrefix);
       setComposerScrollTop(0);
       setAttachedFiles([]);
       adjustHeight(true);
       setEditingMessageId(null);
       setIsResponding(true);
-      await streamReply(activeChatIdRef.current ?? `local-${createClientMessageId()}`, submittedContent, attachmentData);
+      await streamReply(
+        activeChatIdRef.current ?? `local-${createClientMessageId()}`,
+        submittedContent,
+        attachmentData,
+        targetServerId
+      );
       return;
     }
 
@@ -2009,6 +2022,7 @@ export default function AI_Prompt({
     value, lockedComposerPrefix, attachedFiles, onConversationStart, persistChatListEntry,
     persistActiveChat, activeTab, onAutomationConversationStart, editingMessageId,
     adjustHeight, streamReply, apiFetch, toChatTitle, createClientMessageId, uploadMessageAttachments,
+    messages,
   ]);
 
   const copyToClipboard = async (text: string) => {
@@ -2282,7 +2296,7 @@ export default function AI_Prompt({
               <span
                 aria-hidden="true"
                 className={cn(
-                  "pointer-events-none absolute -inset-x-[0.2em] -inset-y-[0.1em] rounded-[min(var(--radius-sm),8px)]",
+                  "pointer-events-none absolute -inset-x-[0.2em] -inset-y-[0.04em] rounded-[min(var(--radius-sm),8px)]",
                   isSkillMention
                     ? isLockedSkillMention
                       ? "bg-violet-500/14 dark:bg-violet-400/16"
@@ -2556,7 +2570,7 @@ export default function AI_Prompt({
     const approvalActionLabel = isGmailSendApproval ? "Approve" : "Add";
 
     return (
-      <div className="mx-auto w-full overflow-hidden rounded-2xl bg-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.07),0_0_0_1px_rgba(255,255,255,0.18)_inset,0_20px_70px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_20px_70px_rgba(0,0,0,0.22)]">
+      <div className="mx-auto w-full overflow-hidden rounded-t-2xl rounded-b-none border-x border-t border-b-0 border-black/10 bg-transparent shadow-none backdrop-blur-2xl dark:border-white/10">
         <div className="flex items-start gap-2.5 px-3 py-3">
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg">
             {renderAppLogo(approval.appName, "md")}
@@ -2589,6 +2603,7 @@ export default function AI_Prompt({
             {approvalActionLabel}
           </Button>
         </div>
+        <div className="h-[18px]" aria-hidden="true" />
       </div>
     );
   };
@@ -2604,6 +2619,7 @@ export default function AI_Prompt({
           values={values}
           disabled={isResponding}
           compact
+          composerTail
           onFieldChange={(fieldId, nextValue) =>
             updateAppMiniUiValue(messageId, fieldId, nextValue)
           }
@@ -3015,6 +3031,40 @@ export default function AI_Prompt({
           : "py-4"
       )}
     >
+      <Dialog
+        open={Boolean(pendingEditConfirmation)}
+        onOpenChange={(open) => {
+          if (!open) setPendingEditConfirmation(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Replace later messages?</DialogTitle>
+            <DialogDescription>
+              Sending this edit will delete{" "}
+              {pendingEditConfirmation?.laterCount ?? 0} later message
+              {(pendingEditConfirmation?.laterCount ?? 0) === 1 ? "" : "s"} in
+              this chat and generate a new reply from the edited message.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingEditConfirmation(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void sendMessage({ confirmEditPrune: true })}
+            >
+              Delete and resend
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <input
         id={fileInputId}
         ref={fileInputRef}
@@ -3584,15 +3634,15 @@ export default function AI_Prompt({
 
       <div
         className={cn(
-          "p-0",
+          "relative p-0",
           hasConversation &&
             (dockComposerToBottom
-              ? "relative z-50 shrink-0 pt-2"
+              ? cn("relative z-50 shrink-0", pendingAppAction ? "pt-0" : "pt-2")
               : "sticky bottom-4 z-50")
         )}
       >
         {pendingAppAction ? (
-          <div className="relative z-40 -mt-3 -mb-2 px-0">
+          <div className="pointer-events-auto absolute inset-x-0 bottom-full z-30 translate-y-4 px-0">
             {pendingAppAction.approval
               ? renderAppApprovalCard(pendingAppAction.approval, pendingAppAction.messageId)
               : pendingAppAction.miniUi
@@ -3600,29 +3650,6 @@ export default function AI_Prompt({
                 : null}
           </div>
         ) : null}
-        {connectedApps.length > 0 && (
-          <div className="mb-1 flex min-h-8 items-center justify-start gap-2 px-1.5">
-            <div className="flex items-center gap-1">
-              {connectedApps.map((app) => (
-                <div
-                  key={app}
-                  className="group inline-flex h-7 items-center gap-1.5 px-1 text-xs text-foreground"
-                >
-                  {renderAppLogo(app)}
-                  <span className="max-w-24 truncate">{app}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeConnectedApp(app)}
-                    className="-ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
-                    aria-label={`Remove ${app}`}
-                  >
-                    <X className="size-2.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         <div
           className={cn(
             "relative z-50 overflow-visible transition-transform duration-300 ease-out",
@@ -3687,7 +3714,7 @@ export default function AI_Prompt({
               "pointer-events-none absolute inset-0 border",
               glassComposer
                 ? hasConversation
-                  ? cn("rounded-b-2xl border-x border-b border-t-0", glassBorder, glassLayerBack)
+                  ? cn("rounded-b-2xl border", glassBorder, glassLayerBack)
                   : cn("rounded-xl border", glassBorder, glassLayerBack)
                 : "rounded-xl border border-sidebar-border bg-sidebar"
             )}
@@ -3698,7 +3725,7 @@ export default function AI_Prompt({
               glassComposer
                 ? hasConversation
                   ? cn(
-                      "rounded-b-2xl border-x border-b border-t-0",
+                      "rounded-b-2xl border",
                       glassBorder,
                       glassLayerFront
                     )
@@ -3710,8 +3737,8 @@ export default function AI_Prompt({
               <div
                 aria-hidden="true"
                 className={cn(
-                  "pointer-events-none absolute inset-0 z-0 overflow-hidden px-4 pb-2.5 text-base text-foreground font-normal leading-normal tracking-normal md:text-sm",
-                  "pt-2.5"
+                  "pointer-events-none absolute inset-0 z-0 overflow-hidden px-4 pb-3 text-base text-foreground font-normal leading-normal tracking-normal md:text-sm",
+                  "pt-3"
                 )}
               >
                 <div
@@ -3724,7 +3751,7 @@ export default function AI_Prompt({
               <Textarea
                 className={cn(
                   "relative z-10 w-full resize-none border-none bg-transparent px-4 pb-3 text-transparent caret-foreground selection:bg-primary/20 selection:text-transparent focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent",
-                  "pt-2.5",
+                  "pt-3",
                   "min-h-[64px]"
                 )}
                 id={textareaId}

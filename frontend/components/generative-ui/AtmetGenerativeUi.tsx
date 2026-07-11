@@ -39,6 +39,7 @@ type AtmetGenerativeUiProps = {
   values?: Record<string, string>
   disabled?: boolean
   compact?: boolean
+  composerTail?: boolean
   onFieldChange?: (fieldId: string, value: string) => void
   onAction?: (action: AtmetUiAction, values?: Record<string, string>) => void
 }
@@ -83,7 +84,7 @@ function EmailTagInput({
   return (
     <div
       className={cn(
-        "mt-1.5 flex w-full flex-wrap items-center gap-1.5 rounded-lg border border-black/10 bg-transparent px-2 py-1 shadow-none backdrop-blur-xl focus-within:ring-1 focus-within:ring-ring dark:border-white/10",
+        "mt-1.5 flex w-full flex-wrap items-center gap-1.5 rounded-lg border border-black/10 bg-background px-2 py-1 shadow-none focus-within:ring-1 focus-within:ring-ring dark:border-white/10",
         compact ? "min-h-8" : "min-h-9"
       )}
     >
@@ -140,6 +141,7 @@ export function AtmetGenerativeUi({
   values,
   disabled = false,
   compact = false,
+  composerTail = false,
   onFieldChange,
   onAction,
 }: AtmetGenerativeUiProps) {
@@ -157,6 +159,7 @@ export function AtmetGenerativeUi({
         values={values}
         disabled={disabled}
         compact={compact}
+        composerTail={composerTail}
         onFieldChange={onFieldChange}
         onAction={onAction}
       />
@@ -186,6 +189,7 @@ function AtmetUiShell({
   children,
   footer,
   compact = false,
+  composerTail = false,
 }: {
   title?: string
   description?: string
@@ -193,11 +197,12 @@ function AtmetUiShell({
   children: ReactNode
   footer?: ReactNode
   compact?: boolean
+  composerTail?: boolean
 }) {
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-2xl bg-transparent shadow-[0_0_0_1px_rgba(0,0,0,0.07),0_0_0_1px_rgba(255,255,255,0.18)_inset,0_20px_70px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_20px_70px_rgba(0,0,0,0.22)]",
+        "overflow-hidden rounded-t-2xl rounded-b-none border-x border-t border-b-0 border-black/10 bg-transparent shadow-none backdrop-blur-2xl dark:border-white/10",
         compact
           ? "supports-[backdrop-filter]:bg-transparent"
           : "supports-[backdrop-filter]:bg-transparent"
@@ -228,6 +233,7 @@ function AtmetUiShell({
       {footer ? (
         <div className={cn("flex justify-end pt-0", compact ? "px-3 pb-3" : "px-4 pb-4")}>{footer}</div>
       ) : null}
+      {composerTail ? <div className="h-[18px]" aria-hidden="true" /> : null}
     </section>
   )
 }
@@ -238,6 +244,7 @@ function AtmetUiForm({
   values,
   disabled,
   compact,
+  composerTail,
   onFieldChange,
   onAction,
 }: {
@@ -246,6 +253,7 @@ function AtmetUiForm({
   values?: Record<string, string>
   disabled?: boolean
   compact?: boolean
+  composerTail?: boolean
   onFieldChange?: (fieldId: string, value: string) => void
   onAction?: (action: AtmetUiAction, values?: Record<string, string>) => void
 }) {
@@ -275,6 +283,7 @@ function AtmetUiForm({
       description={component.description}
       logo={logo}
       compact={compact}
+      composerTail={composerTail}
       footer={
         <Button
           type="button"
@@ -294,7 +303,7 @@ function AtmetUiForm({
           const fieldValue = currentValues[field.id] ?? ""
           const hasValue = fieldValue.trim().length > 0
           const controlClassName =
-            "mt-1.5 border-black/10 bg-transparent shadow-none backdrop-blur-xl placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 dark:border-white/10"
+            "mt-1.5 border-black/10 bg-background shadow-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 dark:border-white/10"
           const valueToneClassName = hasValue
             ? "text-foreground"
             : "text-muted-foreground"

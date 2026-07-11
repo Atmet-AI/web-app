@@ -22,7 +22,18 @@ function isLocalOrigin(origin: string) {
   return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(origin)
 }
 
-export function getPublicAppOrigin(request?: NextRequest) {
+type PublicUrlOptions = {
+  allowLocal?: boolean
+}
+
+export function getPublicAppOrigin(
+  request?: NextRequest,
+  options: PublicUrlOptions = {}
+) {
+  if (request && options.allowLocal) {
+    return canonicalizePublicOrigin(request.nextUrl.origin)
+  }
+
   const telegramWebhookOrigin = normalizeBaseUrl(process.env.TELEGRAM_WEBHOOK_BASE_URL)
   if (telegramWebhookOrigin) return telegramWebhookOrigin
 
@@ -47,6 +58,10 @@ export function getPublicAppOrigin(request?: NextRequest) {
   return DEFAULT_PUBLIC_APP_URL
 }
 
-export function buildPublicUrl(path: string, request?: NextRequest) {
-  return new URL(path, getPublicAppOrigin(request)).toString()
+export function buildPublicUrl(
+  path: string,
+  request?: NextRequest,
+  options: PublicUrlOptions = {}
+) {
+  return new URL(path, getPublicAppOrigin(request, options)).toString()
 }
