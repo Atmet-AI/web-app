@@ -1246,6 +1246,25 @@ export default function AI_Prompt({
     });
   };
 
+  const insertSkillMention = (skill: string) => {
+    const mention = `/${skill} `;
+    const nextValue = value.length === 0
+      ? mention
+      : `${value}${value.endsWith(" ") ? "" : " "}${mention}`;
+
+    setSelectedSkill(skill);
+    setValue(nextValue);
+    setCommandMenu(null);
+
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      const nextCursor = nextValue.length;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(nextCursor, nextCursor);
+      adjustHeight();
+    });
+  };
+
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -3902,7 +3921,7 @@ export default function AI_Prompt({
                           <DropdownMenuItem
                             className="flex items-center justify-between gap-2"
                             key={skill}
-                            onSelect={() => setSelectedSkill(skill)}
+                            onSelect={() => insertSkillMention(skill)}
                           >
                             <span>{skill}</span>
                             {selectedSkill === skill && <Check className="h-4 w-4 text-primary" />}
@@ -3998,7 +4017,7 @@ export default function AI_Prompt({
             </div>
           </div>
           {commandMenu && commandItems.length > 0 && (
-            <div className="absolute bottom-[calc(100%+0.5rem)] left-3 z-[100] max-h-[min(18rem,calc(100dvh-10rem))] min-w-40 overflow-x-hidden overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
+            <div className="no-scrollbar absolute bottom-[calc(100%+0.375rem)] left-4 z-[140] max-h-44 w-[min(18rem,calc(100%-2rem))] overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/10">
               {commandItems.map((item, index) => (
                 <button
                   key={`${commandMenu.type}-${item}`}
@@ -4006,7 +4025,7 @@ export default function AI_Prompt({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => selectCommandItem(item)}
                   className={cn(
-                    "relative flex w-full cursor-default items-center justify-between gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden transition-colors",
+                    "relative flex h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2 text-sm outline-hidden transition-colors",
                     index === highlightedCommandIndex
                       ? "bg-accent text-accent-foreground"
                       : "text-popover-foreground hover:bg-accent hover:text-accent-foreground"

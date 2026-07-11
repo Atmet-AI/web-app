@@ -3,8 +3,13 @@ import { getUser } from "@/lib/api/auth"
 import { getWorkspaceId } from "@/lib/api/workspace"
 import { ok, Errors } from "@/lib/api/response"
 import { getCatalogIntegration } from "@/lib/integrations-catalog"
+import {
+  deleteComposioConnectedAccount,
+  listComposioConnectedAccounts,
+} from "@/lib/integrations/composio"
 import { syncComposioWorkspaceConnections } from "@/lib/integrations/composio-sync"
 import { ensureIntegrationProvider } from "@/lib/integrations/providers"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 
 export async function GET(
   request: NextRequest,
@@ -100,10 +105,59 @@ export async function DELETE(
   const catalog = getCatalogIntegration(slug)
   if (!catalog) return Errors.notFound("Integration")
 
-  const { supabase } = auth
   const provider = await ensureIntegrationProvider(catalog)
 
-  const { error } = await supabase
+  const { data: connections, error: connectionError } = await supabaseAdmin
+    .from("workspace_integration")
+    .select("id")
+    .eq("workspace_id", ws.workspaceId)
+    .eq("provider_id", provider.id)
+    .eq("created_by", auth.user.id)
+
+  if (connectionError) {
+    console.error("Unable to load integration connections before disconnect", connectionError)
+    return Errors.internal()
+  }
+
+  if (catalog.connectorProvider === "composio" && catalog.composioToolkit) {
+    try {
+      await syncComposioWorkspaceConnections({
+        workspaceId: ws.workspaceId,
+        providerId: provider.id,
+        providerName: catalog.name,
+        userId: auth.user.id,
+        toolkit: catalog.composioToolkit,
+      })
+
+      const accounts = await listComposioConnectedAccounts({
+        workspaceId: ws.workspaceId,
+        userId: auth.user.id,
+        toolkit: catalog.composioToolkit,
+      })
+
+      await Promise.all(
+        accounts.map((account) => deleteComposioConnectedAccount(account.id))
+      )
+    } catch (error) {
+      console.error("Unable to disconnect Composio integration", error)
+      return Errors.badRequest("Unable to disconnect this app account. Please try again.")
+    }
+  }
+
+  const connectionIds = connections?.map((connection) => connection.id) ?? []
+  if (connectionIds.length > 0) {
+    const { error: secretError } = await supabaseAdmin
+      .from("integration_secret")
+      .delete()
+      .in("workspace_integration_id", connectionIds)
+
+    if (secretError) {
+      console.error("Unable to delete integration secrets", secretError)
+      return Errors.internal()
+    }
+  }
+
+  const { error } = await supabaseAdmin
     .from("workspace_integration")
     .delete()
     .eq("workspace_id", ws.workspaceId)

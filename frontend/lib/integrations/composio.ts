@@ -128,6 +128,11 @@ export async function listComposioConnectedAccounts(input: {
   }))
 }
 
+export async function deleteComposioConnectedAccount(connectedAccountId: string) {
+  const composio = getComposioClient()
+  await composio.connectedAccounts.delete(connectedAccountId)
+}
+
 async function getOrCreateManagedAuthConfig(toolkit: string) {
   const composio = getComposioClient()
   const existing = await composio.authConfigs.list({
