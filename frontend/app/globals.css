@@ -1,8 +1,23 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "dither-plugin";
 
 @custom-variant dark (&:is(.dark *));
+
+@font-face {
+  font-family: "Redaction 35";
+  src: url("/redaction/Redaction_35-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+.font-redaction-35-italic {
+  font-family: "Redaction 35", serif;
+  font-style: italic;
+  font-weight: 400;
+}
 
 :root {
   --background: oklch(1 0 0);

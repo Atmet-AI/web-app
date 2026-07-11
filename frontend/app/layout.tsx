@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
+import { headers } from "next/headers"
 
 import "./globals.css"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -71,11 +72,13 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const isPublicShell = (await headers()).get("x-atmet-public-shell") === "true"
+
   return (
     <html
       lang="en"
@@ -84,22 +87,28 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          <CuelumeProvider />
-          <WorkspaceProvider>
-          <TooltipProvider>
-            <SidebarProvider>
-              <Suspense fallback={null}>
-                <AppSidebar />
-              </Suspense>
-              <SidebarInset className="h-screen overflow-y-auto">
-                <Suspense fallback={<div className="h-10 border-b border-border" />}>
-                  <PlatformNavbar />
-                </Suspense>
-                {children}
-              </SidebarInset>
-            </SidebarProvider>
-          </TooltipProvider>
-          </WorkspaceProvider>
+          {isPublicShell ? (
+            children
+          ) : (
+            <>
+              <CuelumeProvider />
+              <WorkspaceProvider>
+              <TooltipProvider>
+                <SidebarProvider>
+                  <Suspense fallback={null}>
+                    <AppSidebar />
+                  </Suspense>
+                  <SidebarInset className="h-screen overflow-y-auto">
+                    <Suspense fallback={<div className="h-10 border-b border-border" />}>
+                      <PlatformNavbar />
+                    </Suspense>
+                    {children}
+                  </SidebarInset>
+                </SidebarProvider>
+              </TooltipProvider>
+              </WorkspaceProvider>
+            </>
+          )}
         </ThemeProvider>
       </body>
     </html>
