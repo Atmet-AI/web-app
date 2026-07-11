@@ -8126,7 +8126,7 @@ function RequestsConsoleContent() {
       }
     >
       <>
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-40">
               <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -8173,8 +8173,8 @@ function RequestsConsoleContent() {
               }
             />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full text-sm">
+            <div className="no-scrollbar max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border">
+              <table className="w-max min-w-[74rem] text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
                     <th className="px-3 py-2.5 text-left font-medium">Name</th>

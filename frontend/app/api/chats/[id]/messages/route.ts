@@ -271,12 +271,15 @@ async function buildMentionedSkillContexts(input: {
   for (const skill of selected) {
     const definition = readRecord(skill.definition)
     const fileSnippets = await readSkillPackageFiles(definition)
+    const instructions =
+      typeof definition.instructions === "string" ? definition.instructions.trim() : ""
     contexts.push(
       [
         `Skill: ${skill.name}`,
         `Description: ${skill.description ?? "No description"}`,
         `Type: ${skill.type}`,
         `Source: ${typeof definition.source === "string" ? definition.source : skill.scope}`,
+        instructions ? `Instructions:\n${instructions}` : "",
         `Definition: ${JSON.stringify(definition, null, 2)}`,
         fileSnippets.length > 0 ? `Skill files:\n${fileSnippets.join("\n\n---\n\n")}` : "",
       ].filter(Boolean).join("\n")
