@@ -6,7 +6,7 @@ export const createSkillSchema = z.object({
   definition: z.record(z.string(), z.unknown()).optional(),
   type: z.enum(["action", "trigger", "tool", "agent"]),
   image_url: z.string().url().optional().nullable(),
-  status: z.enum(["active", "inactive"]).optional().default("active"),
+  status: z.literal("active").optional().default("active"),
 })
 
 export const updateSkillSchema = z.object({
@@ -15,5 +15,5 @@ export const updateSkillSchema = z.object({
   definition: z.record(z.string(), z.unknown()).optional(),
   type: z.enum(["action", "trigger", "tool", "agent"]).optional(),
   image_url: z.string().url().optional().nullable(),
-  status: z.enum(["active", "inactive"]).optional(),
+  status: z.literal("active").optional(),
 })

@@ -9,7 +9,6 @@ type AppHeaderProps = {
   integration: Integration
   onConnect: () => void
   onDisconnect: () => void
-  onReconnect: () => void
   isSubmitting: boolean
   isAvailable?: boolean
 }
@@ -22,7 +21,6 @@ export function AppHeader({
   integration,
   onConnect,
   onDisconnect,
-  onReconnect,
   isSubmitting,
   isAvailable = true,
 }: AppHeaderProps) {
@@ -82,26 +80,15 @@ export function AppHeader({
               Soon
             </Button>
           ) : integration.connected ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onDisconnect}
-                disabled={isSubmitting}
-                className="h-10 rounded-lg"
-              >
-                Disconnect
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={onReconnect}
-                disabled={isSubmitting}
-                className="h-10 rounded-lg"
-              >
-                {integration.authType === "apikey" ? "Add key" : "Add account"}
-              </Button>
-            </>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onDisconnect}
+              disabled={isSubmitting}
+              className="h-10 rounded-lg"
+            >
+              Disconnect
+            </Button>
           ) : (
             <Button
               type="button"

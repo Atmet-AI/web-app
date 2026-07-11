@@ -153,21 +153,21 @@ function inferSkillName(content: string) {
 
 function inferSkillCategory(content: string) {
   const lower = content.toLowerCase()
-  if (/(data|csv|sheet|spreadsheet|extract|parse|report|analytics)/.test(lower)) return "Data"
+  if (/(write|draft|copy|email|post|blog|doc|document)/.test(lower)) return "Writing"
+  if (/(research|find|source|cite|compare|market)/.test(lower)) return "Research"
+  if (/(analyze|analysis|review|summarize|classify|decide|reason)/.test(lower)) return "Analysis"
   if (/(support|ticket|reply|customer|help|faq)/.test(lower)) return "Support"
-  if (/(reason|review|analyze|summarize|classify|decide)/.test(lower)) return "Reasoning"
+  if (/(data|csv|sheet|spreadsheet|extract|parse|report|analytics)/.test(lower)) return "Data"
+  if (/(sales|lead|deal|crm|prospect)/.test(lower)) return "Sales"
+  if (/(marketing|seo|campaign|content|brand)/.test(lower)) return "Marketing"
+  if (/(engineer|code|github|release|bug|deploy)/.test(lower)) return "Engineering"
+  if (/(finance|invoice|budget|expense|revenue)/.test(lower)) return "Finance"
+  if (/(legal|contract|policy|compliance|terms)/.test(lower)) return "Legal"
+  if (/(hr|hiring|recruit|employee|people)/.test(lower)) return "HR"
+  if (/(operations|ops|process|handoff)/.test(lower)) return "Operations"
+  if (/(communicate|message|slack|meeting|follow up|follow-up)/.test(lower)) return "Communication"
+  if (/(productivity|organize|plan|schedule|prioritize)/.test(lower)) return "Productivity"
   return "Automation"
-}
-
-function inferSkillSection(content: string) {
-  const lower = content.toLowerCase()
-  if (/(marketing|seo|campaign|content)/.test(lower)) return "Marketing"
-  if (/(sales|lead|deal|crm)/.test(lower)) return "Sales"
-  if (/(engineer|code|github|release|bug)/.test(lower)) return "Engineering"
-  if (/(finance|invoice|budget|expense)/.test(lower)) return "Finance"
-  if (/(support|ticket|customer)/.test(lower)) return "Support"
-  if (/(product|roadmap|feature)/.test(lower)) return "Product"
-  return "Operations"
 }
 
 async function createSkillFromChat(input: {
@@ -187,7 +187,6 @@ async function createSkillFromChat(input: {
 
   const name = inferSkillName(input.content)
   const category = inferSkillCategory(input.content)
-  const section = inferSkillSection(input.content)
   const description = instructions.length > 220 ? `${instructions.slice(0, 217)}...` : instructions
 
   const { data: skill, error } = await supabaseAdmin
@@ -204,7 +203,6 @@ async function createSkillFromChat(input: {
       definition: {
         source: "atmet_chat",
         category,
-        section,
         instructions,
         chat_id: input.chatId,
         message_id: input.messageId,
@@ -408,19 +406,61 @@ export async function POST(
     return Errors.validationError(parsed.error.issues[0].message)
   }
 
-  // Save user message
-  const { data: userMessage, error: insertError } = await supabase
-    .from("message")
-    .insert({
-      chat_id: chatId,
-      role: "user",
-      content: parsed.data.content.trim() || "Attached file(s)",
-      metadata: { attachments: parsed.data.attachments },
-    })
-    .select()
-    .single()
+  const nextUserContent = parsed.data.content.trim() || "Attached file(s)"
+  let userMessage: {
+    id: string
+    created_at: string
+  } | null = null
 
-  if (insertError || !userMessage) return Errors.internal()
+  if (parsed.data.editMessageId) {
+    const { data: editableMessage, error: editableError } = await supabaseAdmin
+      .from("message")
+      .select("id, role, created_at")
+      .eq("id", parsed.data.editMessageId)
+      .eq("chat_id", chatId)
+      .maybeSingle()
+
+    if (editableError) return Errors.internal()
+    if (!editableMessage || editableMessage.role !== "user") {
+      return Errors.notFound("Message")
+    }
+
+    const { error: deleteLaterError } = await supabaseAdmin
+      .from("message")
+      .delete()
+      .eq("chat_id", chatId)
+      .gt("created_at", editableMessage.created_at)
+
+    if (deleteLaterError) return Errors.internal()
+
+    const { data: updatedMessage, error: updateError } = await supabaseAdmin
+      .from("message")
+      .update({
+        content: nextUserContent,
+        metadata: { attachments: parsed.data.attachments },
+      })
+      .eq("id", editableMessage.id)
+      .eq("chat_id", chatId)
+      .select("id, created_at")
+      .single()
+
+    if (updateError || !updatedMessage) return Errors.internal()
+    userMessage = updatedMessage
+  } else {
+    const { data: insertedMessage, error: insertError } = await supabase
+      .from("message")
+      .insert({
+        chat_id: chatId,
+        role: "user",
+        content: nextUserContent,
+        metadata: { attachments: parsed.data.attachments },
+      })
+      .select("id, created_at")
+      .single()
+
+    if (insertError || !insertedMessage) return Errors.internal()
+    userMessage = insertedMessage
+  }
 
   const fileIds = parsed.data.attachments
     .map((attachment) => attachment.fileId)

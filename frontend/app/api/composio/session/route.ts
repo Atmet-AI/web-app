@@ -33,7 +33,11 @@ export async function POST(request: NextRequest) {
       workspaceId: ws.workspaceId,
       userId: auth.user.id,
       toolkits: parsed.data.toolkits,
-      callbackUrl: buildPublicUrl(parsed.data.callbackPath ?? "/integrations", request),
+      callbackUrl: buildPublicUrl(
+        parsed.data.callbackPath ?? "/integrations",
+        request,
+        { allowLocal: true }
+      ),
     })
 
     return ok({

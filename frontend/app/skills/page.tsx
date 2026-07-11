@@ -1,9 +1,8 @@
 "use client"
 
-import { useSearchParams } from "next/navigation"
 import AIPrompt from "@/components/kokonutui/ai-prompt"
 import { Button } from "@/components/ui/button"
-import { Badge, type BadgeVariant } from "@/registry/spell-ui/badge"
+import { Badge } from "@/registry/spell-ui/badge"
 import { Input } from "@/components/ui/input"
 import {
   Dialog,
@@ -21,24 +20,31 @@ import { useWorkspace } from "@/lib/workspace-context"
 import { Bot, FileText, Folder, FolderUp, Search, Upload, X } from "lucide-react"
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 
-type SkillCategory = "Reasoning" | "Data" | "Automation" | "Support"
-type SkillStatus = "Active" | "Draft"
-type SkillSection =
-  | "Marketing"
-  | "Sales"
-  | "Engineering"
-  | "Finance"
-  | "Operations"
-  | "Support"
-  | "Product"
+const SKILL_CATEGORIES = [
+  "Writing",
+  "Research",
+  "Analysis",
+  "Data",
+  "Automation",
+  "Productivity",
+  "Communication",
+  "Sales",
+  "Marketing",
+  "Support",
+  "Engineering",
+  "Finance",
+  "Operations",
+  "Legal",
+  "HR",
+] as const
+
+type SkillCategory = (typeof SKILL_CATEGORIES)[number]
 
 type SkillItem = {
   id: string
   name: string
   description: string
   category: SkillCategory
-  section: SkillSection
-  status: SkillStatus
   updatedAt: string
   owner: string
   isUserCreated: boolean
@@ -46,21 +52,6 @@ type SkillItem = {
   sourceType?: "md_file" | "folder" | "atmet_chat"
   imageUrl?: string | null
   connectedApps?: string[]
-}
-
-const SECTION_ORDER: SkillSection[] = [
-  "Marketing",
-  "Sales",
-  "Engineering",
-  "Finance",
-  "Operations",
-  "Support",
-  "Product",
-]
-
-const statusStyles: Record<SkillStatus, BadgeVariant> = {
-  Active: "green",
-  Draft: "amber",
 }
 
 type SkillApiRecord = {
@@ -81,10 +72,15 @@ function readDefinitionText(definition: Record<string, unknown> | null | undefin
   return typeof value === "string" ? value : ""
 }
 
+function toSkillCategory(value: string, fallback: SkillCategory): SkillCategory {
+  return SKILL_CATEGORIES.includes(value as SkillCategory)
+    ? (value as SkillCategory)
+    : fallback
+}
+
 function toSkillItem(skill: SkillApiRecord): SkillItem {
   const scope = skill.scope ?? "workspace"
   const category = readDefinitionText(skill.definition, "category")
-  const section = readDefinitionText(skill.definition, "section")
   const source = readDefinitionText(skill.definition, "source")
   const packageInfo =
     skill.definition?.package &&
@@ -105,9 +101,10 @@ function toSkillItem(skill: SkillApiRecord): SkillItem {
     id: skill.id,
     name: skill.name,
     description: skill.description ?? "",
-    category: (category || (skill.type === "tool" ? "Automation" : skill.type === "agent" ? "Reasoning" : "Data")) as SkillCategory,
-    section: (section || "Operations") as SkillSection,
-    status: (skill.status === "active" ? "Active" : "Draft") as SkillStatus,
+    category: toSkillCategory(
+      category,
+      skill.type === "agent" ? "Analysis" : skill.type === "trigger" ? "Automation" : "Productivity"
+    ),
     updatedAt: skill.created_at.slice(0, 10),
     owner: scope === "system" ? "Atmet" : "You",
     isUserCreated: scope !== "system",
@@ -152,37 +149,26 @@ function SkillCard({
           onPreview()
         }
       }}
-      className="flex min-h-32 gap-3 rounded-xl bg-sidebar p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="flex gap-3 rounded-xl bg-sidebar p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       <SkillAvatar sourceType={skill.sourceType} />
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold tracking-tight text-foreground">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <h2 className="min-w-0 truncate text-sm font-semibold tracking-tight text-foreground">
               {skill.name}
             </h2>
-            <p className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
-              {skill.description || "No description yet."}
-            </p>
-          </div>
-          <Badge variant={statusStyles[skill.status]} size="sm" className="shrink-0">
-            {skill.status}
-          </Badge>
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <Badge variant="neutral" size="sm">
-            {skill.category}
-          </Badge>
-          <Badge variant="blue" size="sm">
-            {skillSourceLabel(skill.sourceType)}
-          </Badge>
-          {skill.isUserCreated ? (
-            <Badge variant="violet" size="sm">
-              Workspace
+            <Badge variant="neutral" size="sm">
+              {skill.category}
             </Badge>
-          ) : null}
+            <Badge variant="blue" size="sm">
+              {skillSourceLabel(skill.sourceType)}
+            </Badge>
+          </div>
+          <p className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
+            {skill.description || "No description yet."}
+          </p>
         </div>
       </div>
     </article>
@@ -190,14 +176,12 @@ function SkillCard({
 }
 
 function SkillsPageContent() {
-  const searchParams = useSearchParams()
   const { apiFetch } = useWorkspace()
   const [skills, setSkills] = useState<SkillItem[]>([])
   const [isLoadingSkills, setIsLoadingSkills] = useState(true)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [nameFilter, setNameFilter] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
   const [createSkillOpen, setCreateSkillOpen] = useState(false)
   const [uploadSkillOpen, setUploadSkillOpen] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null)
@@ -205,22 +189,10 @@ function SkillsPageContent() {
   const [uploadDescription, setUploadDescription] = useState("")
   const [uploadType, setUploadType] = useState("tool")
   const [uploadCategory, setUploadCategory] = useState<SkillCategory>("Automation")
-  const [uploadSection, setUploadSection] = useState<SkillSection>("Operations")
-  const [uploadStatus, setUploadStatus] = useState("active")
   const [uploadImage, setUploadImage] = useState<File | null>(null)
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
   const [uploadError, setUploadError] = useState("")
   const [isUploadingSkill, setIsUploadingSkill] = useState(false)
-  const sectionFilterParam = searchParams.get("section")
-  const sectionFilter = useMemo<SkillSection | null>(() => {
-    if (!sectionFilterParam) return null
-    return (
-      SECTION_ORDER.find(
-        (section) => section.toLowerCase() === sectionFilterParam.toLowerCase()
-      ) ?? null
-    )
-  }, [sectionFilterParam])
-
   useEffect(() => {
     const openCreateSkillDialog = () => {
       setCreateSkillOpen(true)
@@ -266,8 +238,6 @@ function SkillsPageContent() {
     setUploadDescription("")
     setUploadType("tool")
     setUploadCategory("Automation")
-    setUploadSection("Operations")
-    setUploadStatus("active")
     setUploadImage(null)
     setUploadFiles([])
     setUploadError("")
@@ -291,8 +261,6 @@ function SkillsPageContent() {
     formData.set("description", uploadDescription.trim())
     formData.set("type", uploadType)
     formData.set("category", uploadCategory)
-    formData.set("section", uploadSection)
-    formData.set("status", uploadStatus)
     if (uploadImage) formData.set("image", uploadImage)
 
     const paths = uploadFiles.map((file) => {
@@ -330,15 +298,10 @@ function SkillsPageContent() {
     uploadFiles,
     uploadImage,
     uploadName,
-    uploadSection,
-    uploadStatus,
     uploadType,
   ])
 
-  const categoryOptions = useMemo(
-    () => Array.from(new Set(skills.map((skill) => skill.category))),
-    [skills]
-  )
+  const categoryOptions = SKILL_CATEGORIES
 
   const filteredSkills = useMemo(() => {
     return skills.filter((skill) => {
@@ -349,13 +312,10 @@ function SkillsPageContent() {
 
       const byCategory =
         categoryFilter === "all" || skill.category === categoryFilter
-      const byStatus = statusFilter === "all" || skill.status === statusFilter
-      const bySection =
-        sectionFilter === null || skill.section === sectionFilter
 
-      return byName && byCategory && byStatus && bySection
+      return byName && byCategory
     })
-  }, [skills, nameFilter, categoryFilter, sectionFilter, statusFilter])
+  }, [skills, nameFilter, categoryFilter])
 
   const categoryGroups = useMemo(
     () =>
@@ -408,15 +368,8 @@ function SkillsPageContent() {
               <Button
                 type="button"
                 size="sm"
-                variant={
-                  categoryFilter === "all" && statusFilter === "all"
-                    ? "secondary"
-                    : "outline"
-                }
-                onClick={() => {
-                  setCategoryFilter("all")
-                  setStatusFilter("all")
-                }}
+                variant={categoryFilter === "all" ? "secondary" : "outline"}
+                onClick={() => setCategoryFilter("all")}
                 className="h-7 text-xs"
               >
                 All
@@ -433,29 +386,19 @@ function SkillsPageContent() {
                   {category}
                 </Button>
               ))}
-              {(["Active", "Draft"] as SkillStatus[]).map((status) => (
-                <Button
-                  key={status}
-                  type="button"
-                  size="sm"
-                  variant={statusFilter === status ? "secondary" : "outline"}
-                  onClick={() => setStatusFilter(status)}
-                  className="h-7 text-xs"
-                >
-                  {status}
-                </Button>
-              ))}
             </div>
           </section>
 
           {isLoadingSkills ? (
             <div className="grid gap-3 lg:grid-cols-2">
               {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="h-32 rounded-xl bg-sidebar p-3.5">
-                  <div className="h-9 w-9 rounded-lg bg-sidebar-accent" />
-                  <div className="mt-3 h-4 w-40 rounded bg-sidebar-accent" />
-                  <div className="mt-2 h-3 w-full rounded bg-sidebar-accent" />
-                  <div className="mt-1.5 h-3 w-2/3 rounded bg-sidebar-accent" />
+                <div key={index} className="flex gap-3 rounded-xl bg-sidebar p-3.5">
+                  <div className="h-9 w-9 shrink-0 rounded-lg bg-sidebar-accent" />
+                  <div className="min-w-0 flex-1">
+                    <div className="h-4 w-40 rounded bg-sidebar-accent" />
+                    <div className="mt-2 h-3 w-full rounded bg-sidebar-accent" />
+                    <div className="mt-1.5 h-3 w-2/3 rounded bg-sidebar-accent" />
+                  </div>
                 </div>
               ))}
             </div>
@@ -584,25 +527,9 @@ function SkillsPageContent() {
                   onChange={(event) => setUploadCategory(event.target.value as SkillCategory)}
                   className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring"
                 >
-                  {(["Reasoning", "Data", "Automation", "Support"] as SkillCategory[]).map((category) => (
+                  {SKILL_CATEGORIES.map((category) => (
                     <option key={category} value={category}>
                       {category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="default-skill-section">Section</Label>
-                <select
-                  id="default-skill-section"
-                  value={uploadSection}
-                  onChange={(event) => setUploadSection(event.target.value as SkillSection)}
-                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring"
-                >
-                  {SECTION_ORDER.map((section) => (
-                    <option key={section} value={section}>
-                      {section}
                     </option>
                   ))}
                 </select>
@@ -623,18 +550,6 @@ function SkillsPageContent() {
                 </select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="default-skill-status">Status</Label>
-                <select
-                  id="default-skill-status"
-                  value={uploadStatus}
-                  onChange={(event) => setUploadStatus(event.target.value)}
-                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -721,11 +636,8 @@ function SkillsPageContent() {
                         <DialogTitle className="text-xl">
                           {selectedSkill.name}
                         </DialogTitle>
-                        <Badge
-                          variant={statusStyles[selectedSkill.status]}
-                          size="sm"
-                        >
-                          {selectedSkill.status}
+                        <Badge variant="neutral" size="sm">
+                          {selectedSkill.category}
                         </Badge>
                         <Badge variant="blue" size="sm">
                           {skillSourceLabel(selectedSkill.sourceType)}
@@ -744,20 +656,15 @@ function SkillsPageContent() {
                   </h3>
                   <p className="mt-3 text-pretty text-sm leading-7 text-muted-foreground">
                     {selectedSkill.description || "This skill is ready to use in Atmet chats."} This {selectedSkill.category.toLowerCase()} skill
-                    is designed for the {selectedSkill.section.toLowerCase()} team to make
-                    recurring work faster, more consistent, and easier to pass into connected
-                    workflows.
+                    is designed to make recurring work faster, more consistent,
+                    and easier to pass into connected workflows.
                   </p>
                 </section>
 
-                <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+                <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
                   <div className="rounded-lg bg-muted/50 p-4">
                     <dt className="text-xs text-muted-foreground">Category</dt>
                     <dd className="mt-1 font-medium">{selectedSkill.category}</dd>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 p-4">
-                    <dt className="text-xs text-muted-foreground">Section</dt>
-                    <dd className="mt-1 font-medium">{selectedSkill.section}</dd>
                   </div>
                   <div className="rounded-lg bg-muted/50 p-4">
                     <dt className="text-xs text-muted-foreground">Owner</dt>

@@ -88,7 +88,8 @@ export async function POST(request: NextRequest) {
   const provider = await ensureComposioProvider(toolkit, parsed.data.providerSlug)
   const callbackUrl = buildPublicUrl(
     parsed.data.callbackPath ?? `/integrations/${provider.slug}?connected=composio`,
-    request
+    request,
+    { allowLocal: true }
   )
 
   try {

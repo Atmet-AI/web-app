@@ -67,7 +67,11 @@ export default function AppDetailsPage() {
   const params = useParams<{ slug: string }>()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { apiFetch } = useWorkspace()
+  const {
+    activeWorkspaceId,
+    apiFetch,
+    isLoading: isWorkspaceLoading,
+  } = useWorkspace()
   const slug = params.slug
 
   const [integration, setIntegration] = React.useState<Integration | null>(null)
@@ -94,6 +98,7 @@ export default function AppDetailsPage() {
 
   const loadIntegration = React.useCallback(async () => {
     if (!slug) return
+    if (isWorkspaceLoading || !activeWorkspaceId) return
 
     setIsLoading(true)
     setErrorMessage(null)
@@ -118,7 +123,7 @@ export default function AppDetailsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [apiFetch, slug])
+  }, [activeWorkspaceId, apiFetch, isWorkspaceLoading, slug])
 
   React.useEffect(() => {
     void loadIntegration()
@@ -203,27 +208,6 @@ export default function AppDetailsPage() {
       setIsMutating(false)
     }
   }, [apiFetch, integration, loadIntegration])
-
-  const handleReconnect = React.useCallback(() => {
-    if (!integration) return
-    if (!isIntegrationAvailable(integration)) return
-
-    if (integration.authType === "apikey") {
-      setApiDrawerOpen(true)
-      return
-    }
-
-    if (
-      integration.connectorProvider === "composio" ||
-      integration.authType === "oauth"
-    ) {
-      setOauthError(null)
-      setOauthModalOpen(true)
-      return
-    }
-
-    setApiDrawerOpen(true)
-  }, [integration])
 
   const handleContinueOAuth = React.useCallback(async () => {
     if (!integration) return
@@ -438,7 +422,6 @@ export default function AppDetailsPage() {
               integration={integration}
               onConnect={handleConnectClick}
               onDisconnect={handleDisconnect}
-              onReconnect={handleReconnect}
               isSubmitting={isMutating}
               isAvailable={isAvailable}
             />

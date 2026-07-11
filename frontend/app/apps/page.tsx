@@ -1,19 +1,12 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Search } from "lucide-react"
 
 import { Badge } from "@/registry/spell-ui/badge"
 
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isIntegrationAvailable } from "@/lib/integrations/availability"
@@ -38,8 +31,16 @@ const categoryLabels: Record<IntegrationCategory, string> = {
   generic: "Generic",
 }
 
+const appActionButtonClass =
+  "h-7 w-full rounded-lg px-4 py-0 text-xs font-medium leading-none"
+
 export default function AppsPage() {
-  const { apiFetch } = useWorkspace()
+  const router = useRouter()
+  const {
+    activeWorkspaceId,
+    apiFetch,
+    isLoading: isWorkspaceLoading,
+  } = useWorkspace()
   const [integrations, setIntegrations] = React.useState<Integration[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
@@ -47,10 +48,13 @@ export default function AppsPage() {
   const [categoryFilter, setCategoryFilter] = React.useState<
     "all" | IntegrationCategory
   >("all")
-  const [selectedIntegration, setSelectedIntegration] =
-    React.useState<Integration | null>(null)
+  const [availabilityFilter, setAvailabilityFilter] = React.useState<
+    "all" | "active" | "soon"
+  >("all")
 
   const loadIntegrations = React.useCallback(async () => {
+    if (isWorkspaceLoading || !activeWorkspaceId) return
+
     setIsLoading(true)
     setErrorMessage(null)
 
@@ -72,7 +76,7 @@ export default function AppsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [apiFetch])
+  }, [activeWorkspaceId, apiFetch, isWorkspaceLoading])
 
   React.useEffect(() => {
     void loadIntegrations()
@@ -92,13 +96,18 @@ export default function AppsPage() {
     return integrations.filter((integration) => {
       const matchesCategory =
         categoryFilter === "all" || integration.category === categoryFilter
+      const isAvailable = isIntegrationAvailable(integration)
+      const matchesAvailability =
+        availabilityFilter === "all" ||
+        (availabilityFilter === "active" && isAvailable) ||
+        (availabilityFilter === "soon" && !isAvailable)
       const matchesQuery =
         normalizedQuery.length === 0 ||
         integration.name.toLowerCase().includes(normalizedQuery)
 
-      return matchesCategory && matchesQuery
+      return matchesCategory && matchesAvailability && matchesQuery
     })
-  }, [categoryFilter, integrations, searchQuery])
+  }, [availabilityFilter, categoryFilter, integrations, searchQuery])
 
   return (
     <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 flex-col bg-background">
@@ -149,6 +158,23 @@ export default function AppsPage() {
                 </Button>
               ))}
             </div>
+
+            <div className="flex flex-wrap gap-2">
+              {(["all", "active", "soon"] as const).map((status) => (
+                <Button
+                  key={status}
+                  type="button"
+                  size="sm"
+                  variant={
+                    availabilityFilter === status ? "secondary" : "outline"
+                  }
+                  onClick={() => setAvailabilityFilter(status)}
+                  className="h-7 text-xs capitalize"
+                >
+                  {status === "all" ? "All apps" : status}
+                </Button>
+              ))}
+            </div>
           </section>
 
           {isLoading ? (
@@ -175,7 +201,7 @@ export default function AppsPage() {
                 <IntegrationCard
                   key={integration.slug}
                   integration={integration}
-                  onPreview={() => setSelectedIntegration(integration)}
+                  onOpen={() => router.push(`/apps/${integration.slug}`)}
                 />
               ))}
             </div>
@@ -186,123 +212,16 @@ export default function AppsPage() {
           )}
         </div>
       </section>
-
-      <Dialog
-        open={selectedIntegration !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedIntegration(null)
-        }}
-      >
-        <DialogContent className="max-h-[85vh] overflow-y-auto p-0 sm:max-w-2xl">
-          {selectedIntegration && (
-            <>
-              <DialogHeader className="p-6">
-                <div className="flex items-start gap-4 pr-8">
-                  <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-sidebar-accent">
-                    <img
-                      src={selectedIntegration.logo}
-                      alt={`${selectedIntegration.name} logo`}
-                      className="h-7 w-7 object-contain"
-                    />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <DialogTitle className="text-xl">
-                        {selectedIntegration.name}
-                      </DialogTitle>
-                      <Badge variant="neutral" size="sm">
-                        {categoryLabels[selectedIntegration.category]}
-                      </Badge>
-                      {!isIntegrationAvailable(selectedIntegration) ? (
-                        <Badge variant="amber" size="sm">
-                          Soon
-                        </Badge>
-                      ) : null}
-                      {isIntegrationAvailable(selectedIntegration) ? (
-                        <Badge
-                          variant={
-                            selectedIntegration.connected ? "green" : "neutral"
-                          }
-                          size="sm"
-                        >
-                          {selectedIntegration.connected
-                            ? "Connected"
-                            : "Not connected"}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <DialogDescription className="mt-2 leading-6 text-pretty">
-                      {selectedIntegration.description}
-                    </DialogDescription>
-                  </div>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-6 p-6">
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div className="rounded-xl bg-sidebar/70 p-3">
-                    <p className="text-lg font-semibold">
-                      {selectedIntegration.triggers.length}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Triggers</p>
-                  </div>
-                  <div className="rounded-xl bg-sidebar/70 p-3">
-                    <p className="text-lg font-semibold">
-                      {selectedIntegration.actions.length}
-                    </p>
-                    <p className="text-xs text-muted-foreground">MCP tools</p>
-                  </div>
-                  <div className="rounded-xl bg-sidebar/70 p-3">
-                    <p className="text-lg font-semibold">
-                      {selectedIntegration.scopes.length}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Permissions</p>
-                  </div>
-                </div>
-
-                <section>
-                  <h3 className="text-sm font-semibold text-foreground">
-                    About this integration
-                  </h3>
-                  <p className="mt-3 text-sm leading-7 text-pretty text-muted-foreground">
-                    {selectedIntegration.description} Connect{" "}
-                    {selectedIntegration.name} to bring its data and
-                    capabilities into your Atmet workflows. Once connected,
-                    teams can automate recurring work, respond to important
-                    activity, and keep information synchronized without
-                    switching between tools.
-                  </p>
-                </section>
-
-                {isIntegrationAvailable(selectedIntegration) ? (
-                  <Button
-                    render={<Link href={`/apps/${selectedIntegration.slug}`} />}
-                    className="h-10 w-full"
-                  >
-                    {selectedIntegration.connected
-                      ? `Manage ${selectedIntegration.name}`
-                      : `Connect ${selectedIntegration.name}`}
-                  </Button>
-                ) : (
-                  <Button disabled className="h-10 w-full">
-                    Soon
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
 
 function IntegrationCard({
   integration,
-  onPreview,
+  onOpen,
 }: {
   integration: Integration
-  onPreview: () => void
+  onOpen: () => void
 }) {
   const isAvailable = isIntegrationAvailable(integration)
 
@@ -310,16 +229,16 @@ function IntegrationCard({
     <article
       role="button"
       tabIndex={0}
-      onClick={onPreview}
+      onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault()
-          onPreview()
+          onOpen()
         }
       }}
       className="flex min-h-[184px] flex-col rounded-xl bg-sidebar p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-sidebar-accent/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
-      <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-sidebar-accent">
+      <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-md bg-white shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]">
         <img
           src={integration.logo}
           alt={`${integration.name} logo`}
@@ -362,11 +281,13 @@ function IntegrationCard({
       >
         {isAvailable ? (
           <Button
-            render={<Link href={`/apps/${integration.slug}`} />}
+            type="button"
+            size="sm"
+            onClick={onOpen}
             className={
               integration.connected
-                ? "h-10 w-full rounded-lg bg-sidebar text-xs font-medium text-foreground hover:bg-sidebar-accent"
-                : "h-10 w-full rounded-lg bg-black text-xs font-medium text-white hover:bg-black/90"
+                ? `${appActionButtonClass} border-0 bg-white text-foreground shadow-none hover:bg-primary hover:text-white dark:bg-sidebar-accent dark:text-foreground dark:hover:bg-primary dark:hover:text-white`
+                : `${appActionButtonClass} bg-primary text-primary-foreground hover:bg-primary/90`
             }
           >
             {integration.connected ? "Manage" : "Connect"}
@@ -374,7 +295,8 @@ function IntegrationCard({
         ) : (
           <Button
             disabled
-            className="h-10 w-full rounded-lg text-xs font-medium"
+            size="sm"
+            className={`${appActionButtonClass} bg-primary text-primary-foreground`}
           >
             Soon
           </Button>
