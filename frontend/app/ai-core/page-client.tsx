@@ -74,7 +74,6 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
         }}
       >
         <AIPrompt
-          key={activeChatId ?? "chat-default"}
           chatId={activeChatId}
           onConversationStart={() => setHasStartedConversation(true)}
           onAutomationConversationStart={notifyAutomationStarted}
@@ -94,7 +93,6 @@ export default function AiCoreClientPage() {
 
   return (
     <AiCorePageContent
-      key={activeChatId ?? "chat-default"}
       activeChatId={activeChatId}
     />
   )

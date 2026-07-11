@@ -302,6 +302,24 @@
     box-shadow: none !important;
     outline: none !important;
   }
+  [data-slot="command-input-wrapper"] [data-slot="input-group"] {
+    border-color: var(--color-primary) !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  [data-slot="command-input-wrapper"] [data-slot="input-group-control"],
+  [data-slot="command-input-wrapper"] [cmdk-input],
+  [data-slot="command-input-wrapper"] input {
+    border: 0 !important;
+    border-color: transparent !important;
+    border-width: 0 !important;
+    box-shadow: none !important;
+    outline: 0 !important;
+    outline-offset: 0 !important;
+    --tw-ring-color: transparent !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+  }
   :where(
     [data-settings-scope="true"] [data-slot="dropdown-menu-content"],
     [data-settings-scope="true"] [data-slot="dropdown-menu-sub-content"]

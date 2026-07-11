@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { Search01Icon } from "@hugeicons/core-free-icons"
@@ -11,7 +12,6 @@ import {
   CreditCard,
   Database,
   Disc3,
-  FileSearch,
   FolderOpen,
   FolderPlus,
   Globe2,
@@ -49,6 +49,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useTheme } from "next-themes"
 import { OPEN_NEW_SKILL_DIALOG_EVENT } from "@/lib/skills-events"
+import { useWorkspace } from "@/lib/workspace-context"
 
 const OPEN_MANAGE_CHAT_USERS_EVENT = "open-manage-chat-users"
 const OPEN_SETTINGS_PANEL_EVENT = "open-settings-panel"
@@ -103,6 +104,22 @@ type QuickAction = {
   shortcut?: QuickActionShortcut
   avatarUrl?: string
   logoUrl?: string
+}
+
+type WorkspaceMemberTarget = {
+  id: string
+  name: string
+  email: string
+  role: string
+  avatarUrl: string
+  membershipStatus: "active" | "pending"
+}
+
+type IntegrationTarget = {
+  slug: string
+  name: string
+  logoUrl: string
+  description: string
 }
 
 const dataQuickActions: QuickAction[] = [
@@ -494,154 +511,6 @@ const settingsNestedQuickActions: QuickAction[] = [
   },
 ]
 
-const workspaceMemberTargets = [
-  {
-    id: "mem_001",
-    name: "Amir Haddad",
-    email: "amir.haddad@atmet.ai",
-    role: "Super Admin",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=128&q=80",
-  },
-  {
-    id: "mem_002",
-    name: "Lina Saad",
-    email: "lina.saad@atmet.ai",
-    role: "Admin",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=128&q=80",
-  },
-  {
-    id: "mem_003",
-    name: "Omar Khaled",
-    email: "omar.khaled@atmet.ai",
-    role: "Workspace Admin",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?auto=format&fit=crop&w=128&q=80",
-  },
-  {
-    id: "mem_004",
-    name: "Yara Nasser",
-    email: "yara.nasser@atmet.ai",
-    role: "Workspace Member",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=128&q=80",
-  },
-  {
-    id: "mem_005",
-    name: "Fadi Mourad",
-    email: "fadi.mourad@atmet.ai",
-    role: "Workspace Admin",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=128&q=80",
-  },
-] as const
-
-const userQuickActions: QuickAction[] = workspaceMemberTargets.map(
-  (member) => ({
-    id: `users-member-${member.id}`,
-    parentId: "users-manage",
-    level: 1,
-    sector: "Users",
-    label: member.name,
-    description: `${member.role} • ${member.email}`,
-    icon: Users,
-    eventName: OPEN_SETTINGS_PANEL_EVENT,
-    eventDetail: {
-      section: "Members",
-      memberId: member.id,
-      memberQuery: member.name,
-    },
-    keywords: [member.email, member.role, "member profile", "workspace user"],
-    avatarUrl: member.avatarUrl,
-  })
-)
-
-const topApps = [
-  {
-    slug: "gmail",
-    name: "Gmail",
-    logoUrl: "https://cdn.simpleicons.org/gmail",
-    description: "Email automations and workflow triggers.",
-  },
-  {
-    slug: "slack",
-    name: "Slack",
-    logoUrl: "https://cdn.simpleicons.org/slack",
-    description: "Channel notifications and team messaging flows.",
-  },
-  {
-    slug: "notion",
-    name: "Notion",
-    logoUrl: "https://cdn.simpleicons.org/notion",
-    description: "Sync pages and databases into automations.",
-  },
-  {
-    slug: "hubspot",
-    name: "HubSpot",
-    logoUrl: "https://cdn.simpleicons.org/hubspot",
-    description: "CRM contacts, deals, and lifecycle events.",
-  },
-  {
-    slug: "github",
-    name: "GitHub",
-    logoUrl: "https://cdn.simpleicons.org/github",
-    description: "Repository events, PRs, and issue actions.",
-  },
-  {
-    slug: "x",
-    name: "X",
-    logoUrl: "https://cdn.simpleicons.org/x",
-    description: "Social publishing and mention-based triggers.",
-  },
-  {
-    slug: "jira",
-    name: "Jira",
-    logoUrl: "https://cdn.simpleicons.org/jira",
-    description: "Issue tracking workflows and sprint updates.",
-  },
-  {
-    slug: "asana",
-    name: "Asana",
-    logoUrl: "https://cdn.simpleicons.org/asana",
-    description: "Task orchestration and status transitions.",
-  },
-  {
-    slug: "salesforce",
-    name: "Salesforce",
-    logoUrl: "https://cdn.simpleicons.org/salesforce",
-    description: "Enterprise CRM objects and record updates.",
-  },
-  {
-    slug: "discord",
-    name: "Discord",
-    logoUrl: "https://cdn.simpleicons.org/discord",
-    description: "Community notifications and engagement signals.",
-  },
-] as const
-
-const appQuickActions: QuickAction[] = topApps.map((app, index) => ({
-  id: `apps-${app.slug}`,
-  level: 0,
-  sector: "Apps",
-  label: app.name,
-  description: app.description,
-  path: `/apps/${app.slug}`,
-  icon: Disc3,
-  logoUrl: app.logoUrl,
-  keywords: [app.slug, "apps", "integrations", "connect", "manage"],
-  shortcut:
-    index === 0
-      ? {
-          key: "i",
-          primary: true,
-          alt: true,
-          shift: true,
-          display: "⇧⌥⌘I",
-        }
-      : undefined,
-}))
-
 const settingsNestedByParent = new Map<string, QuickAction[]>(
   settingsNestedQuickActions.reduce<Array<[string, QuickAction[]]>>(
     (groups, action) => {
@@ -664,19 +533,6 @@ const orderedSettingsTreeActions = settingsSectionQuickActions.flatMap(
     ...(settingsNestedByParent.get(sectionAction.id) ?? []),
   ]
 )
-
-const quickActions = [
-  ...appQuickActions,
-  ...dataQuickActions,
-  ...chatQuickActions,
-  ...projectQuickActions,
-  userQuickActionRoots[0],
-  ...userQuickActions,
-  userQuickActionRoots[1],
-  settingsRootAction,
-  ...settingsSystemQuickActions,
-  ...orderedSettingsTreeActions,
-]
 
 const pinnedQuickActions: Array<{ id: string; label: string }> = [
   { id: "settings-theme-toggle", label: "Toggle theme" },
@@ -705,15 +561,89 @@ export function SearchForm({
 }: React.ComponentProps<"div">) {
   const router = useRouter()
   const { resolvedTheme, setTheme } = useTheme()
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
+  const [workspaceMemberTargets, setWorkspaceMemberTargets] = React.useState<
+    WorkspaceMemberTarget[]
+  >([])
+  const [integrationTargets, setIntegrationTargets] = React.useState<
+    IntegrationTarget[]
+  >([])
+  const userQuickActions = React.useMemo<QuickAction[]>(
+    () =>
+      workspaceMemberTargets.map((member) => ({
+        id: `users-member-${member.id}`,
+        parentId: "users-manage",
+        level: 1,
+        sector: "Users",
+        label: member.name,
+        description: `${member.role} • ${member.email}`,
+        icon: Users,
+        eventName: OPEN_SETTINGS_PANEL_EVENT,
+        eventDetail: {
+          section: "Members",
+          memberId: member.membershipStatus === "active" ? member.id : undefined,
+          memberQuery: member.name,
+        },
+        keywords: [
+          member.email,
+          member.role,
+          member.membershipStatus,
+          "member profile",
+          "workspace user",
+        ],
+        avatarUrl: member.avatarUrl,
+      })),
+    [workspaceMemberTargets]
+  )
+  const appQuickActions = React.useMemo<QuickAction[]>(
+    () =>
+      integrationTargets.map((app, index) => ({
+        id: `apps-${app.slug}`,
+        level: 0,
+        sector: "Apps",
+        label: app.name,
+        description: app.description,
+        path: `/apps/${app.slug}`,
+        icon: Disc3,
+        logoUrl: app.logoUrl,
+        keywords: [app.slug, app.name, "apps", "integrations", "connect", "manage"],
+        shortcut:
+          index === 0
+            ? {
+                key: "i",
+                primary: true,
+                alt: true,
+                shift: true,
+                display: "⇧⌥⌘I",
+              }
+            : undefined,
+      })),
+    [integrationTargets]
+  )
+  const quickActions = React.useMemo(
+    () => [
+      ...appQuickActions,
+      ...dataQuickActions,
+      ...chatQuickActions,
+      ...projectQuickActions,
+      userQuickActionRoots[0],
+      ...userQuickActions,
+      userQuickActionRoots[1],
+      settingsRootAction,
+      ...settingsSystemQuickActions,
+      ...orderedSettingsTreeActions,
+    ],
+    [appQuickActions, userQuickActions]
+  )
   const actionMap = React.useMemo(
     () => new Map(quickActions.map((action) => [action.id, action])),
-    []
+    [quickActions]
   )
   const shortcutActions = React.useMemo(
     () => quickActions.filter((action) => Boolean(action.shortcut)),
-    []
+    [quickActions]
   )
 
   const getInitials = React.useCallback((name: string) => {
@@ -754,7 +684,7 @@ export function SearchForm({
     }
 
     return quickActions.filter((action) => includedIds.has(action.id))
-  }, [actionMap, query])
+  }, [actionMap, query, quickActions])
 
   const pinnedActions = React.useMemo(() => {
     return pinnedQuickActions
@@ -772,6 +702,131 @@ export function SearchForm({
     () => new Set(pinnedActions.map((action) => action.id)),
     [pinnedActions]
   )
+
+  React.useEffect(() => {
+    let isCancelled = false
+
+    if (!activeWorkspaceId) {
+      setWorkspaceMemberTargets([])
+      return
+    }
+
+    apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            members?: Array<{
+              role: "owner" | "admin" | "member"
+              joined_at: string
+              user:
+                | {
+                    id: string
+                    email: string | null
+                    full_name: string | null
+                    avatar_url?: string | null
+                    status: string
+                  }
+                | Array<{
+                    id: string
+                    email: string | null
+                    full_name: string | null
+                    avatar_url?: string | null
+                    status: string
+                  }>
+                | null
+            }>
+            pendingInvitations?: Array<{
+              id: string
+              email: string
+              role: "member"
+              status: "pending"
+            }>
+          }
+        } | null
+      ) => {
+        if (isCancelled) return
+
+        const activeMembers =
+          payload?.data?.members?.map((row) => {
+            const user = Array.isArray(row.user) ? row.user[0] : row.user
+            const name = user?.full_name || user?.email || "Unknown user"
+            const role =
+              row.role === "owner"
+                ? "Owner"
+                : row.role === "admin"
+                  ? "Admin"
+                  : "Member"
+            return {
+              id: user?.id ?? `${row.role}-${row.joined_at}`,
+              name,
+              email: user?.email ?? "",
+              role,
+              avatarUrl: user?.avatar_url ?? "",
+              membershipStatus: "active" as const,
+            }
+          }) ?? []
+
+        const pendingMembers =
+          payload?.data?.pendingInvitations?.map((invitation) => ({
+            id: `invitation-${invitation.id}`,
+            name: invitation.email,
+            email: invitation.email,
+            role: "Pending",
+            avatarUrl: "",
+            membershipStatus: "pending" as const,
+          })) ?? []
+
+        setWorkspaceMemberTargets([...activeMembers, ...pendingMembers])
+      })
+      .catch(() => {
+        if (!isCancelled) setWorkspaceMemberTargets([])
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeWorkspaceId, apiFetch])
+
+  React.useEffect(() => {
+    let isCancelled = false
+
+    apiFetch("/api/integrations")
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (payload: {
+          data?: {
+            integrations?: Array<{
+              slug: string
+              name: string
+              logo?: string | null
+              description?: string | null
+              category?: string | null
+            }>
+          }
+        } | null
+      ) => {
+        if (isCancelled) return
+        setIntegrationTargets(
+          (payload?.data?.integrations ?? []).map((integration) => ({
+            slug: integration.slug,
+            name: integration.name,
+            logoUrl: integration.logo ?? "",
+            description:
+              integration.description ||
+              `${integration.category || "App"} integration for Atmet workflows.`,
+          }))
+        )
+      }
+      )
+      .catch(() => {
+        if (!isCancelled) setIntegrationTargets([])
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [apiFetch])
 
   const runAction = React.useCallback(
     (action: QuickAction) => {
@@ -863,7 +918,7 @@ export function SearchForm({
           strokeWidth={1.5}
           className="size-4 shrink-0 text-muted-foreground"
         />
-        <span className="truncate text-sm text-foreground/90">
+        <span className="truncate text-sm text-muted-foreground">
           Search or run action...
         </span>
         <Kbd className="ms-auto">⌘K</Kbd>
@@ -935,9 +990,12 @@ export function SearchForm({
                         </Avatar>
                       ) : action.logoUrl ? (
                         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background">
-                          <img
+                          <Image
                             src={action.logoUrl}
                             alt={`${action.label} logo`}
+                            width={14}
+                            height={14}
+                            unoptimized
                             className="h-3.5 w-3.5 object-contain"
                           />
                         </span>

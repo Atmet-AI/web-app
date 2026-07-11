@@ -75,11 +75,12 @@ function CommandInput({
     <div data-slot="command-input-wrapper" className="p-1 pb-0">
       <InputGroup className="h-8! rounded-lg! border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:ps-2!">
         <CommandPrimitive.Input
-          data-slot="command-input"
+          data-slot="input-group-control"
           className={cn(
-            "w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+            "w-full flex-1 rounded-none border-0 bg-transparent text-sm shadow-none outline-none ring-0 disabled:cursor-not-allowed disabled:opacity-50 focus:border-0 focus:outline-none focus:ring-0 focus-visible:border-0 focus-visible:outline-none focus-visible:ring-0",
             className
           )}
+          style={{ outline: "none", boxShadow: "none" }}
           {...props}
         />
         <InputGroupAddon>

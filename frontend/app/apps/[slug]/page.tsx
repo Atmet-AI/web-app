@@ -10,6 +10,14 @@ import { ConnectOAuthModal } from "@/components/integrations/ConnectOAuthModal"
 import { Badge } from "@/registry/spell-ui/badge"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isIntegrationAvailable } from "@/lib/integrations/availability"
@@ -81,6 +89,7 @@ export default function AppDetailsPage() {
   const [isMutating, setIsMutating] = React.useState(false)
   const [oauthModalOpen, setOauthModalOpen] = React.useState(false)
   const [oauthError, setOauthError] = React.useState<string | null>(null)
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = React.useState(false)
 
   const [apiDrawerOpen, setApiDrawerOpen] = React.useState(false)
   const [apiKey, setApiKey] = React.useState("")
@@ -208,6 +217,11 @@ export default function AppDetailsPage() {
       setIsMutating(false)
     }
   }, [apiFetch, integration, loadIntegration])
+
+  const handleConfirmDisconnect = React.useCallback(async () => {
+    await handleDisconnect()
+    setDisconnectDialogOpen(false)
+  }, [handleDisconnect])
 
   const handleContinueOAuth = React.useCallback(async () => {
     if (!integration) return
@@ -421,7 +435,7 @@ export default function AppDetailsPage() {
             <AppHeader
               integration={integration}
               onConnect={handleConnectClick}
-              onDisconnect={handleDisconnect}
+              onDisconnect={() => setDisconnectDialogOpen(true)}
               isSubmitting={isMutating}
               isAvailable={isAvailable}
             />
@@ -640,6 +654,43 @@ export default function AppDetailsPage() {
         onTestConnection={handleTestConnection}
         onSave={handleSaveApiKey}
       />
+
+      <Dialog
+        open={disconnectDialogOpen}
+        onOpenChange={(open) => {
+          if (!isMutating) setDisconnectDialogOpen(open)
+        }}
+      >
+        <DialogContent className="gap-0 overflow-hidden rounded-xl! p-0" showCloseButton={!isMutating}>
+          <DialogHeader className="border-b border-border px-5 py-4">
+            <DialogTitle>Disconnect app</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to disconnect {integration.name}? Atmet will no
+              longer be able to use this app until you connect it again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mx-0 mb-0 flex-row items-center justify-end gap-2 rounded-none border-t border-border bg-background px-5 py-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setDisconnectDialogOpen(false)}
+              disabled={isMutating}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleConfirmDisconnect}
+              disabled={isMutating}
+            >
+              {isMutating ? "Disconnecting..." : "Disconnect"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {flashMessage ? (
         <div

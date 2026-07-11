@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
 import { AppSidebar } from "@/components/app-sidebar"
+import { CuelumeProvider } from "@/components/cuelume-provider"
 import { PlatformNavbar } from "@/components/platform-navbar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -83,6 +84,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
+          <CuelumeProvider />
           <WorkspaceProvider>
           <TooltipProvider>
             <SidebarProvider>
