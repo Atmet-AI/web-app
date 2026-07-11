@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { GradientSpin } from "gradient-spin";
+import { play } from "cuelume";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -349,6 +350,7 @@ export default function AI_Prompt({
   const nextMessageIdRef = useRef(Date.now());
   const activeChatIdRef = useRef<string | null>(null);
   const activeChatTitleRef = useRef<string | null>(null);
+  const locallyStreamingChatIdRef = useRef<string | null>(null);
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
@@ -790,13 +792,20 @@ export default function AI_Prompt({
   }, [fixedSkillName, lockedComposerPrefix]);
 
   useEffect(() => {
-    activeChatIdRef.current = chatId ?? null;
-    setResolvedChatId(chatId ?? null);
+    const nextChatId = chatId ?? null;
+    const isSameInFlightChat =
+      nextChatId !== null && activeChatIdRef.current === nextChatId;
+
+    activeChatIdRef.current = nextChatId;
+    setResolvedChatId(nextChatId);
+    if (!isSameInFlightChat) {
+      locallyStreamingChatIdRef.current = null;
+    }
     setAgentSetupMessageId(null);
     setTelegramAgentError(null);
     setTelegramAgentSuccess(null);
 
-    if (!chatId) {
+    if (!nextChatId) {
       activeChatTitleRef.current = null;
       return;
     }
@@ -811,7 +820,10 @@ export default function AI_Prompt({
       setMessages([]);
       return;
     }
-    if (isResponding) return;
+
+    if (locallyStreamingChatIdRef.current === effectiveChatId) {
+      return;
+    }
 
     let isCancelled = false;
     void apiFetch(`/api/chats/${effectiveChatId}/messages`)
@@ -837,7 +849,7 @@ export default function AI_Prompt({
     return () => {
       isCancelled = true;
     };
-  }, [apiFetch, chatId, isResponding, resolvedChatId]);
+  }, [apiFetch, chatId, resolvedChatId]);
 
   useEffect(() => {
     const copyTimers = copyTimersRef.current;
@@ -1366,10 +1378,14 @@ export default function AI_Prompt({
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let completed = false;
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          completed = true;
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -1378,7 +1394,10 @@ export default function AI_Prompt({
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
-          if (raw === "[DONE]") break;
+          if (raw === "[DONE]") {
+            completed = true;
+            break;
+          }
           try {
             const chunk = JSON.parse(raw) as { content?: string };
             if (chunk.content) {
@@ -1394,6 +1413,10 @@ export default function AI_Prompt({
             // ignore malformed SSE line
           }
         }
+      }
+
+      if (completed) {
+        play("success");
       }
     } catch (error) {
       const message =
@@ -1981,6 +2004,7 @@ export default function AI_Prompt({
           chatId = payload.data?.chat?.id ?? null;
           if (chatId) {
             activeChatIdRef.current = chatId;
+            locallyStreamingChatIdRef.current = chatId;
             setResolvedChatId(chatId);
             activeChatTitleRef.current = chatTitle;
             if (typeof window !== "undefined" && window.location.pathname === "/ai-core") {
@@ -2884,17 +2908,24 @@ export default function AI_Prompt({
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let completed = false;
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          completed = true;
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
-          if (raw === "[DONE]") break;
+          if (raw === "[DONE]") {
+            completed = true;
+            break;
+          }
           try {
             const chunk = JSON.parse(raw) as { content?: string };
             if (chunk.content) {
@@ -2908,6 +2939,9 @@ export default function AI_Prompt({
             }
           } catch { /* ignore */ }
         }
+      }
+      if (completed) {
+        play("success");
       }
     } catch {
       setMessages((prev) =>
@@ -3990,6 +4024,7 @@ export default function AI_Prompt({
                   </DropdownMenu>
                   <Button
                     aria-label="Send message"
+                    data-cuelume-press
                     className={cn(
                       "h-7 rounded-[min(var(--radius-md),12px)] bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground hover:bg-primary/90"
                     )}

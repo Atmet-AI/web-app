@@ -15,13 +15,22 @@
   "menuColor": "default",
   "menuAccent": "subtle",
   "aliases": {
+    "app": "@/app",
     "components": "@/components",
     "utils": "@/lib/utils",
     "ui": "@/components/ui",
     "lib": "@/lib",
-    "hooks": "@/hooks"
+    "hooks": "@/hooks",
+    "types": "@/types",
+    "content": "@/content"
   },
   "registries": {
+    "@tailark-pro": {
+      "url": "https://pro.tailark.com/registry/{name}",
+      "headers": {
+        "Authorization": "Bearer ${TAILARK_API_KEY}"
+      }
+    },
     "@blocks": "https://blocks.so/r/{name}.json",
     "@kokonutui": "https://kokonutui.com/r/{name}.json",
     "@ss-components": "https://shadcnstudio.com/r/components/{name}.json",

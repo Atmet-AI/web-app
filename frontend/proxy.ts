@@ -21,6 +21,32 @@ const PUBLIC_API_PATHS = new Set([
   "/api/auth/reset-password",
   "/api/auth/resend-verification",
 ])
+const APP_HOSTNAME = "app.atmetai.com"
+const MARKETING_HOSTNAMES = new Set(["atmetai.com", "www.atmetai.com"])
+const LOCAL_MARKETING_HOSTNAMES = new Set(["localhost", "127.0.0.1"])
+
+function getHostname(request: NextRequest) {
+  return request.headers.get("host")?.split(":")[0]?.toLowerCase() ?? ""
+}
+
+function externalRedirect(request: NextRequest, hostname: string, pathname: string) {
+  const url = request.nextUrl.clone()
+  url.protocol = "https:"
+  url.hostname = hostname
+  url.port = ""
+  url.pathname = pathname
+  return NextResponse.redirect(url)
+}
+
+function nextWithPublicShell(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-atmet-public-shell", "true")
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
+}
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.has(pathname) || pathname.startsWith("/invite/")
@@ -92,10 +118,34 @@ async function hasSupabaseSession(request: NextRequest, response: NextResponse) 
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const hostname = getHostname(request)
+  const isMarketingHost = MARKETING_HOSTNAMES.has(hostname)
+  const isLocalMarketingHost = LOCAL_MARKETING_HOSTNAMES.has(hostname)
+  const isAppHost = hostname === APP_HOSTNAME
   const response = NextResponse.next()
 
   if (isPublicAsset(pathname)) {
     return NextResponse.next()
+  }
+
+  if (!isAppHost && isPublicPath(pathname) && !REDIRECT_WHEN_SIGNED_IN_PATHS.has(pathname)) {
+    return nextWithPublicShell(request)
+  }
+
+  if (isLocalMarketingHost && pathname === "/") {
+    return nextWithPublicShell(request)
+  }
+
+  if (isAppHost && pathname === "/landing-page") {
+    return externalRedirect(request, "atmetai.com", "/")
+  }
+
+  if (isMarketingHost && pathname === "/landing-page") {
+    return NextResponse.redirect(new URL("/", request.url))
+  }
+
+  if (isMarketingHost && pathname !== "/" && !isPublicApiPath(pathname)) {
+    return externalRedirect(request, APP_HOSTNAME, pathname)
   }
 
   const accessPolicies = await getAccessPolicies()
@@ -144,8 +194,12 @@ export async function proxy(request: NextRequest) {
     return clearSession(NextResponse.redirect(new URL("/sign-in", request.url)))
   }
 
-  if (isPublicPath(pathname)) {
+  if ((isMarketingHost && pathname === "/") || isPublicPath(pathname)) {
     if (!hasAnySession || !REDIRECT_WHEN_SIGNED_IN_PATHS.has(pathname)) {
+      if ((isMarketingHost || isLocalMarketingHost) && pathname === "/") {
+        return nextWithPublicShell(request)
+      }
+
       return response
     }
 

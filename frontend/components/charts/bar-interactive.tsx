@@ -13,9 +13,11 @@ type UsagePoint = {
 export function BarInteractive({
   data,
   className,
+  unit = "credits",
 }: {
   data: UsagePoint[]
   className?: string
+  unit?: string
 }) {
   const maxValue = React.useMemo(
     () => Math.max(...data.map((point) => point.value), 1),
@@ -51,7 +53,7 @@ export function BarInteractive({
               fontSize: "12px",
             }}
             formatter={(value) => [
-              `${(typeof value === "number" ? value : Number(value ?? 0)).toLocaleString()} credits`,
+              `${(typeof value === "number" ? value : Number(value ?? 0)).toLocaleString()} ${unit}`,
               "Usage",
             ]}
           />

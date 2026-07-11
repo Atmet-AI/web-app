@@ -6,6 +6,11 @@ import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import packageJson from "@/package.json"
 import { ATMET_AUTH_CHANGED_EVENT, ATMET_USER_UPDATED_EVENT, useWorkspace } from "@/lib/workspace-context"
+import {
+  ATMET_APPEARANCE_SETTINGS_STORAGE_KEY,
+  announceSoundsEnabled,
+  appearanceSettingsStorageKey,
+} from "@/lib/sound-preferences"
 import { countries } from "@/lib/countries"
 import { buildInternationalPhone, buildWhatsappUrl, getPhoneCountry } from "@/lib/phone-countries"
 
@@ -70,6 +75,7 @@ import {
 import {
   IconApps,
   IconBell,
+  IconBrain,
   IconBuilding,
   IconCalendar,
   IconChartBar,
@@ -96,7 +102,6 @@ import {
   IconShield,
   IconShieldCheck,
   IconSun,
-  IconTools,
   IconUser,
   IconUserPlus,
   IconUsers,
@@ -132,6 +137,7 @@ import {
   Upload,
   User,
   UserPlus,
+  Volume2,
 } from "lucide-react"
 
 const navItems = [
@@ -151,7 +157,7 @@ const navItems = [
     title: "Skills",
     url: "/skills",
     iconType: "tabler" as const,
-    icon: IconTools,
+    icon: IconBrain,
   },
   {
     title: "Apps",
@@ -562,7 +568,6 @@ type OpenSettingsPanelDetail = {
   returnToAdminSection?: AdminConsoleSection
 }
 
-const APPEARANCE_SETTINGS_STORAGE_KEY = "atmet-appearance-settings"
 const PERSONALIZATION_SETTINGS_STORAGE_KEY = "atmet-personalization-settings"
 const HELP_DOCS_EXTERNAL_URL = "https://atmet.ai/help-docs"
 const CHANGELOGS_EXTERNAL_URL = "https://chanaloge.com"
@@ -575,10 +580,7 @@ type AppearanceSettings = {
   timezone: string
   language: string
   fontScale: FontScale
-}
-
-function appearanceSettingsStorageKey(userKey?: string | null) {
-  return userKey ? `${APPEARANCE_SETTINGS_STORAGE_KEY}:${userKey}` : APPEARANCE_SETTINGS_STORAGE_KEY
+  soundsEnabled: boolean
 }
 
 function applyFixedPrimaryColor() {
@@ -1418,6 +1420,7 @@ function GeneralSettingsContent({
       timezone: inferredTimezone,
       language: "English",
       fontScale: "default",
+      soundsEnabled: true,
     })
   const [savedAppearanceSettings, setSavedAppearanceSettings] =
     React.useState<AppearanceSettings>({
@@ -1425,6 +1428,7 @@ function GeneralSettingsContent({
       timezone: inferredTimezone,
       language: "English",
       fontScale: "default",
+      soundsEnabled: true,
     })
 
   React.useEffect(() => {
@@ -1442,6 +1446,7 @@ function GeneralSettingsContent({
       timezone: inferredTimezone,
       language: "English",
       fontScale: "default",
+      soundsEnabled: true,
     }
 
     if (typeof window === "undefined") {
@@ -1454,7 +1459,7 @@ function GeneralSettingsContent({
     const storageKey = appearanceSettingsStorageKey(userPreferenceKey)
     const rawSettings =
       window.localStorage.getItem(storageKey) ??
-      window.localStorage.getItem(APPEARANCE_SETTINGS_STORAGE_KEY)
+      window.localStorage.getItem(ATMET_APPEARANCE_SETTINGS_STORAGE_KEY)
     if (!rawSettings) {
       setAppearanceSettings(fallbackSettings)
       setSavedAppearanceSettings(fallbackSettings)
@@ -1475,7 +1480,8 @@ function GeneralSettingsContent({
     appearanceSettings.theme !== savedAppearanceSettings.theme ||
     appearanceSettings.timezone !== savedAppearanceSettings.timezone ||
     appearanceSettings.language !== savedAppearanceSettings.language ||
-    appearanceSettings.fontScale !== savedAppearanceSettings.fontScale
+    appearanceSettings.fontScale !== savedAppearanceSettings.fontScale ||
+    appearanceSettings.soundsEnabled !== savedAppearanceSettings.soundsEnabled
 
   const themePreviewImageById: Record<"light" | "dark" | "system", string> = {
     light: "/white.png",
@@ -1600,6 +1606,29 @@ function GeneralSettingsContent({
           <p className="text-xs text-muted-foreground">
             Applies globally across the entire website.
           </p>
+
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/20 px-3 py-2.5">
+            <div className="flex min-w-0 items-start gap-2">
+              <Volume2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  Interaction sounds
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Play soft cues for button presses and completed AI replies.
+                </p>
+              </div>
+            </div>
+            <AdminToggle
+              checked={appearanceSettings.soundsEnabled}
+              onChange={(soundsEnabled) =>
+                setAppearanceSettings((prev) => ({
+                  ...prev,
+                  soundsEnabled,
+                }))
+              }
+            />
+          </div>
         </section>
 
         <section className="space-y-2">
@@ -1705,6 +1734,7 @@ function GeneralSettingsContent({
             setTheme(appearanceSettings.theme)
             applyFixedPrimaryColor()
             applyGlobalFontScale(appearanceSettings.fontScale)
+            announceSoundsEnabled(appearanceSettings.soundsEnabled)
             if (typeof window !== "undefined") {
               window.localStorage.setItem(
                 appearanceSettingsStorageKey(userPreferenceKey),
@@ -2098,7 +2128,17 @@ function MembersSettingsContent({
     }
     setIsMembersLoading(true)
     try {
-      const response = await apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
+      const [
+        response,
+        usageAllResponse,
+        usageMonthResponse,
+        usageWeekResponse,
+      ] = await Promise.all([
+        apiFetch(`/api/workspaces/${activeWorkspaceId}/members`),
+        apiFetch(`/api/workspaces/${activeWorkspaceId}/usage-limits?range=all`),
+        apiFetch(`/api/workspaces/${activeWorkspaceId}/usage-limits?range=month`),
+        apiFetch(`/api/workspaces/${activeWorkspaceId}/usage-limits?range=week`),
+      ])
       if (!response.ok) {
         setMembers([])
         setCurrentMemberRole(null)
@@ -2129,6 +2169,51 @@ function MembersSettingsContent({
           }>
         }
       }
+      type MemberUsagePayload = {
+        data?: {
+          members?: Array<{
+            id: string
+            usage?: {
+              tokens?: number
+            }
+          }>
+          userUsage?: {
+            tokens?: number
+          }
+        }
+      }
+      const [usageAllPayload, usageMonthPayload, usageWeekPayload] =
+        await Promise.all([
+          usageAllResponse.ok
+            ? (usageAllResponse.json() as Promise<MemberUsagePayload>)
+            : Promise.resolve(null),
+          usageMonthResponse.ok
+            ? (usageMonthResponse.json() as Promise<MemberUsagePayload>)
+            : Promise.resolve(null),
+          usageWeekResponse.ok
+            ? (usageWeekResponse.json() as Promise<MemberUsagePayload>)
+            : Promise.resolve(null),
+        ])
+      const usageByRange = {
+        all: new Map(
+          (usageAllPayload?.data?.members ?? []).map((member) => [
+            member.id,
+            member.usage?.tokens ?? 0,
+          ])
+        ),
+        month: new Map(
+          (usageMonthPayload?.data?.members ?? []).map((member) => [
+            member.id,
+            member.usage?.tokens ?? 0,
+          ])
+        ),
+        week: new Map(
+          (usageWeekPayload?.data?.members ?? []).map((member) => [
+            member.id,
+            member.usage?.tokens ?? 0,
+          ])
+        ),
+      }
       setCurrentMemberRole(payload.data?.currentMemberRole ?? null)
       setSeatsLimit(payload.data?.seatLimit ?? 10)
       setMembers(
@@ -2156,9 +2241,9 @@ function MembersSettingsContent({
               initials,
               avatarUrl: user?.avatar_url ?? "",
               creditsUsage: {
-                allTime: 0,
-                thisMonth: 0,
-                thisWeek: 0,
+                allTime: user?.id ? usageByRange.all.get(user.id) ?? 0 : 0,
+                thisMonth: user?.id ? usageByRange.month.get(user.id) ?? 0 : 0,
+                thisWeek: user?.id ? usageByRange.week.get(user.id) ?? 0 : 0,
               },
               integratedApps: [],
             }
@@ -2233,44 +2318,13 @@ function MembersSettingsContent({
   )
   const creditsChartData = React.useMemo(() => {
     if (!selectedMember) return [] as { label: string; value: number }[]
-
-    const buildSeries = (total: number, weights: number[]) => {
-      const weightSum = weights.reduce((sum, weight) => sum + weight, 0) || 1
-      return weights.map((weight) =>
-        Math.max(0, Math.round((total * weight) / weightSum))
-      )
-    }
-
     if (creditsRange === "All time") {
-      const labels = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
-      const values = buildSeries(
-        selectedMember.creditsUsage.allTime,
-        [9, 12, 11, 15, 16, 19, 18]
-      )
-      return labels.map((label, index) => ({
-        label,
-        value: values[index] ?? 0,
-      }))
+      return [{ label: "All time", value: selectedMember.creditsUsage.allTime }]
     }
-
     if (creditsRange === "This month") {
-      const labels = ["Week 1", "Week 2", "Week 3", "Week 4"]
-      const values = buildSeries(
-        selectedMember.creditsUsage.thisMonth,
-        [22, 28, 24, 26]
-      )
-      return labels.map((label, index) => ({
-        label,
-        value: values[index] ?? 0,
-      }))
+      return [{ label: "This month", value: selectedMember.creditsUsage.thisMonth }]
     }
-
-    const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    const values = buildSeries(
-      selectedMember.creditsUsage.thisWeek,
-      [12, 16, 15, 14, 13, 17, 13]
-    )
-    return labels.map((label, index) => ({ label, value: values[index] ?? 0 }))
+    return [{ label: "This week", value: selectedMember.creditsUsage.thisWeek }]
   }, [selectedMember, creditsRange])
 
   const addInviteEmails = React.useCallback((raw: string) => {
@@ -2486,7 +2540,7 @@ function MembersSettingsContent({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-muted-foreground">Last login</Label>
+                  <Label className="text-muted-foreground">Joined</Label>
                   <Input
                     value={selectedMember.lastLogin}
                     disabled
@@ -2499,7 +2553,7 @@ function MembersSettingsContent({
             <section className="space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-foreground">
-                  Usage of credits
+                  Token usage
                 </p>
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -2532,7 +2586,7 @@ function MembersSettingsContent({
               </div>
               <div className="rounded-xl border border-border bg-background px-3 py-2.5">
                 <p className="text-base font-semibold text-foreground">
-                  {formattedCreditsUsage} credits
+                  {formattedCreditsUsage} tokens
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Consumption for {creditsRange.toLowerCase()}.
@@ -2540,6 +2594,7 @@ function MembersSettingsContent({
                 <BarInteractive
                   data={creditsChartData}
                   className="mt-2.5 h-44"
+                  unit="tokens"
                 />
               </div>
             </section>
@@ -2695,7 +2750,7 @@ function MembersSettingsContent({
                     <th className="w-[24%] px-2.5 py-1.5 text-left font-medium">
                       <span className="inline-flex items-center gap-1.5">
                         <Clock3 className="h-3.5 w-3.5" />
-                        Last login
+                        Joined
                       </span>
                     </th>
                     <th className="w-11 px-2 py-1.5 text-center font-medium">
@@ -8173,7 +8228,7 @@ function RequestsConsoleContent() {
               }
             />
           ) : (
-            <div className="no-scrollbar max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border">
+            <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border">
               <table className="w-max min-w-[74rem] text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
@@ -8369,6 +8424,10 @@ function parseStoredAppearanceSettings(
         parsed.fontScale === "bigger"
           ? parsed.fontScale
           : fallbackSettings.fontScale,
+      soundsEnabled:
+        typeof parsed.soundsEnabled === "boolean"
+          ? parsed.soundsEnabled
+          : fallbackSettings.soundsEnabled,
     } satisfies AppearanceSettings
   } catch {
     return fallbackSettings
@@ -8446,6 +8505,36 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     .join("") || "U"
   const userPreferenceKey = liveUser?.id ?? liveUser?.email ?? null
 
+  const saveThemePreference = React.useCallback(
+    (nextTheme: AppearanceTheme) => {
+      setTheme(nextTheme)
+      if (typeof window === "undefined") return
+
+      const fallbackSettings: AppearanceSettings = {
+        theme: nextTheme,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        language: "English",
+        fontScale: "default",
+        soundsEnabled: true,
+      }
+      const storageKey = appearanceSettingsStorageKey(userPreferenceKey)
+      const rawSettings =
+        window.localStorage.getItem(storageKey) ??
+        window.localStorage.getItem(ATMET_APPEARANCE_SETTINGS_STORAGE_KEY)
+      const currentSettings = parseStoredAppearanceSettings(
+        rawSettings,
+        fallbackSettings
+      )
+      const nextSettings: AppearanceSettings = {
+        ...currentSettings,
+        theme: nextTheme,
+      }
+
+      window.localStorage.setItem(storageKey, JSON.stringify(nextSettings))
+    },
+    [setTheme, userPreferenceKey]
+  )
+
   React.useEffect(() => {
     applyFixedPrimaryColor()
     if (typeof window === "undefined" || !userPreferenceKey) return
@@ -8455,10 +8544,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       language: "English",
       fontScale: "default",
+      soundsEnabled: true,
     }
     const rawSettings =
       window.localStorage.getItem(appearanceSettingsStorageKey(userPreferenceKey)) ??
-      window.localStorage.getItem(APPEARANCE_SETTINGS_STORAGE_KEY)
+      window.localStorage.getItem(ATMET_APPEARANCE_SETTINGS_STORAGE_KEY)
     const settings = parseStoredAppearanceSettings(rawSettings, fallbackSettings)
 
     setTheme(settings.theme)
@@ -9042,7 +9132,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           className="h-3.5 w-3.5 shrink-0 opacity-80"
                         />
                       ) : (
-                        <item.icon className="h-3.5 w-3.5 shrink-0 opacity-80" stroke={1.5} />
+                        <item.icon
+                          className="h-3.5 w-3.5 shrink-0 opacity-80"
+                          stroke={1.5}
+                        />
                       )}
                       <span>{item.title}</span>
                     </SidebarMenuButton>
@@ -9630,7 +9723,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <DropdownMenuContent align="end" side="top" className="w-56">
                 <DropdownMenuItem
                   onClick={() =>
-                    setTheme(resolvedTheme === "dark" ? "light" : "dark")
+                    saveThemePreference(
+                      resolvedTheme === "dark" ? "light" : "dark"
+                    )
                   }
                 >
                   {resolvedTheme === "dark" ? (

@@ -393,6 +393,7 @@ export default function WaitlistPage() {
               <Button
                 type="submit"
                 size="sm"
+                data-cuelume-press
                 data-auth-primary-action="true"
                 className="mt-2 w-full transition-transform active:scale-[0.96] sm:col-span-2"
                 disabled={isSubmitting}
