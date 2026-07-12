@@ -1,12 +1,16 @@
+'use client'
+
 import { Map } from '@/components/map'
+import { useLandingPage } from '@/components/landing-page-context'
 
 export function StatsSection() {
+    const { t } = useLandingPage()
+
     return (
         <section
             id="results"
-            data-theme="dark"
             className="bg-background">
-            <div className="@container py-12 md:py-20">
+            <div className="@container py-10 md:py-14">
                 <div className="mx-auto max-w-5xl px-6">
                     <div className="mask-t-from-35% mask-b-from-75%">
                         <Map />
@@ -17,16 +21,16 @@ export function StatsSection() {
                         <div className="**:text-center @max-2xl:max-w-2xs @max-2xl:mx-auto @max-2xl:gap-6 @2xl:grid-cols-3 grid *:px-6">
                             <div className="space-y-4 *:block">
                                 <span className="text-3xl font-semibold">
-                                    99.9 <span className="text-muted-foreground text-lg">%</span>
+                                    85.0 <span className="text-muted-foreground text-lg">%</span>
                                 </span>
                                 <p className="text-muted-foreground text-balance text-sm">
-                                    <strong className="text-foreground font-medium">Operational visibility</strong> across connected workflows.
+                                    <strong className="text-foreground font-medium">{t.stats.visibility}</strong> {t.stats.visibilityText}
                                 </p>
                             </div>
                             <div className="space-y-4 *:block">
                                 <span className="text-3xl font-semibold">24/7</span>
                                 <p className="text-muted-foreground text-balance text-sm">
-                                    <strong className="text-foreground font-medium">Always-on agents</strong> ready for scheduled business work.
+                                    <strong className="text-foreground font-medium">{t.stats.always}</strong> {t.stats.alwaysText}
                                 </p>
                             </div>
                             <div className="space-y-4 *:block">
@@ -34,7 +38,7 @@ export function StatsSection() {
                                     12 <span className="text-muted-foreground text-lg">X</span>
                                 </span>
                                 <p className="text-muted-foreground text-balance text-sm">
-                                    <strong className="text-foreground font-medium">12X</strong> more repeatable workflows with less manual handoff.
+                                    <strong className="text-foreground font-medium">{t.stats.repeatable}</strong> {t.stats.repeatableText}
                                 </p>
                             </div>
                         </div>

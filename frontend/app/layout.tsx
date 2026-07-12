@@ -1,6 +1,6 @@
 import { Suspense } from "react"
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from "next/font/google"
 import { headers } from "next/headers"
 
 import "./globals.css"
@@ -21,6 +21,12 @@ const fontSans = Geist({
 const fontMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+})
+
+const fontArabic = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-arabic",
 })
 
 export const metadata: Metadata = {
@@ -83,7 +89,7 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", fontSans.variable)}
+      className={cn("antialiased", fontMono.variable, fontSans.variable, fontArabic.variable, "font-sans")}
     >
       <body>
         <ThemeProvider>

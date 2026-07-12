@@ -4,14 +4,24 @@ import { cn } from "@/lib/utils"
 
 export const Logo = ({ className }: { className?: string; uniColor?: boolean }) => {
   return (
-    <Image
-      src="/Logos/Atmet%20Darkmode.png"
-      alt="Atmet"
-      width={1781}
-      height={337}
-      priority
-      className={cn("h-5 w-auto object-contain", className)}
-    />
+    <span className={cn("relative inline-flex h-5 w-[5.3rem] items-center", className)}>
+      <Image
+        src="/Logos/Atmet%20Whitemode.png"
+        alt="Atmet"
+        width={1781}
+        height={337}
+        priority
+        className="h-full w-auto object-contain dark:hidden"
+      />
+      <Image
+        src="/Logos/Atmet%20Darkmode.png"
+        alt="Atmet"
+        width={1781}
+        height={337}
+        priority
+        className="hidden h-full w-auto object-contain dark:block"
+      />
+    </span>
   )
 }
 
