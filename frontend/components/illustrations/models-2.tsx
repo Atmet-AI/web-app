@@ -25,7 +25,7 @@ export const Models2Illustration = () => {
             <div className="relative mx-auto max-w-md">
                 <Gemini className="absolute left-1/2 top-1/2 z-0 size-14 -translate-x-1/2 -translate-y-1/2 blur-md dark:opacity-50" />
 
-                <div className="shadow-black/6.5 inset-shadow-sm dark:inset-shadow-foreground/6.5 not-dark:bg-illustration absolute left-1/2 top-1/2 z-0 size-14 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-lg shadow-[inset_0_0_0_1px_rgb(30_144_255/0.16)]" />
+                <div className="not-dark:bg-illustration absolute left-1/2 top-1/2 z-0 size-14 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/20" />
 
                 <div className="relative z-10 grid grid-cols-5 items-center">
                     {models.map((model, index) => (

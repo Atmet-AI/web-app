@@ -16,7 +16,7 @@ export function MoreFeatures() {
                             </div>
                         </div>
                     </div>
-                    <div className="@xl:grid-cols-2 mt-16 grid gap-6 [--color-border:color-mix(in_oklab,var(--color-foreground)10%,transparent)] *:shadow-lg *:shadow-black/5 lg:-mx-8">
+                    <div className="@xl:grid-cols-2 mt-16 grid gap-6 [--color-border:color-mix(in_oklab,var(--color-foreground)10%,transparent)] lg:-mx-8">
                         <Card className="group grid grid-rows-[auto_1fr] gap-8 rounded-2xl p-8">
                             <div>
                                 <h3 className="text-foreground font-semibold">Human approval where it counts</h3>

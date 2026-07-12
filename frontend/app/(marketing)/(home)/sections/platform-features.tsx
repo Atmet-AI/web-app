@@ -5,9 +5,10 @@ import { AiMemoryIllustration } from '@/components/illustrations/ai-memory'
 import { AiSearch2Illustration } from '@/components/illustrations/ai-search-2'
 import { Models2Illustration } from '@/components/illustrations/models-2'
 import { useLandingPage } from '@/components/landing-page-context'
+import { cn } from '@/lib/utils'
 
 export function PlatformFeatures() {
-    const { t } = useLandingPage()
+    const { language, t } = useLandingPage()
 
     return (
         <section id="platform">
@@ -16,13 +17,13 @@ export function PlatformFeatures() {
                     <div>
                         <span className="text-primary font-mono text-sm uppercase">{t.platform.eyebrow}</span>
                         <div className="mt-8 grid items-end gap-6 md:grid-cols-2">
-                            <h2 className="text-foreground text-4xl font-semibold md:text-5xl">{t.platform.title}</h2>
+                            <h2 className={cn("text-foreground text-4xl font-semibold md:text-5xl", language === 'ar' && 'font-thmanyah-serif-display')}>{t.platform.title}</h2>
                             <div className="lg:ps-12">
                                 <p className="text-muted-foreground text-balance">{t.platform.description}</p>
                             </div>
                         </div>
                     </div>
-                    <div className="@2xl:grid-cols-2 @2xl:grid-rows-5 mt-16 grid gap-6 [--color-border:color-mix(in_oklab,var(--color-foreground)10%,transparent)] *:shadow-lg *:shadow-black/5 lg:-mx-8">
+                    <div className="@2xl:grid-cols-2 @2xl:grid-rows-5 mt-16 grid gap-6 [--color-border:color-mix(in_oklab,var(--color-foreground)10%,transparent)] lg:-mx-8">
                         <Card className="@2xl:row-span-3 group grid grid-rows-[auto_1fr] rounded-2xl p-0">
                             <div className="text-balance p-8">
                                 <h3 className="text-foreground font-semibold">{t.platform.skillsTitle}</h3>

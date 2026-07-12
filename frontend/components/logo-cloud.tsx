@@ -129,18 +129,32 @@ const streamingLogos: React.ReactNode[] = [
     />,
 ]
 
-const logos: Record<'ai' | 'hosting' | 'streaming' | 'payments', React.ReactNode[]> = {
-    ai: aiLogos,
-    hosting: hostingLogos,
-    payments: paymentsLogos,
-    streaming: streamingLogos,
+const logos: Record<'operations' | 'finance' | 'engineering' | 'sales' | 'marketing' | 'more', React.ReactNode[]> = {
+    operations: aiLogos,
+    finance: paymentsLogos,
+    engineering: hostingLogos,
+    sales: streamingLogos,
+    marketing: [
+        <Hulu key="hulu-marketing" height={22} width="auto" />,
+        <Spotify key="spotify-marketing" height={24} width="auto" />,
+        <Primevideo key="primevideo-marketing" height={28} width="auto" />,
+        <Beacon key="beacon-marketing" height={20} width="auto" />,
+        <OpenAIFull key="openai-marketing" height={24} width="auto" />,
+    ],
+    more: [
+        <Supabase key="supabase-more" height={24} width="auto" />,
+        <VercelFull key="vercel-more" height={20} width="auto" />,
+        <Cisco key="cisco-more" height={32} width="auto" />,
+        <PayPal key="paypal-more" height={24} width="auto" />,
+        <Bolt key="bolt-more" height={20} width="auto" />,
+    ],
 }
 
 type LogoGroup = keyof typeof logos
 
 export function LogoCloud() {
     const { t } = useLandingPage()
-    const [currentGroup, setCurrentGroup] = useState<LogoGroup>('ai')
+    const [currentGroup, setCurrentGroup] = useState<LogoGroup>('operations')
     const currentWordClasses = (group: LogoGroup) =>
         group === currentGroup
             ? 'ui-badge ui-badge-blue inline-flex w-fit shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border-0 px-1.5 py-0.5 font-medium leading-none transition-colors'
@@ -161,30 +175,40 @@ export function LogoCloud() {
 
     return (
         <section
-            className="bg-background pb-16">
+            className="bg-background pb-16 pt-12 md:pt-16">
             <div className="mx-auto max-w-5xl px-6">
-                <div className="mx-auto mb-12 max-w-3xl text-balance text-center md:mb-16">
+                <div className="mx-auto mb-8 max-w-3xl text-balance text-center md:mb-10">
                     <p className="text-muted-foreground text-xl md:text-2xl">
                         {t.logoCloud.prefix}{' '}
                         <span
-                            data-slot={currentGroup === 'ai' ? 'badge' : undefined}
-                            className={currentWordClasses('ai')}>
-                            {t.logoCloud.ai}
-                        </span>{' '}
-                        <span
-                            data-slot={currentGroup === 'hosting' ? 'badge' : undefined}
-                            className={currentWordClasses('hosting')}>
+                            data-slot={currentGroup === 'operations' ? 'badge' : undefined}
+                            className={currentWordClasses('operations')}>
                             {t.logoCloud.operations}
                         </span>{' '}
                         <span
-                            data-slot={currentGroup === 'payments' ? 'badge' : undefined}
-                            className={currentWordClasses('payments')}>
+                            data-slot={currentGroup === 'finance' ? 'badge' : undefined}
+                            className={currentWordClasses('finance')}>
                             {t.logoCloud.finance}
                         </span>{' '}
                         <span
-                            data-slot={currentGroup === 'streaming' ? 'badge' : undefined}
-                            className={currentWordClasses('streaming')}>
-                            {t.logoCloud.customer}
+                            data-slot={currentGroup === 'engineering' ? 'badge' : undefined}
+                            className={currentWordClasses('engineering')}>
+                            {t.logoCloud.engineering}
+                        </span>{' '}
+                        <span
+                            data-slot={currentGroup === 'sales' ? 'badge' : undefined}
+                            className={currentWordClasses('sales')}>
+                            {t.logoCloud.sales}
+                        </span>{' '}
+                        <span
+                            data-slot={currentGroup === 'marketing' ? 'badge' : undefined}
+                            className={currentWordClasses('marketing')}>
+                            {t.logoCloud.marketing}
+                        </span>{' '}
+                        <span
+                            data-slot={currentGroup === 'more' ? 'badge' : undefined}
+                            className={currentWordClasses('more')}>
+                            {t.logoCloud.more}
                         </span>
                     </p>
                 </div>

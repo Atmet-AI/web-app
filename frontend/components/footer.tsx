@@ -50,12 +50,12 @@ export default function FooterSection() {
                                 className="space-y-4 text-sm">
                                 <span className="block font-medium">{link.group}</span>
 
-                                <div className="flex flex-wrap gap-4 sm:flex-col">
+                                <div className="flex flex-wrap gap-2 sm:flex-col">
                                     {link.items.map((item, index) => (
                                         <a
                                             key={index}
                                             href={item.href}
-                                            className="text-muted-foreground hover:text-primary block duration-150">
+                                            className="inline-flex w-fit rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground">
                                             <span>{item.title}</span>
                                         </a>
                                     ))}
@@ -65,30 +65,13 @@ export default function FooterSection() {
 
                         <div className="space-y-4">
                             <span className="block font-medium">{t.footer.community}</span>
-                            <div className="flex flex-wrap gap-3 text-sm">
-                                <a
-                                    href="#"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    aria-label="X/Twitter"
-                                    className="text-muted-foreground hover:text-primary block">
-                                    <svg
-                                        className="size-5"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        width="1em"
-                                        height="1em"
-                                        viewBox="0 0 24 24">
-                                        <path
-                                            fill="currentColor"
-                                            d="M10.488 14.651L15.25 21h7l-7.858-10.478L20.93 3h-2.65l-5.117 5.886L8.75 3h-7l7.51 10.015L2.32 21h2.65zM16.25 19L5.75 5h2l10.5 14z"></path>
-                                    </svg>
-                                </a>
+                            <div className="flex flex-wrap gap-2 text-sm">
                                 <a
                                     href="#"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     aria-label="LinkedIn"
-                                    className="text-muted-foreground hover:text-primary block">
+                                    className="inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground">
                                     <svg
                                         className="size-5"
                                         xmlns="http://www.w3.org/2000/svg"

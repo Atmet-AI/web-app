@@ -49,21 +49,20 @@ export default function Header() {
             data-state={isMobileMenuOpen ? 'active' : 'inactive'}
             {...(isScrolled && { 'data-scrolled': true })}
             className="pointer-events-none fixed inset-x-0 top-4 z-50 px-4">
-            <div className="mx-auto flex max-w-[72rem] items-start justify-center gap-2">
             <div
                 className={cn(
-                    'pointer-events-auto h-12 w-full max-w-4xl overflow-hidden rounded-xl border border-border/70 bg-background/72 shadow-xl shadow-black/10 ring-1 ring-border/50 backdrop-blur-xl transition-all duration-300 dark:shadow-black/20',
-                    'in-data-scrolled:bg-background/86 in-data-scrolled:shadow-black/15 dark:in-data-scrolled:shadow-black/30',
+                    'pointer-events-auto mx-auto h-11 w-full max-w-5xl overflow-hidden rounded-xl border border-border/70 bg-background/72 ring-1 ring-border/50 backdrop-blur-xl transition-all duration-300',
+                    'in-data-scrolled:bg-background/86',
                     'max-lg:in-data-[state=active]:h-[calc(100svh-2rem)] max-lg:in-data-[state=active]:bg-background/94'
                 )}>
-                <div className="h-full px-4 sm:px-5">
+                <div className="h-full px-3 sm:px-4">
                     <div className="relative flex h-full flex-wrap items-center justify-between">
                         <div className="flex h-full items-center justify-between gap-6 max-lg:h-12 max-lg:w-full max-lg:border-b max-lg:border-foreground/10">
                             <a
                                 href="/landing-page"
                                 aria-label="home"
                                 className="inline-flex items-center">
-                                <Logo className="h-[1.125rem]" />
+                                <Logo className="h-4" />
                             </a>
 
                             <button
@@ -78,12 +77,12 @@ export default function Header() {
                         <nav
                             aria-label="Primary"
                             className="absolute inset-0 m-auto hidden h-fit w-fit lg:block">
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5">
                                 {navLinks.map((link) => (
                                     <a
                                         key={link.name}
                                         href={link.href}
-                                        className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground">
+                                        className="inline-flex h-7 items-center rounded-md px-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground">
                                         {link.name}
                                     </a>
                                 ))}
@@ -92,7 +91,7 @@ export default function Header() {
 
                         {isMobileMenuOpen && <MobileMenu closeMenu={() => setIsMobileMenuOpen(false)} />}
 
-                        <div className="max-lg:in-data-[state=active]:mt-6 in-data-[state=active]:flex hidden w-full flex-wrap items-center justify-end md:flex-nowrap lg:m-0 lg:flex lg:h-full lg:w-fit lg:gap-1.5 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none dark:shadow-none dark:lg:bg-transparent">
+                        <div className="max-lg:in-data-[state=active]:mt-6 in-data-[state=active]:flex hidden w-full flex-wrap items-center justify-end md:flex-nowrap lg:m-0 lg:flex lg:h-full lg:w-fit lg:gap-1 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none dark:shadow-none dark:lg:bg-transparent">
                             {actionLinks.map((link) => (
                                 <a
                                     key={link.name}
@@ -106,26 +105,23 @@ export default function Header() {
                                     {link.name}
                                 </a>
                             ))}
+                            <button
+                                type="button"
+                                onClick={toggleTheme}
+                                aria-label={theme === 'dark' ? t.controls.themeLight : t.controls.themeDark}
+                                className="inline-flex size-7 items-center justify-center rounded-md bg-muted text-foreground transition-colors hover:bg-muted/75">
+                                {theme === 'dark' ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={toggleLanguage}
+                                aria-label={t.controls.language}
+                                className="inline-flex size-7 items-center justify-center rounded-md bg-muted text-foreground transition-colors hover:bg-muted/75">
+                                <Languages className="size-3.5" />
+                            </button>
                         </div>
                     </div>
                 </div>
-            </div>
-            <div className="pointer-events-auto hidden h-12 items-center gap-1.5 rounded-xl border border-border/70 bg-background/72 px-2 shadow-xl shadow-black/10 ring-1 ring-border/50 backdrop-blur-xl lg:flex dark:shadow-black/20">
-                <button
-                    type="button"
-                    onClick={toggleTheme}
-                    aria-label={theme === 'dark' ? t.controls.themeLight : t.controls.themeDark}
-                    className="inline-flex h-7 items-center justify-center rounded-md bg-muted px-2 text-[12px] font-semibold text-foreground transition-colors hover:bg-muted/75">
-                    {theme === 'dark' ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
-                </button>
-                <button
-                    type="button"
-                    onClick={toggleLanguage}
-                    className="inline-flex h-7 items-center gap-1 rounded-md bg-muted px-2 text-[12px] font-semibold text-foreground transition-colors hover:bg-muted/75">
-                    <Languages className="size-3.5" />
-                    {t.controls.language}
-                </button>
-            </div>
             </div>
         </header>
     )
