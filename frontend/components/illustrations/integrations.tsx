@@ -17,10 +17,7 @@ export const IntegrationsIllustration = () => {
                 {t.illustrations.integrationsTitle}
             </div>
             <div className="relative">
-                <div className="absolute inset-0 scale-100 blur-lg opacity-20 transition-all duration-300 dark:opacity-35">
-                    <div className="absolute inset-x-6 bottom-0 top-12 -translate-y-3 bg-primary/70"></div>
-                </div>
-                <div className="bg-card ring-border relative overflow-hidden rounded-2xl border border-border px-6 py-3 shadow-md shadow-black/5 ring-1 before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_55%_50%,rgb(30_144_255/0.18),transparent_62%)] dark:before:bg-[radial-gradient(circle_at_55%_50%,rgb(30_144_255/0.28),transparent_62%)]">
+                <div className="bg-card ring-border relative overflow-hidden rounded-2xl border border-border px-6 py-3 ring-1 before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_55%_50%,rgb(30_144_255/0.18),transparent_62%)] dark:before:bg-[radial-gradient(circle_at_55%_50%,rgb(30_144_255/0.28),transparent_62%)]">
                     <Integration
                         icon={<Mail className="text-red-500" />}
                         name={integrations[0][0]}

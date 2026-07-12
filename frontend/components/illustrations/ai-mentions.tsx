@@ -23,7 +23,7 @@ export const AiMentionsIllustration = () => {
     return (
         <div
             aria-hidden
-            className="w-full min-w-0 rounded-2xl border border-border p-3 shadow-[inset_0_0_0_1px_rgb(30_144_255/0.08)]">
+            className="w-full min-w-0 rounded-2xl border border-border p-3">
             <div className="text-muted-foreground relative rounded-lg border border-border p-3 text-xs leading-relaxed">
                 {t.illustrations.requestLines.map((line) => (
                     <span key={line}>
@@ -38,7 +38,7 @@ export const AiMentionsIllustration = () => {
                 </span>
             </div>
 
-            <div className="bg-card shadow-black/6.5 mt-2 overflow-hidden rounded-xl border border-border shadow-lg">
+            <div className="bg-card mt-2 overflow-hidden rounded-xl border border-border">
                 <div className="divide-y divide-border">
                     {results.map((result, index) => (
                         <div

@@ -13,10 +13,40 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Thmanyah Serif Display";
+  src: url("/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Thmanyah Serif Display";
+  src: url("/thmanyahserifdisplay/woff2/thmanyahserifdisplay-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 .font-redaction-35-italic {
   font-family: "Redaction 35", serif;
   font-style: italic;
   font-weight: 400;
+}
+
+.font-thmanyah-serif-display {
+  font-family: "Thmanyah Serif Display", var(--font-arabic), "IBM Plex Sans Arabic", serif !important;
+  font-weight: 700;
+  line-height: 1.18;
+  word-spacing: 0.08em;
+}
+
+.font-arabic-ibm .font-thmanyah-serif-display,
+.font-arabic-ibm .font-thmanyah-serif-display *:not(svg):not(path) {
+  font-family: "Thmanyah Serif Display", var(--font-arabic), "IBM Plex Sans Arabic", serif !important;
+  line-height: 1.18;
+  word-spacing: 0.08em;
 }
 
 .font-arabic-ibm {
@@ -24,7 +54,7 @@
 }
 
 .font-arabic-ibm,
-.font-arabic-ibm *:not(svg):not(path) {
+.font-arabic-ibm *:not(svg):not(path):not(.font-thmanyah-serif-display):not(.font-thmanyah-serif-display *) {
   font-family: var(--font-arabic), "IBM Plex Sans Arabic", var(--font-sans), sans-serif !important;
 }
 

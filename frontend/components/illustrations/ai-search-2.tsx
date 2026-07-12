@@ -45,12 +45,12 @@ export const AiSearch2Illustration = () => {
             className="relative w-full min-w-0">
             <div className="perspective-dramatic flex flex-col gap-4">
                 <div className="mask-radial-[100%_100%] mask-radial-from-75% mask-radial-at-top-left rotate-x-3 -rotate-4 rotate-z-6 space-y-3 ps-6 pt-1">
-                    <div className="bg-card/75 shadow-black/6.5 rounded-2xl border border-border p-2 shadow-lg shadow-[inset_0_0_0_1px_rgb(30_144_255/0.12)]">
+                    <div className="bg-card/75 rounded-2xl border border-border p-2">
                         <div className="flex items-center gap-2 p-4">
                             <Search className="size-4" />
                             <span className="">{t.illustrations.skillSearch}</span>
                         </div>
-                        <div className="bg-card shadow-black/6.5 divide-y divide-border rounded-2xl border border-border shadow shadow-[inset_0_0_0_1px_rgb(30_144_255/0.1)]">
+                        <div className="bg-card divide-y divide-border rounded-2xl border border-border">
                             {results.map((result, index) => (
                                 <div
                                     key={index}

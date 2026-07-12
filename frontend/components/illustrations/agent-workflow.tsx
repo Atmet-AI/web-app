@@ -10,7 +10,7 @@ export const AgentWorkflowIllustration = () => {
         <div
             aria-hidden
             className="before:bg-card after:bg-card/75 before:z-1 group relative w-full min-w-0 px-2 pb-1 pt-6 before:absolute before:inset-x-4 before:bottom-4 before:top-4 before:rounded-2xl before:border before:border-border before:backdrop-blur after:absolute after:inset-x-7 after:bottom-4 after:top-2 after:rounded-2xl after:border after:border-border/70">
-            <div className="bg-card shadow-black/6.5 relative z-10 rounded-2xl border border-border p-6 shadow-lg">
+            <div className="bg-card relative z-10 rounded-2xl border border-border p-6">
                 <div className="text-base font-medium">{t.illustrations.workflow}</div>
 
                 <div className="mt-4 space-y-0.5">
@@ -74,7 +74,7 @@ export const AgentWorkflowIllustration = () => {
 }
 
 const LogoContainer = ({ children }: { children: React.ReactNode }) => {
-    return <div className="bg-linear-to-b from-muted to-background inset-ring-3 inset-ring-background bg-card flex size-10 items-center justify-center rounded-lg border border-border shadow-md">{children}</div>
+    return <div className="bg-linear-to-b from-muted to-background inset-ring-3 inset-ring-background bg-card flex size-10 items-center justify-center rounded-lg border border-border">{children}</div>
 }
 
 export default AgentWorkflowIllustration
