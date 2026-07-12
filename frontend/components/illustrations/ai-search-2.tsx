@@ -1,6 +1,9 @@
+'use client'
+
 import { Figma } from '@/components/ui/svgs/figma'
 import { Drive } from '@/components/ui/svgs/drive'
 import { Search } from 'lucide-react'
+import { useLandingPage } from '@/components/landing-page-context'
 
 type Result = {
     title: string
@@ -11,6 +14,7 @@ type Result = {
 }
 
 export const AiSearch2Illustration = () => {
+    const { t } = useLandingPage()
     const results: Result[] = [
         {
             title: 'Hero Section Illustrations Pack',
@@ -41,12 +45,12 @@ export const AiSearch2Illustration = () => {
             className="relative w-full min-w-0">
             <div className="perspective-dramatic flex flex-col gap-4">
                 <div className="mask-radial-[100%_100%] mask-radial-from-75% mask-radial-at-top-left rotate-x-3 -rotate-4 rotate-z-6 space-y-3 ps-6 pt-1">
-                    <div className="bg-card/75 ring-border-illustration shadow-black/6.5 rounded-2xl p-2 shadow-lg ring-1">
+                    <div className="bg-card/75 shadow-black/6.5 rounded-2xl border border-border p-2 shadow-lg shadow-[inset_0_0_0_1px_rgb(30_144_255/0.12)]">
                         <div className="flex items-center gap-2 p-4">
                             <Search className="size-4" />
-                            <span className="">Best illustrations for our Marketing website</span>
+                            <span className="">{t.illustrations.skillSearch}</span>
                         </div>
-                        <div className="bg-illustration ring-border-illustration shadow-black/6.5 divide-y rounded-2xl shadow ring-1">
+                        <div className="bg-card shadow-black/6.5 divide-y divide-border rounded-2xl border border-border shadow shadow-[inset_0_0_0_1px_rgb(30_144_255/0.1)]">
                             {results.map((result, index) => (
                                 <div
                                     key={index}
@@ -63,9 +67,9 @@ export const AiSearch2Illustration = () => {
                                     </div>
 
                                     <div className="flex-1 space-y-1">
-                                        <div className="font-medium">{result.title}</div>
+                                        <div className="font-medium">{t.illustrations.skillResults[index][0]}</div>
                                         <span className="text-foreground block text-xs">
-                                            From <span className="text-muted-foreground"> {result.filename}</span>
+                                            <span className="text-muted-foreground"> {t.illustrations.skillResults[index][1]}</span>
                                         </span>
                                     </div>
                                 </div>

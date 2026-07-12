@@ -15,6 +15,7 @@ import { VercelWordmark as VercelFull } from '@/components/ui/svgs/vercel'
 import { Spotify } from '@/components/ui/svgs/spotify'
 import { Paypal as PayPal } from '@/components/ui/svgs/paypal'
 import { LeapWalletDark as LeapWallet } from '@/components/ui/svgs/leap-wallet'
+import { useLandingPage } from '@/components/landing-page-context'
 
 const aiLogos: React.ReactNode[] = [
     <OpenAIFull
@@ -138,6 +139,7 @@ const logos: Record<'ai' | 'hosting' | 'streaming' | 'payments', React.ReactNode
 type LogoGroup = keyof typeof logos
 
 export function LogoCloud() {
+    const { t } = useLandingPage()
     const [currentGroup, setCurrentGroup] = useState<LogoGroup>('ai')
     const currentWordClasses = (group: LogoGroup) =>
         group === currentGroup
@@ -159,31 +161,30 @@ export function LogoCloud() {
 
     return (
         <section
-            data-theme="dark"
             className="bg-background pb-16">
             <div className="mx-auto max-w-5xl px-6">
-                <div className="mx-auto mb-12 max-w-xl text-balance text-center md:mb-16">
-                    <p className="text-muted-foreground text-lg">
-                        Atmet connects the tools modern teams already use across{' '}
+                <div className="mx-auto mb-12 max-w-3xl text-balance text-center md:mb-16">
+                    <p className="text-muted-foreground text-xl md:text-2xl">
+                        {t.logoCloud.prefix}{' '}
                         <span
                             data-slot={currentGroup === 'ai' ? 'badge' : undefined}
                             className={currentWordClasses('ai')}>
-                            AI work,
+                            {t.logoCloud.ai}
                         </span>{' '}
                         <span
                             data-slot={currentGroup === 'hosting' ? 'badge' : undefined}
                             className={currentWordClasses('hosting')}>
-                            operations,
+                            {t.logoCloud.operations}
                         </span>{' '}
                         <span
                             data-slot={currentGroup === 'payments' ? 'badge' : undefined}
                             className={currentWordClasses('payments')}>
-                            finance,
+                            {t.logoCloud.finance}
                         </span>{' '}
                         <span
                             data-slot={currentGroup === 'streaming' ? 'badge' : undefined}
                             className={currentWordClasses('streaming')}>
-                            and customer workflows
+                            {t.logoCloud.customer}
                         </span>
                     </p>
                 </div>

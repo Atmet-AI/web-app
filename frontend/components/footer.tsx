@@ -1,50 +1,33 @@
-import { Logo } from '@/components/logo'
+'use client'
 
-const links = [
-    {
-        group: 'Product',
-        items: [
-            {
-                title: 'How it works',
-                href: '#how-it-works',
-            },
-            {
-                title: 'Platform',
-                href: '#platform',
-            },
-            {
-                title: 'Results',
-                href: '#results',
-            },
-            {
-                title: 'Open app',
-                href: 'https://app.atmetai.com/sign-in',
-            },
-        ],
-    },
-    {
-        group: 'Access',
-        items: [
-            {
-                title: 'Join waitlist',
-                href: '/waitlist',
-            },
-            {
-                title: 'Sign in',
-                href: 'https://app.atmetai.com/sign-in',
-            },
-            {
-                title: 'Atmetai.com',
-                href: '/',
-            },
-        ],
-    },
-]
+import { Logo } from '@/components/logo'
+import { useLandingPage } from '@/components/landing-page-context'
 
 export default function FooterSection() {
+    const { t } = useLandingPage()
+    const links = [
+        {
+            group: t.footer.product,
+            items: [
+                { title: t.nav.howItWorks, href: '#how-it-works' },
+                { title: t.footer.platform, href: '#platform' },
+                { title: t.footer.results, href: '#results' },
+                { title: t.footer.openApp, href: 'https://app.atmetai.com/sign-in' },
+            ],
+        },
+        {
+            group: t.footer.access,
+            items: [
+                { title: t.nav.waitlist, href: '/waitlist' },
+                { title: t.footer.signIn, href: 'https://app.atmetai.com/sign-in' },
+                { title: 'Atmetai.com', href: '/' },
+            ],
+        },
+    ]
+
     return (
         <footer
-            data-theme="dark"
+            id="contact"
             role="contentinfo"
             className="bg-background border-t py-8 sm:py-20 lg:pt-32">
             <div className="mx-auto max-w-5xl space-y-16 px-6">
@@ -57,7 +40,7 @@ export default function FooterSection() {
                             <Logo />
                         </a>
 
-                        <p className="text-muted-foreground text-balance text-sm">Atmet is an AI coworker agent that automates repeatable business workflows across your tools.</p>
+                        <p className="text-muted-foreground text-balance text-sm">{t.footer.description}</p>
                     </div>
 
                     <div className="col-span-3 grid gap-6 sm:grid-cols-3">
@@ -81,7 +64,7 @@ export default function FooterSection() {
                         ))}
 
                         <div className="space-y-4">
-                            <span className="block font-medium">Community</span>
+                            <span className="block font-medium">{t.footer.community}</span>
                             <div className="flex flex-wrap gap-3 text-sm">
                                 <a
                                     href="#"
@@ -126,9 +109,9 @@ export default function FooterSection() {
                     className="bg-size-[6px_1px] h-px bg-[linear-gradient(90deg,var(--color-foreground)_1px,transparent_1px)] bg-repeat-x opacity-25"
                 />
                 <div className="flex flex-wrap justify-between gap-4">
-                    <span className="text-muted-foreground text-sm">© {new Date().getFullYear()} Atmet, All rights reserved </span>
+                    <span className="text-muted-foreground text-sm">© {new Date().getFullYear()} Atmet, {t.footer.rights} </span>
 
-                    <span className="text-sm text-emerald-500">Early access open</span>
+                    <span className="text-sm text-emerald-500">{t.footer.earlyAccess}</span>
                 </div>
             </div>
         </footer>

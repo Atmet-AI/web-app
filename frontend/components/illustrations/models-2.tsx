@@ -22,17 +22,19 @@ export const Models2Illustration = () => {
         <div
             aria-hidden
             className="mask-x-from-75% relative w-full min-w-0 py-6">
-            <div className="relative">
-                <Gemini className="absolute inset-0 m-auto size-14 blur-md dark:opacity-50" />
+            <div className="relative mx-auto max-w-md">
+                <Gemini className="absolute left-1/2 top-1/2 z-0 size-14 -translate-x-1/2 -translate-y-1/2 blur-md dark:opacity-50" />
 
-                <div className="ring-border-illustration dark:ring-foreground/15 shadow-black/6.5 inset-shadow-sm dark:inset-shadow-foreground/6.5 not-dark:bg-illustration absolute inset-0 m-auto size-14 rounded-full shadow-lg ring-1" />
+                <div className="shadow-black/6.5 inset-shadow-sm dark:inset-shadow-foreground/6.5 not-dark:bg-illustration absolute left-1/2 top-1/2 z-0 size-14 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-lg shadow-[inset_0_0_0_1px_rgb(30_144_255/0.16)]" />
 
-                <div className="flex items-center gap-6">
+                <div className="relative z-10 grid grid-cols-5 items-center">
                     {models.map((model, index) => (
                         <div
                             key={index}
-                            className="rotate-x-5 not-nth-3:opacity-75 flex size-14 items-center gap-2.5 *:m-auto [&>svg]:size-6">
-                            {model.icon}
+                            className="flex h-14 items-center justify-center">
+                            <div className="rotate-x-5 not-nth-3:opacity-75 flex size-14 items-center justify-center [&>svg]:m-auto [&>svg]:size-7">
+                                {model.icon}
+                            </div>
                         </div>
                     ))}
                 </div>

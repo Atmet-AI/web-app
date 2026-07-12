@@ -19,6 +19,15 @@
   font-weight: 400;
 }
 
+.font-arabic-ibm {
+  font-family: var(--font-arabic), "IBM Plex Sans Arabic", var(--font-sans), sans-serif;
+}
+
+.font-arabic-ibm,
+.font-arabic-ibm *:not(svg):not(path) {
+  font-family: var(--font-arabic), "IBM Plex Sans Arabic", var(--font-sans), sans-serif !important;
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
