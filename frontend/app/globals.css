@@ -446,7 +446,7 @@
   }
   :where([data-slot="dropdown-menu-trigger"]):not(.border-input):not(
       .border-border
-    ) {
+    ):not([data-landing-action-menu-trigger="true"]) {
     border-style: none !important;
     border-width: 0 !important;
     border-color: transparent !important;
@@ -456,7 +456,7 @@
   }
   :where([data-slot="dropdown-menu-trigger"]):not(.border-input):not(
       .border-border
-    ):hover {
+    ):not([data-landing-action-menu-trigger="true"]):hover {
     background-color: var(--color-sidebar-accent) !important;
     color: var(--color-foreground) !important;
   }
