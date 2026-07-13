@@ -246,7 +246,7 @@ export default function WaitlistPage() {
           >
             <div className="text-center">
               <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
-                Join the waitlist
+                Join waitlist
               </h1>
               <p className="mt-2 text-pretty text-sm text-muted-foreground">
                 Tell us a little about yourself and we&apos;ll be in touch.
@@ -399,7 +399,7 @@ export default function WaitlistPage() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                <span>Join the waitlist</span>
+                <span>Join waitlist</span>
                 <Kbd className="h-4 rounded-[calc(min(var(--radius-md),12px)*4/7)] border-transparent bg-primary-foreground/15 px-1 text-[10px] text-primary-foreground">
                   <CornerDownLeft className="h-2.5 w-2.5" />
                 </Kbd>

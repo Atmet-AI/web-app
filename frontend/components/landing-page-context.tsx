@@ -22,10 +22,11 @@ export const landingCopy = {
             docs: 'Docs',
         },
         hero: {
+            badge: 'Join the waitlist | Get early access to the alpha',
             titleStart: 'Your AI coworker agent for',
             titleAccent: 'business workflows',
             subtitle: 'Connect your apps, describe the work, and let Atmet automate repeatable tasks across your business.',
-            waitlist: 'Join the waitlist',
+            waitlist: 'Join waitlist',
             openApp: 'Open app',
         },
         logoCloud: {
@@ -111,6 +112,7 @@ export const landingCopy = {
             chatItems: ['Invoice collection agent', 'Weekly sales summary', 'Support escalation flow'],
             suggestions: ['Create a follow-up agent', 'Analyze overdue invoices', 'Draft customer replies'],
             sidebarItems: ['Build Project', 'Agents', 'Skills', 'Apps'],
+            tabs: ['Build agent', 'Run workflow', 'Connect apps', 'Review output'],
         },
         illustrations: {
             integrationsTitle: 'Integrations',
@@ -120,24 +122,18 @@ export const landingCopy = {
                 ['Instagram', 'Manage social content and audience signals.'],
                 ['Google Sheets', 'Sync spreadsheet data and approvals.'],
             ],
-            requestLines: [
-                'Build an agent for every overdue invoice,',
-                'check the account in HubSpot,',
-                'find the last customer email thread,',
-                'create a task for the account owner,',
-                'and ask me before sending with',
-            ],
+            request: 'When a renewal invoice is 14 days overdue, check the customer health score in HubSpot, summarize the latest email thread, create a follow-up task for the account owner, and ask me to approve the reminder before sending it with',
             suggestions: '3 suggestions',
             navigate: 'to navigate',
-            workflow: 'Workflow',
-            query: 'Query Analysis',
-            queryText: 'Extract intent and entities',
-            context: 'Context Retrieval',
-            contextText: 'Searching vector database',
-            response: 'Response Generation',
-            responseText: 'Run inference with context',
-            output: 'Output Delivery',
-            outputText: 'Stream response to client',
+            workflow: 'Renewal follow-up',
+            query: 'Detect overdue invoice',
+            queryText: 'Watch finance triggers',
+            context: 'Check customer context',
+            contextText: 'Pull CRM and email history',
+            response: 'Draft next action',
+            responseText: 'Prepare reminder and task',
+            output: 'Request approval',
+            outputText: 'Send after manager review',
             pending: 'Pending',
             skillSearch: 'Best skills for operations workflows',
             skillResults: [
@@ -169,8 +165,9 @@ export const landingCopy = {
             docs: 'المستندات',
         },
         hero: {
+            badge: 'انضم للقائمة | احصل على وصول مبكر لنسخة ألفا',
             titleStart: 'أتمت يؤتمت شغلك كامل،',
-            titleAccent: 'ابنِ وكيل ذكاء إصطناعي لأي مجال',
+            titleAccent: 'ابنِ وكيـل ذكاء إصطناعي لأي مجال',
             subtitle: 'اربط تطبيقاتك، صف العمل المطلوب، ودع أتمت يؤتمت المهام المتكررة عبر شركتك.',
             waitlist: 'انضم للقائمة',
             openApp: 'افتح التطبيق',
@@ -258,6 +255,7 @@ export const landingCopy = {
             chatItems: ['وكيل تحصيل الفواتير', 'ملخص المبيعات الأسبوعي', 'تدفق تصعيد الدعم'],
             suggestions: ['أنشئ وكيل متابعة', 'حلل الفواتير المتأخرة', 'اكتب ردود العملاء'],
             sidebarItems: ['بناء مشروع', 'الوكلاء', 'المهارات', 'التطبيقات'],
+            tabs: ['بناء وكيل', 'تشغيل سير العمل', 'ربط التطبيقات', 'مراجعة المخرجات'],
         },
         illustrations: {
             integrationsTitle: 'التكاملات',
@@ -267,24 +265,18 @@ export const landingCopy = {
                 ['Instagram', 'أدر المحتوى الاجتماعي وإشارات الجمهور.'],
                 ['Google Sheets', 'زامن بيانات الجداول والموافقات.'],
             ],
-            requestLines: [
-                'ابن وكيلًا لكل فاتورة متأخرة،',
-                'تحقق من الحساب في HubSpot،',
-                'اعثر على آخر محادثة بريد مع العميل،',
-                'أنشئ مهمة لصاحب الحساب،',
-                'واطلب موافقتي قبل الإرسال مع',
-            ],
+            request: 'عندما تتأخر فاتورة تجديد لمدة ١٤ يومًا، تحقق من درجة صحة العميل في HubSpot، لخّص آخر محادثة بريدية، أنشئ مهمة متابعة لصاحب الحساب، واطلب موافقتي قبل إرسال التذكير مع',
             suggestions: '٣ اقتراحات',
             navigate: 'للتنقل',
-            workflow: 'سير العمل',
-            query: 'تحليل الطلب',
-            queryText: 'استخراج النية والكيانات',
-            context: 'استرجاع السياق',
-            contextText: 'البحث في قاعدة المعرفة',
-            response: 'توليد الرد',
-            responseText: 'تشغيل الاستدلال مع السياق',
-            output: 'تسليم المخرجات',
-            outputText: 'إرسال النتيجة إلى العميل',
+            workflow: 'متابعة التجديد',
+            query: 'اكتشاف فاتورة متأخرة',
+            queryText: 'مراقبة محفزات المالية',
+            context: 'فحص سياق العميل',
+            contextText: 'جلب CRM وسجل البريد',
+            response: 'صياغة الإجراء التالي',
+            responseText: 'تحضير التذكير والمهمة',
+            output: 'طلب الموافقة',
+            outputText: 'الإرسال بعد مراجعة المدير',
             pending: 'قيد الانتظار',
             skillSearch: 'أفضل المهارات لسير عمل العمليات',
             skillResults: [
@@ -341,12 +333,8 @@ export function LandingPageProvider({ children }: { children: React.ReactNode })
     }, [setRootTheme, theme])
 
     const toggleTheme = React.useCallback(() => {
-        setLandingTheme((current) => {
-            const nextTheme = current === 'dark' ? 'light' : 'dark'
-            setRootTheme(nextTheme)
-            return nextTheme
-        })
-    }, [setRootTheme])
+        setLandingTheme((current) => (current === 'dark' ? 'light' : 'dark'))
+    }, [])
 
     React.useEffect(() => {
         window.localStorage.setItem('atmet-landing-language', language)

@@ -25,12 +25,7 @@ export const AiMentionsIllustration = () => {
             aria-hidden
             className="w-full min-w-0 rounded-2xl border border-border p-3">
             <div className="text-muted-foreground relative rounded-lg border border-border p-3 text-xs leading-relaxed">
-                {t.illustrations.requestLines.map((line) => (
-                    <span key={line}>
-                        {line}
-                        <br />
-                    </span>
-                ))}
+                <span>{t.illustrations.request} </span>
                 <span className="relative w-fit items-center">
                     <span className="bg-linear-to-r absolute inset-0 h-5 -translate-y-0.5 via-indigo-500/15 to-emerald-500/15" />
                     <span>@</span>

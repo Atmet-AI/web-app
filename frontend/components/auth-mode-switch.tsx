@@ -19,7 +19,7 @@ export function AuthModeSwitch() {
         href={isWaitlist ? "/sign-in" : "/waitlist"}
         className="inline-flex min-h-10 items-center font-medium text-foreground underline-offset-4 hover:underline"
       >
-        {isWaitlist ? "Sign in" : "Join the waitlist"}
+        {isWaitlist ? "Sign in" : "Join waitlist"}
       </Link>
     </p>
   )

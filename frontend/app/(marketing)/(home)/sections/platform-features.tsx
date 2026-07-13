@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { Card } from '@/components/ui/card'
 import { AiMemoryIllustration } from '@/components/illustrations/ai-memory'
 import { AiSearch2Illustration } from '@/components/illustrations/ai-search-2'
@@ -54,8 +55,28 @@ export function PlatformFeatures() {
                             </div>
                         </Card>
 
-                        <Card className="bg-linear-to-l @2xl:row-span-2 @md:grid-cols-[1fr_auto] grid gap-8 overflow-hidden rounded-2xl from-primary/8 p-8 dark:from-slate-900/50">
-                            <div className="text-balance">
+                        <Card className="bg-linear-to-l @2xl:row-span-2 @md:grid-cols-[1fr_auto] relative grid min-h-80 gap-8 overflow-hidden rounded-2xl from-primary/8 p-8 dark:from-slate-900/50">
+                            <div
+                                aria-hidden="true"
+                                className="pointer-events-none absolute inset-0 z-0">
+                                <Image
+                                    src="/Screenshot%202026-07-13%20at%207.45.13%E2%80%AFPM.png"
+                                    alt=""
+                                    width={898}
+                                    height={776}
+                                    className="absolute bottom-[-24%] end-[-10%] hidden w-[72%] max-w-[28rem] opacity-55 [mask-image:radial-gradient(circle_at_50%_50%,black_0%,black_46%,transparent_72%)] dark:block"
+                                    sizes="(max-width: 768px) calc(100vw - 3rem), 38rem"
+                                />
+                                <Image
+                                    src="/Screenshot%202026-07-13%20at%207.45.08%E2%80%AFPM.png"
+                                    alt=""
+                                    width={898}
+                                    height={776}
+                                    className="absolute bottom-[-24%] end-[-10%] block w-[72%] max-w-[28rem] opacity-60 [mask-image:radial-gradient(circle_at_50%_50%,black_0%,black_46%,transparent_72%)] dark:hidden"
+                                    sizes="(max-width: 768px) calc(100vw - 3rem), 38rem"
+                                />
+                            </div>
+                            <div className="relative z-10 text-balance">
                                 <h3 className="text-foreground font-semibold">{t.platform.automationTitle}</h3>
                                 <p className="text-muted-foreground mt-2">{t.platform.automationDescription}</p>
                             </div>
