@@ -70,6 +70,53 @@ export const landingCopy = {
             automationTitle: 'Full automation, 24/7',
             automationDescription: 'Let agents monitor triggers, run recurring workflows, and complete routine work around the clock.',
         },
+        useCases: {
+            eyebrow: 'Use cases',
+            title: 'Run the work that sits between every team and tool',
+            description: 'Atmet is built for multi-step operations: it watches for triggers, gathers context from your apps, follows your rules, updates systems, and brings people in only when a decision matters.',
+            items: [
+                {
+                    title: 'Finance: order-to-cash and collections',
+                    description: 'When an invoice becomes overdue, Atmet checks payment status, reviews account history, creates owner tasks, drafts the customer reminder, and updates the finance tracker. If the account is strategic or risky, it routes the next action for approval before anything is sent.',
+                },
+                {
+                    title: 'Sales: lead-to-opportunity handoff',
+                    description: 'When a new lead arrives, Atmet enriches the company, checks territory and qualification rules, creates or updates the CRM record, assigns the right owner, and schedules the next step. The rep starts with a clean brief instead of digging through forms, emails, and spreadsheets.',
+                },
+                {
+                    title: 'Customer success: onboarding and renewals',
+                    description: 'After a deal closes, Atmet creates the onboarding project, requests required files, sends kickoff steps, updates the CRM stage, and tracks milestones until go-live. Later, it watches renewal dates, usage signals, and support history so the team can act before risk turns into churn.',
+                },
+                {
+                    title: 'Support: escalation and incident operations',
+                    description: 'Atmet detects urgent tickets, gathers customer history, checks SLA rules, notifies the right team channel, creates an incident task, and prepares a response for review. It keeps the ticket, status page, customer owner, and internal timeline aligned while people handle the judgment calls.',
+                },
+                {
+                    title: 'Retail and ecommerce: inventory exceptions',
+                    description: 'When stock runs low or an order exception appears, Atmet checks inventory, supplier timelines, open purchase orders, and customer impact. It can create replenishment tasks, alert operations, update the storefront or support queue, and escalate anything that affects revenue.',
+                },
+                {
+                    title: 'Healthcare and clinics: patient admin follow-up',
+                    description: 'Atmet can help non-clinical teams coordinate appointment reminders, missing intake forms, insurance follow-ups, and internal task handoffs. It keeps staff focused on patient experience while routine administrative steps move across email, forms, calendars, and practice systems.',
+                },
+                {
+                    title: 'HR: hiring, onboarding, and policy requests',
+                    description: 'Atmet moves candidates through hiring stages, schedules interviews, reminds interviewers, collects feedback, and updates the ATS. For employees, it can route policy questions, prepare onboarding tasks, collect documents, and follow up when steps are stuck.',
+                },
+                {
+                    title: 'IT and security: access and incident workflows',
+                    description: 'When someone requests access, Atmet checks role rules, gathers manager approval, creates provisioning tasks, and records the decision. For incidents, it can collect context from monitoring tools, notify owners, open tickets, and maintain a clear timeline until resolution.',
+                },
+                {
+                    title: 'Legal and compliance: review queues',
+                    description: 'Atmet can intake contract or compliance requests, classify urgency, collect missing details, assign the right reviewer, track approvals, and update the requester. It does not replace judgment; it removes the coordination work around getting the right judgment on time.',
+                },
+                {
+                    title: 'Marketing and agencies: campaign operations',
+                    description: 'Atmet turns briefs into project tasks, assigns owners, collects creative assets, checks review status, prepares publishing checklists, and reminds stakeholders before deadlines slip. Campaign work keeps moving across docs, design files, calendars, and publishing tools.',
+                },
+            ],
+        },
         stats: {
             visibility: 'Operational visibility',
             visibilityText: 'across connected workflows.',
@@ -161,15 +208,15 @@ export const landingCopy = {
             features: 'المزايا',
             useCases: 'حالات الاستخدام',
             contact: 'تواصل',
-            waitlist: 'انضم للقائمة',
+            waitlist: 'قائمة الإنتظار',
             docs: 'المستندات',
         },
         hero: {
-            badge: 'انضم للقائمة | احصل على وصول مبكر لنسخة ألفا',
+            badge: 'قائمة الإنتظار | احصل على وصول مبكر لنسخة ألفا',
             titleStart: 'أتمت يؤتمت شغلك كامل،',
             titleAccent: 'ابنِ وكيـل ذكاء إصطناعي لأي مجال',
             subtitle: 'اربط تطبيقاتك، صف العمل المطلوب، ودع أتمت يؤتمت المهام المتكررة عبر شركتك.',
-            waitlist: 'انضم للقائمة',
+            waitlist: 'قائمة الإنتظار',
             openApp: 'افتح التطبيق',
         },
         logoCloud: {
@@ -213,6 +260,53 @@ export const landingCopy = {
             automationTitle: 'أتمتة كاملة على مدار الساعة',
             automationDescription: 'دع الوكلاء يراقبون المحفزات، يشغلون سير العمل المتكرر، وينجزون العمل الروتيني طوال الوقت.',
         },
+        useCases: {
+            eyebrow: 'حالات الاستخدام',
+            title: 'شغّل العمل الذي يقع بين كل فريق وكل أداة',
+            description: 'أتمت مصمم للعمليات متعددة الخطوات: يراقب المحفزات، يجمع السياق من تطبيقاتك، يتبع قواعدك، يحدّث الأنظمة، ويدخل الأشخاص فقط عندما يحتاج القرار إلى حكم أو موافقة.',
+            items: [
+                {
+                    title: 'المالية: التحصيل من الفاتورة إلى الدفع',
+                    description: 'عندما تتأخر فاتورة، يفحص أتمت حالة الدفع وسجل الحساب، ينشئ مهام للمالك، يكتب تذكير العميل، ويحدّث متتبع المالية. وإذا كان الحساب حساسًا أو مهمًا، يوجه الخطوة التالية للموافقة قبل إرسال أي شيء.',
+                },
+                {
+                    title: 'المبيعات: تحويل العميل المحتمل إلى فرصة',
+                    description: 'عند وصول عميل محتمل جديد، يثري أتمت بيانات الشركة، يراجع قواعد المنطقة والتأهيل، ينشئ أو يحدّث سجل CRM، يعيّن المالك المناسب، ويجدول الخطوة التالية. يبدأ مندوب المبيعات بسياق جاهز بدل البحث بين النماذج والبريد والجداول.',
+                },
+                {
+                    title: 'نجاح العملاء: التهيئة والتجديد',
+                    description: 'بعد إغلاق الصفقة، ينشئ أتمت مشروع التهيئة، يطلب الملفات المطلوبة، يرسل خطوات الانطلاق، يحدّث مرحلة CRM، ويتابع المراحل حتى الإطلاق. لاحقًا يراقب تواريخ التجديد والاستخدام وسجل الدعم حتى يتحرك الفريق قبل أن يتحول الخطر إلى فقدان عميل.',
+                },
+                {
+                    title: 'الدعم: التصعيد وتشغيل الحوادث',
+                    description: 'يرصد أتمت التذاكر العاجلة، يجمع تاريخ العميل، يفحص قواعد SLA، ينبه قناة الفريق المناسبة، ينشئ مهمة incident، ويجهز ردًا للمراجعة. يبقي التذكرة وصفحة الحالة ومالك العميل والخط الزمني الداخلي متزامنين بينما يتعامل الفريق مع القرارات المهمة.',
+                },
+                {
+                    title: 'التجزئة والتجارة الإلكترونية: استثناءات المخزون',
+                    description: 'عندما ينخفض المخزون أو يظهر استثناء في الطلبات، يفحص أتمت الكميات ومواعيد الموردين وأوامر الشراء المفتوحة وتأثير ذلك على العملاء. يمكنه إنشاء مهام إعادة التوريد، تنبيه العمليات، تحديث المتجر أو صف الدعم، وتصعيد ما يؤثر على الإيراد.',
+                },
+                {
+                    title: 'الرعاية الصحية والعيادات: المتابعة الإدارية',
+                    description: 'يساعد أتمت الفرق غير السريرية في تنسيق تذكيرات المواعيد، نماذج الإدخال الناقصة، متابعات التأمين، وتسليم المهام الداخلية. يبقى الموظفون مركزين على تجربة المريض بينما تتحرك الخطوات الإدارية عبر البريد والنماذج والتقويمات والأنظمة.',
+                },
+                {
+                    title: 'الموارد البشرية: التوظيف والتهيئة وطلبات السياسات',
+                    description: 'ينقل أتمت المرشحين بين مراحل التوظيف، ينسق المقابلات، يذكر المقابلين، يجمع الملاحظات، ويحدّث ATS. وللموظفين، يمكنه توجيه أسئلة السياسات، تجهيز مهام التهيئة، جمع المستندات، والمتابعة عندما تتعطل خطوة.',
+                },
+                {
+                    title: 'تقنية المعلومات والأمن: الوصول والحوادث',
+                    description: 'عندما يطلب شخص وصولًا، يفحص أتمت قواعد الدور، يجمع موافقة المدير، ينشئ مهام التفعيل، ويسجل القرار. وفي الحوادث يمكنه جمع السياق من أدوات المراقبة، تنبيه المالكين، فتح التذاكر، وحفظ خط زمني واضح حتى الحل.',
+                },
+                {
+                    title: 'القانون والامتثال: صفوف المراجعة',
+                    description: 'يمكن لأتمت استقبال طلبات العقود أو الامتثال، تصنيف الأولوية، جمع التفاصيل الناقصة، تعيين المراجع المناسب، تتبع الموافقات، وتحديث صاحب الطلب. هو لا يستبدل الحكم، بل يزيل عمل التنسيق حول وصول الطلب للحكم الصحيح في الوقت المناسب.',
+                },
+                {
+                    title: 'التسويق والوكالات: تشغيل الحملات',
+                    description: 'يحوّل أتمت الملخصات إلى مهام مشروع، يعيّن المالكين، يجمع الأصول الإبداعية، يفحص حالة المراجعة، يجهز قوائم النشر، ويذكّر أصحاب العلاقة قبل تعطل المواعيد. تتحرك الحملة عبر المستندات وملفات التصميم والتقويمات وأدوات النشر بدون ملاحقة يدوية.',
+                },
+            ],
+        },
         stats: {
             visibility: 'رؤية تشغيلية',
             visibilityText: 'عبر سير العمل المتصل.',
@@ -225,7 +319,7 @@ export const landingCopy = {
             title: 'ضع سير عملك على',
             accent: 'القيادة التلقائية بالذكاء الاصطناعي',
             subtitle: 'انضم لقائمة الوصول المبكر وساعد في تشكيل نسخة أتمت Alpha لأتمتة الأعمال الحقيقية.',
-            button: 'انضم للقائمة',
+            button: 'قائمة الإنتظار',
         },
         footer: {
             description: 'أتمت وكيل ذكاء اصطناعي ينجز معك ويؤتمت سير العمل التجاري المتكرر عبر أدواتك.',

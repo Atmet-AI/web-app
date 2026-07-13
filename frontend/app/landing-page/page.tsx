@@ -3,6 +3,7 @@
 import { HowItWorks } from "@/app/(marketing)/(home)/sections/how-it-works"
 import { PlatformFeatures } from "@/app/(marketing)/(home)/sections/platform-features"
 import { StatsSection } from "@/app/(marketing)/(home)/sections/stats-section"
+import { UseCasesSection } from "@/app/(marketing)/(home)/sections/use-cases-section"
 import { CallToAction } from "@/components/call-to-action"
 import FooterSection from "@/components/footer"
 import Header from "@/components/header"
@@ -49,6 +50,7 @@ function LandingPageContent() {
     <div
       lang={language}
       dir={dir}
+      data-landing-scroll-root="true"
       className={cn(
         theme === "dark" && "dark",
         language === "ar" && "font-arabic-ibm",
@@ -115,8 +117,10 @@ function LandingPageContent() {
         <SectionDivider variant={2} />
         <PlatformFeatures />
         <SectionDivider variant={3} />
-        <StatsSection />
+        <UseCasesSection />
         <SectionDivider variant={4} />
+        <StatsSection />
+        <SectionDivider variant={0} />
         <CallToAction />
       </main>
       <FooterSection />

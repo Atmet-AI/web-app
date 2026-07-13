@@ -19,7 +19,7 @@ export function CallToAction() {
                         flickerChance={0.34}
                         maxOpacity={0.34}
                         aria-hidden="true"
-                        className="absolute inset-0 z-10 opacity-90 [mask-image:radial-gradient(ellipse_at_center,black_0%,transparent_76%)]"
+                        className="absolute inset-0 z-10 opacity-90 [mask-image:radial-gradient(ellipse_at_center,transparent_0%,transparent_38%,black_78%)]"
                     />
                     <div className="relative z-20 mx-auto max-w-2xl">
                         <h2 className={cn("text-balance text-4xl font-semibold text-white md:text-5xl", language === 'ar' && 'font-thmanyah-serif-display')}>

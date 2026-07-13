@@ -13,6 +13,31 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
+const scrollToSection = (href: string) => {
+    if (!href.startsWith('#')) {
+        return false
+    }
+
+    const target = document.querySelector<HTMLElement>(href)
+    const scrollRoot = document.querySelector<HTMLElement>('[data-landing-scroll-root="true"]')
+
+    if (!target || !scrollRoot) {
+        return false
+    }
+
+    const rootTop = scrollRoot.getBoundingClientRect().top
+    const targetTop = target.getBoundingClientRect().top
+    const headerOffset = 84
+
+    scrollRoot.scrollTo({
+        top: scrollRoot.scrollTop + targetTop - rootTop - headerOffset,
+        behavior: 'smooth',
+    })
+
+    window.history.replaceState(null, '', href)
+    return true
+}
+
 export default function Header() {
     const { dir, theme, t, toggleLanguage, toggleTheme } = useLandingPage()
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
@@ -20,7 +45,7 @@ export default function Header() {
     const navLinks = [
         { name: t.nav.howItWorks, href: '#how-it-works' },
         { name: t.nav.features, href: '#platform' },
-        { name: t.nav.useCases, href: '#results' },
+        { name: t.nav.useCases, href: '#use-cases' },
         { name: t.nav.contact, href: '#contact' },
     ]
     React.useEffect(() => {
@@ -83,6 +108,11 @@ export default function Header() {
                                     <a
                                         key={link.name}
                                         href={link.href}
+                                        onClick={(event) => {
+                                            if (scrollToSection(link.href)) {
+                                                event.preventDefault()
+                                            }
+                                        }}
                                         className="inline-flex h-7 items-center rounded-md px-2.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground">
                                         {link.name}
                                     </a>
@@ -94,7 +124,7 @@ export default function Header() {
 
                         <div className="max-lg:in-data-[state=active]:mt-6 in-data-[state=active]:flex hidden w-full flex-wrap items-center justify-end md:flex-nowrap lg:m-0 lg:flex lg:h-full lg:w-fit lg:gap-1 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none dark:shadow-none dark:lg:bg-transparent">
                             <a
-                                href="/docs"
+                                href="https://atmet.mintlify.site/"
                                 className="inline-flex h-7 items-center justify-center rounded-md bg-muted px-2 text-[12px] font-semibold text-foreground transition-colors hover:bg-muted/75">
                                 {t.nav.docs}
                             </a>
@@ -120,6 +150,7 @@ export default function Header() {
                                         render={
                                             <button
                                                 type="button"
+                                                data-landing-action-menu-trigger="true"
                                                 aria-label="Open display options"
                                             />
                                         }>
@@ -150,9 +181,9 @@ const MobileMenu = ({ closeMenu }: { closeMenu: () => void }) => {
     const navLinks = [
         { name: t.nav.howItWorks, href: '#how-it-works', primary: false },
         { name: t.nav.features, href: '#platform', primary: false },
-        { name: t.nav.useCases, href: '#results', primary: false },
+        { name: t.nav.useCases, href: '#use-cases', primary: false },
         { name: t.nav.contact, href: '#contact', primary: false },
-        { name: t.nav.docs, href: '/docs', primary: false },
+        { name: t.nav.docs, href: 'https://atmet.mintlify.site/', primary: false },
         { name: t.nav.waitlist, href: '/waitlist', primary: true },
     ]
 
@@ -166,7 +197,13 @@ const MobileMenu = ({ closeMenu }: { closeMenu: () => void }) => {
                     <a
                         key={link.name}
                         href={link.href}
-                        onClick={closeMenu}
+                        onClick={(event) => {
+                            if (scrollToSection(link.href)) {
+                                event.preventDefault()
+                            }
+
+                            closeMenu()
+                        }}
                         className={cn(
                             'rounded-lg px-3 py-3 text-base font-medium transition-colors',
                             link.primary ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
