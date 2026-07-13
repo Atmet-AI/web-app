@@ -12,12 +12,12 @@ export const AiMemoryIllustration = () => {
             className="w-full min-w-0">
             <div className="perspective-dramatic flex flex-col gap-4">
                 <div className="mask-radial-[100%_100%] mask-radial-from-75% mask-radial-at-top-left rotate-x-5 rotate-z-6 -rotate-4 ps-6 pt-1">
-                    <div className="bg-background/75 rounded-2xl border border-border p-2">
+                    <div className="rounded-2xl border border-border bg-zinc-100/80 p-2 dark:bg-background/75">
                         <div className="flex items-center gap-2 px-4 py-3">
                             <div className="text-sm font-medium">{t.illustrations.memoryTitle}</div>
                             <div className="bg-primary/10 text-primary ms-auto rounded-full px-2 py-0.5 text-xs">{t.illustrations.memoryActive}</div>
                         </div>
-                        <div className="bg-card rounded-xl border border-border p-4">
+                        <div className="rounded-xl border border-border bg-white/85 p-4 dark:bg-background/85">
                             <div className="space-y-3">
                                 <div className="text-muted-foreground text-xs">{t.illustrations.memoryWindow}</div>
 

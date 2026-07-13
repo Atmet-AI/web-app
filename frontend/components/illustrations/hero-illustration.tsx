@@ -1,64 +1,84 @@
 'use client'
 
 import Image from 'next/image'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { motion } from 'motion/react'
 
 import { cn } from '@/lib/utils'
+import { useLandingPage } from '@/components/landing-page-context'
+
+const HERO_ROTATION_MS = 5000
 
 const heroImages = [
     {
-        label: 'Build agent',
-        light: '/Lite%20atmet.png',
-        dark: '/dark%20Atemt%20.png',
-        width: 1920,
-        height: 1440,
+        light: '/hero%20section%20images/Image%201%20light.png',
+        dark: '/hero%20section%20images/image%201%20dark.png',
+        width: 3498,
+        height: 2226,
     },
     {
-        label: 'Connect apps',
-        light: '/more%203%20images%20/image%202%20light.png',
-        dark: '/more%203%20images%20/Image%202%20dark.png',
-        width: 2882,
-        height: 2210,
+        light: '/hero%20section%20images/image%202%20light.png',
+        dark: '/hero%20section%20images/image%202%20dark.png',
+        width: 3498,
+        height: 2226,
     },
     {
-        label: 'Run workflow',
-        light: '/more%203%20images%20/image%203%20light.png',
-        dark: '/more%203%20images%20/image%203%20dark.png',
-        width: 1180,
-        height: 770,
+        light: '/hero%20section%20images/image%203%20light.png',
+        dark: '/hero%20section%20images/image%203%20dark.png',
+        width: 3498,
+        height: 2226,
     },
     {
-        label: 'Review output',
-        light: '/more%203%20images%20/iamge%204%20light.png',
-        dark: '/more%203%20images%20/Screen%20Shot%202026-07-12%20at%2023.27.59.png',
-        width: 10000,
-        height: 7000,
+        light: '/hero%20section%20images/image%204%20light.png',
+        dark: '/hero%20section%20images/image%204%20dark.png',
+        width: 3498,
+        height: 2226,
     },
 ]
 
 export const HeroIllustration = () => {
+    const { t } = useLandingPage()
     const [activeImage, setActiveImage] = useState(0)
     const selectedImage = heroImages[activeImage]
+    const tabLabels = t.heroPreview.tabs
+
+    useEffect(() => {
+        const timeout = window.setTimeout(() => {
+            setActiveImage((current) => (current + 1) % heroImages.length)
+        }, HERO_ROTATION_MS)
+
+        return () => window.clearTimeout(timeout)
+    }, [activeImage])
 
     return (
         <div className="mx-auto mt-auto flex w-[min(calc(100vw_-_3rem),75rem)] flex-1 flex-col justify-end pt-12 md:pt-16">
             <div className="mb-0 grid grid-cols-2 border-y border-border/70 bg-background/80 backdrop-blur-md md:grid-cols-4" role="tablist" aria-label="Hero image preview">
-                {heroImages.map((image, index) => (
+                {heroImages.map((_, index) => (
                     <button
-                        key={image.label}
-                        aria-label={`Show ${image.label} preview`}
+                        key={tabLabels[index]}
+                        aria-label={`Show ${tabLabels[index]} preview`}
                         aria-selected={activeImage === index}
                         className={cn(
-                            "relative flex h-11 items-center border-e border-border/70 px-4 text-start text-sm font-medium transition-colors last:border-e-0 active:translate-y-px",
+                            "relative flex h-11 min-w-0 items-center overflow-hidden border-e border-border/70 px-4 text-start text-sm font-medium transition-colors last:border-e-0 active:translate-y-px",
                             activeImage === index
-                                ? "text-foreground before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-primary"
+                                ? "text-foreground"
                                 : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                         )}
                         role="tab"
                         type="button"
                         onClick={() => setActiveImage(index)}
                     >
-                        {image.label}
+                        {activeImage === index ? (
+                            <motion.span
+                                key={activeImage}
+                                aria-hidden="true"
+                                className="absolute inset-x-0 top-0 h-0.5 origin-left bg-primary rtl:origin-right"
+                                initial={{ scaleX: 0 }}
+                                animate={{ scaleX: 1 }}
+                                transition={{ duration: HERO_ROTATION_MS / 1000, ease: 'linear' }}
+                            />
+                        ) : null}
+                        <span className="truncate">{tabLabels[index]}</span>
                     </button>
                 ))}
             </div>
@@ -66,7 +86,7 @@ export const HeroIllustration = () => {
                 <Image
                     className="-mb-px hidden h-auto max-h-full w-full object-contain object-bottom dark:block"
                     src={selectedImage.dark}
-                    alt={`Atmet platform preview ${selectedImage.label}`}
+                    alt={`Atmet platform preview ${tabLabels[activeImage]}`}
                     width={selectedImage.width}
                     height={selectedImage.height}
                     sizes="(max-width: 1280px) calc(100vw - 3rem), 75rem"
@@ -76,7 +96,7 @@ export const HeroIllustration = () => {
                 <Image
                     className="-mb-px block h-auto max-h-full w-full object-contain object-bottom dark:hidden"
                     src={selectedImage.light}
-                    alt={`Atmet platform preview ${selectedImage.label}`}
+                    alt={`Atmet platform preview ${tabLabels[activeImage]}`}
                     width={selectedImage.width}
                     height={selectedImage.height}
                     sizes="(max-width: 1280px) calc(100vw - 3rem), 75rem"

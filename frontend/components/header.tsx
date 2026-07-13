@@ -1,14 +1,20 @@
 'use client'
 
 import React from 'react'
-import { Languages, Menu, Moon, Sun, X } from 'lucide-react'
+import { ChevronDown, Languages, Menu, Moon, Sun, X } from 'lucide-react'
 
 import { Logo } from '@/components/logo'
 import { useLandingPage } from '@/components/landing-page-context'
 import { cn } from '@/lib/utils'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export default function Header() {
-    const { theme, t, toggleLanguage, toggleTheme } = useLandingPage()
+    const { dir, theme, t, toggleLanguage, toggleTheme } = useLandingPage()
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
     const [isScrolled, setIsScrolled] = React.useState(false)
     const navLinks = [
@@ -17,11 +23,6 @@ export default function Header() {
         { name: t.nav.useCases, href: '#results' },
         { name: t.nav.contact, href: '#contact' },
     ]
-    const actionLinks = [
-        { name: t.nav.waitlist, href: '/waitlist', primary: true },
-        { name: t.nav.docs, href: '/docs' },
-    ]
-
     React.useEffect(() => {
         const handleScroll = () => {
             setIsScrolled(window.scrollY > 50)
@@ -51,7 +52,7 @@ export default function Header() {
             className="pointer-events-none fixed inset-x-0 top-4 z-50 px-4">
             <div
                 className={cn(
-                    'pointer-events-auto mx-auto h-11 w-full max-w-5xl overflow-hidden rounded-xl border border-border/70 bg-background/72 ring-1 ring-border/50 backdrop-blur-xl transition-all duration-300',
+                    'pointer-events-auto mx-auto h-11 w-full max-w-5xl overflow-hidden rounded-xl border border-border/35 bg-background/72 shadow-[0_0_0_0.5px_color-mix(in_oklab,var(--color-border)_45%,transparent)] backdrop-blur-xl transition-all duration-300',
                     'in-data-scrolled:bg-background/86',
                     'max-lg:in-data-[state=active]:h-[calc(100svh-2rem)] max-lg:in-data-[state=active]:bg-background/94'
                 )}>
@@ -92,33 +93,50 @@ export default function Header() {
                         {isMobileMenuOpen && <MobileMenu closeMenu={() => setIsMobileMenuOpen(false)} />}
 
                         <div className="max-lg:in-data-[state=active]:mt-6 in-data-[state=active]:flex hidden w-full flex-wrap items-center justify-end md:flex-nowrap lg:m-0 lg:flex lg:h-full lg:w-fit lg:gap-1 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none dark:shadow-none dark:lg:bg-transparent">
-                            {actionLinks.map((link) => (
+                            <a
+                                href="/docs"
+                                className="inline-flex h-7 items-center justify-center rounded-md bg-muted px-2 text-[12px] font-semibold text-foreground transition-colors hover:bg-muted/75">
+                                {t.nav.docs}
+                            </a>
+                            <div
+                                dir="ltr"
+                                className={cn(
+                                    'inline-flex h-7 overflow-hidden rounded-md bg-primary text-primary-foreground',
+                                    dir === 'rtl' && 'flex-row-reverse'
+                                )}>
                                 <a
-                                    key={link.name}
-                                    href={link.href}
-                                    className={cn(
-                                        'inline-flex h-7 items-center justify-center rounded-md px-2 text-[12px] font-semibold transition-colors',
-                                        link.primary
-                                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                                            : 'bg-muted text-foreground hover:bg-muted/75'
-                                    )}>
-                                    {link.name}
+                                    href="/waitlist"
+                                    dir={dir}
+                                    className="inline-flex h-7 items-center justify-center !bg-primary px-2.5 text-[12px] font-semibold !text-primary-foreground transition-colors hover:!bg-primary/90">
+                                    {t.nav.waitlist}
                                 </a>
-                            ))}
-                            <button
-                                type="button"
-                                onClick={toggleTheme}
-                                aria-label={theme === 'dark' ? t.controls.themeLight : t.controls.themeDark}
-                                className="inline-flex size-7 items-center justify-center rounded-md bg-muted text-foreground transition-colors hover:bg-muted/75">
-                                {theme === 'dark' ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={toggleLanguage}
-                                aria-label={t.controls.language}
-                                className="inline-flex size-7 items-center justify-center rounded-md bg-muted text-foreground transition-colors hover:bg-muted/75">
-                                <Languages className="size-3.5" />
-                            </button>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger
+                                        data-landing-action-menu-trigger="true"
+                                        className={cn(
+                                            'inline-flex h-7 w-7 items-center justify-center !bg-primary !text-primary-foreground transition-colors hover:!bg-primary/90 data-[popup-open]:!bg-primary',
+                                            dir === 'rtl' ? 'border-r border-primary-foreground/20' : 'border-l border-primary-foreground/20'
+                                        )}
+                                        render={
+                                            <button
+                                                type="button"
+                                                aria-label="Open display options"
+                                            />
+                                        }>
+                                        <ChevronDown className="size-3.5" />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="min-w-44">
+                                        <DropdownMenuItem onClick={toggleLanguage}>
+                                            <Languages className="size-4" />
+                                            <span>{t.controls.language}</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={toggleTheme}>
+                                            {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+                                            <span>{theme === 'dark' ? t.controls.themeLight : t.controls.themeDark}</span>
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -134,8 +152,8 @@ const MobileMenu = ({ closeMenu }: { closeMenu: () => void }) => {
         { name: t.nav.features, href: '#platform', primary: false },
         { name: t.nav.useCases, href: '#results', primary: false },
         { name: t.nav.contact, href: '#contact', primary: false },
-        { name: t.nav.waitlist, href: '/waitlist', primary: true },
         { name: t.nav.docs, href: '/docs', primary: false },
+        { name: t.nav.waitlist, href: '/waitlist', primary: true },
     ]
 
     return (

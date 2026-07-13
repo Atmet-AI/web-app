@@ -2,151 +2,66 @@
 import { AnimatePresence, motion } from 'motion/react'
 import React, { useEffect, useState } from 'react'
 
-import { Beacon } from '@/components/ui/svgs/beacon'
-import { Bolt } from '@/components/ui/svgs/bolt'
-import { Cisco } from '@/components/ui/svgs/cisco'
-import { Hulu } from '@/components/ui/svgs/hulu'
-import { OpenaiWordmarkLight as OpenAIFull } from '@/components/ui/svgs/openai'
-import { PrimeVideo as Primevideo } from '@/components/ui/svgs/prime-video'
-import { Stripe } from '@/components/ui/svgs/stripe'
-import { SupabaseDark as Supabase } from '@/components/ui/svgs/supabase'
-import { Polars } from '@/components/ui/svgs/polars'
-import { VercelWordmark as VercelFull } from '@/components/ui/svgs/vercel'
-import { Spotify } from '@/components/ui/svgs/spotify'
-import { Paypal as PayPal } from '@/components/ui/svgs/paypal'
-import { LeapWalletDark as LeapWallet } from '@/components/ui/svgs/leap-wallet'
 import { useLandingPage } from '@/components/landing-page-context'
 
-const aiLogos: React.ReactNode[] = [
-    <OpenAIFull
-        key="openai"
-        height={24}
-        width="auto"
-    />,
-    <Bolt
-        key="bolt"
-        height={20}
-        width="auto"
-    />,
-    <Cisco
-        key="cisco-ai"
-        height={32}
-        width="auto"
-    />,
-    <Hulu
-        key="hulu-ai"
-        height={22}
-        width="auto"
-    />,
-    <Spotify
-        key="spotify-ai"
-        height={24}
-        width="auto"
-    />,
-]
+type LogoAsset = {
+    name: string
+    light: string
+    dark: string
+    height?: string
+}
 
-const hostingLogos: React.ReactNode[] = [
-    <Supabase
-        key="supabase"
-        height={24}
-        width="auto"
-    />,
-    <Cisco
-        key="cisco-hosting"
-        height={32}
-        width="auto"
-    />,
-    <Hulu
-        key="hulu-hosting"
-        height={22}
-        width="auto"
-    />,
-    <Spotify
-        key="spotify-hosting"
-        height={24}
-        width="auto"
-    />,
-    <VercelFull
-        key="vercel"
-        height={20}
-        width="auto"
-    />,
-]
+const logoBase = '/Logos for landing page'
 
-const paymentsLogos: React.ReactNode[] = [
-    <Stripe
-        key="stripe"
-        height={24}
-        width="auto"
-    />,
-    <PayPal
-        key="paypal"
-        height={24}
-        width="auto"
-    />,
-    <LeapWallet
-        key="leapwallet"
-        height={24}
-        width="auto"
-    />,
-    <Beacon
-        key="beacon"
-        height={20}
-        width="auto"
-    />,
-    <Polars
-        key="polars"
-        height={24}
-        width="auto"
-    />,
-]
+const logoAsset = (name: string, light: string, dark: string, height = '1.5rem'): LogoAsset => ({
+    name,
+    light: `${logoBase}/Light mode/${light}`,
+    dark: `${logoBase}/Dark mode/${dark}`,
+    height,
+})
 
-const streamingLogos: React.ReactNode[] = [
-    <Primevideo
-        key="primevideo"
-        height={28}
-        width="auto"
-    />,
-    <Hulu
-        key="hulu-streaming"
-        height={22}
-        width="auto"
-    />,
-    <Spotify
-        key="spotify-streaming"
-        height={24}
-        width="auto"
-    />,
-    <Cisco
-        key="cisco-streaming"
-        height={32}
-        width="auto"
-    />,
-    <Beacon
-        key="beacon-streaming"
-        height={20}
-        width="auto"
-    />,
-]
-
-const logos: Record<'operations' | 'finance' | 'engineering' | 'sales' | 'marketing' | 'more', React.ReactNode[]> = {
-    operations: aiLogos,
-    finance: paymentsLogos,
-    engineering: hostingLogos,
-    sales: streamingLogos,
+const logos: Record<'operations' | 'finance' | 'engineering' | 'sales' | 'marketing' | 'more', LogoAsset[]> = {
+    operations: [
+        logoAsset('Airtable', 'Airtable/Airtable_idVHS6Pdqb_0.svg', 'Airtable-2/Airtable_idsyXgmlAP_0.svg'),
+        logoAsset('Notion', 'Notion/Notion_Logo_0.svg', 'Notion/Notion_Logo_0.svg'),
+        logoAsset('Asana', 'Asana/Asana_idgyOBeSXC_0.svg', 'Asana-2/Asana_idmTfCNPDT_0.svg'),
+        logoAsset('Cal.com', 'Cal-com/Cal-com_idvcCwbTDI_0.svg', 'Cal-com-2/Cal-com_idQDvBAWQz_0.svg'),
+        logoAsset('Zapier', 'Zapier/Zapier_idMPnFrbc7_0.svg', 'Zapier-2/Zapier_idfZNtxiND_0.svg'),
+    ],
+    finance: [
+        logoAsset('QuickBooks', 'QuickBooks_Integration copy/QuickBooks_Integration_idtLcbEf85_1.svg', 'QuickBooks_Integration/QuickBooks_Integration_idtLcbEf85_1.svg'),
+        logoAsset('Stripe', 'Stripe/Stripe_Logo_0.svg', 'Stripe-2/Stripe_Logo_0.svg'),
+        logoAsset('PayPal', 'PayPal/PayPal_Logo_0.svg', 'PayPal-2/PayPal_Logo_0.svg'),
+        logoAsset('Xero', 'Xero/Xero_Xero_Wordmark_Midnight_0.svg', 'Xero-2/Xero_Xero_Wordmark_White_0.svg'),
+        logoAsset('Accountable', 'Accountable/Accountable_idqQuJv6-A_0.svg', 'Accountable-2/Accountable_idad5jJwyI_0.svg'),
+    ],
+    engineering: [
+        logoAsset('GitHub', 'GitHub/GitHub_Logo_0.svg', 'GitHub-2/GitHub_Logo_0.svg'),
+        logoAsset('Vercel', 'Vercel/Vercel_Logo_0.svg', 'Vercel-2/Vercel_Logo_0.svg'),
+        logoAsset('Supabase', 'Supabase-2/Supabase_id9q7Wa4Ba_0.svg', 'Supabase/Supabase_idZ_4AZztt_0.svg'),
+        logoAsset('Linear', 'Linear/Linear_Logo_0.svg', 'Linear-2/Linear_Logo_0.svg'),
+        logoAsset('Sentry', 'Sentry/Sentry_idatXqcaDf_0.svg', 'Sentry-2/Sentry_idsTcVEvlQ_0.svg'),
+    ],
+    sales: [
+        logoAsset('HubSpot', 'HubSpot/HubSpot_idHe7kSdFV_0.svg', 'HubSpot-2/HubSpot_idHe7kSdFV_0.svg'),
+        logoAsset('Pipedrive', 'Pipedrive/Pipedrive_idHo6Lfa2R_0.svg', 'Pipedrive-2/Pipedrive_idvxAd_UEa_0.svg'),
+        logoAsset('Calendly', 'Calendly/Calendly_idGx75u1Xb_0.svg', 'Calendly-2/Calendly_idkbixDmT2_0.svg'),
+        logoAsset('Cal.com', 'Cal-com/Cal-com_idvcCwbTDI_0.svg', 'Cal-com-2/Cal-com_idQDvBAWQz_0.svg'),
+        logoAsset('LinkedIn', 'LinkedIn/LinkedIn_Logo_0.svg', 'LinkedIn-2/LinkedIn_Logo_0.svg'),
+    ],
     marketing: [
-        <Hulu key="hulu-marketing" height={22} width="auto" />,
-        <Spotify key="spotify-marketing" height={24} width="auto" />,
-        <Primevideo key="primevideo-marketing" height={28} width="auto" />,
-        <Beacon key="beacon-marketing" height={20} width="auto" />,
-        <OpenAIFull key="openai-marketing" height={24} width="auto" />,
+        logoAsset('Instagram', 'Instagram/Instagram_Logo_0.svg', 'Instagram-2/Instagram_Logo_0.svg'),
+        logoAsset('LinkedIn', 'LinkedIn/LinkedIn_Logo_0.svg', 'LinkedIn-2/LinkedIn_Logo_0.svg'),
+        logoAsset('Meta', 'Meta/Meta_idwdgcJw5c_0.svg', 'Meta-2/Meta_id0D-m9C5l_0.svg'),
+        logoAsset('Mailchimp', 'Mailchimp/Mailchimp_id-GhpqWpt_0.svg', 'Mailchimp-2/Mailchimp_id-GhpqWpt_0.svg'),
+        logoAsset('Analytics Insight', 'Analytics_Insight®/Analytics_Insight®_idFLRvosxz_0.svg', 'Analytics_Insight®-2/Analytics_Insight®_idStK-qYte_0.svg'),
     ],
     more: [
-        <Supabase key="supabase-more" height={24} width="auto" />,
-        <VercelFull key="vercel-more" height={20} width="auto" />,
-        <Cisco key="cisco-more" height={32} width="auto" />,
-        <PayPal key="paypal-more" height={24} width="auto" />,
-        <Bolt key="bolt-more" height={20} width="auto" />,
+        logoAsset('OpenAI', 'OpenAI/OpenAI_Logo_0.svg', 'OpenAI-2/OpenAI_Logo_0.svg'),
+        logoAsset('Claude', 'Claude/Claude_Logo_0.svg', 'Claude-2/Claude_Logo_0.svg'),
+        logoAsset('Zapier', 'Zapier/Zapier_idMPnFrbc7_0.svg', 'Zapier-2/Zapier_idfZNtxiND_0.svg'),
+        logoAsset('Atmet', 'Logo.png', 'Logo-2.png', '1.75rem'),
+        logoAsset('Supabase', 'Supabase-2/Supabase_id9q7Wa4Ba_0.svg', 'Supabase/Supabase_idZ_4AZztt_0.svg'),
     ],
 }
 
@@ -218,18 +133,39 @@ export function LogoCloud() {
                         mode="popLayout">
                         {logos[currentGroup].map((logo, i) => (
                             <motion.div
-                                key={`${currentGroup}-${i}`}
-                                className="**:fill-foreground! mask-b-from-55% flex h-10 items-center justify-center"
+                                key={`${currentGroup}-${logo.name}`}
+                                className="mask-b-from-55% flex h-10 items-center justify-center"
                                 initial={{ opacity: 0, y: 24, filter: 'blur(6px)' }}
                                 animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                                 exit={{ opacity: 0, y: -24, filter: 'blur(6px)', scale: 0.5 }}
                                 transition={{ delay: i * 0.05, duration: 0.4 }}>
-                                {logo}
+                                <LogoMark logo={logo} />
                             </motion.div>
                         ))}
                     </AnimatePresence>
                 </div>
             </div>
         </section>
+    )
+}
+
+function LogoMark({ logo }: { logo: LogoAsset }) {
+    return (
+        <>
+            <img
+                src={logo.light}
+                alt=""
+                aria-hidden="true"
+                className="block max-w-36 object-contain brightness-0 dark:hidden"
+                style={{ height: logo.height }}
+            />
+            <img
+                src={logo.dark}
+                alt=""
+                aria-hidden="true"
+                className="hidden max-w-36 object-contain brightness-0 invert dark:block"
+                style={{ height: logo.height }}
+            />
+        </>
     )
 }

@@ -22,8 +22,8 @@ export function CallToAction() {
                         className="absolute inset-0 z-10 opacity-90 [mask-image:radial-gradient(ellipse_at_center,black_0%,transparent_76%)]"
                     />
                     <div className="relative z-20 mx-auto max-w-2xl">
-                        <h2 className={cn("text-balance text-4xl font-semibold text-white md:text-5xl", language === 'ar' && 'font-thmanyah-serif-display !leading-[1.22]')}>
-                            {t.cta.title} <span className={cn(language === 'ar' && 'font-thmanyah-serif-display !leading-[1.22]')}>{t.cta.accent}</span>
+                        <h2 className={cn("text-balance text-4xl font-semibold text-white md:text-5xl", language === 'ar' && 'font-thmanyah-serif-display')}>
+                            {t.cta.title} <span className={cn(language === 'ar' && 'font-thmanyah-serif-display')}>{t.cta.accent}</span>
                         </h2>
                         <p className="mb-6 mt-4 text-balance text-white/75">{t.cta.subtitle}</p>
 
@@ -31,7 +31,6 @@ export function CallToAction() {
                             <a
                                 href="/waitlist"
                                 data-cuelume-press
-                                data-auth-primary-action="true"
                                 className="inline-flex h-7 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-transparent bg-white px-2.5 text-[0.8rem] font-medium text-black transition-all hover:bg-white/90 active:translate-y-px active:scale-[0.96]">
                                 {t.cta.button}
                             </a>

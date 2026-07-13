@@ -64,9 +64,22 @@ function LandingPageContent() {
           <div className="flex min-h-[calc(100svh-3.5rem)] flex-col pt-24 md:pt-32 lg:pt-40">
             <div className="relative z-10 mx-auto grid max-w-5xl place-items-center gap-4 px-6 text-center">
               <div>
-                <h1 className={cn("mx-auto max-w-4xl text-balance text-5xl font-semibold tracking-normal lg:text-6xl", language === "ar" && "font-thmanyah-serif-display !leading-[1.28] lg:!leading-[1.24]")}>
+                <div className="mb-4 inline-flex items-center justify-center gap-2">
+                  <a
+                    href="/waitlist"
+                    className="hero-badge-glow inline-flex min-h-7 items-center justify-center rounded-md border border-border/70 bg-muted/60 px-3 text-xs font-medium text-muted-foreground shadow-[0_1px_0_rgb(255_255_255/0.08)_inset] transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <span>{t.hero.badge.split('|')[0].trim()}</span>
+                    <span aria-hidden="true" className="mx-2 h-3 w-px bg-border" />
+                    <span>{t.hero.badge.split('|')[1].trim()}</span>
+                  </a>
+                  <span className="text-[0.68rem] font-medium leading-none text-muted-foreground tabular-nums">
+                    v0.1.4
+                  </span>
+                </div>
+                <h1 className={cn("mx-auto max-w-4xl text-balance text-5xl font-semibold tracking-normal lg:text-6xl", language === "ar" && "font-thmanyah-serif-display")}>
                   {t.hero.titleStart}{" "}
-                  <span className={cn(language === "en" ? "font-redaction-35-italic" : "font-thmanyah-serif-display !leading-[1.28] lg:!leading-[1.24]", "text-foreground")}>
+                  <span className={cn(language === "en" ? "font-redaction-35-italic" : "font-thmanyah-serif-display", "text-foreground")}>
                     {t.hero.titleAccent}
                   </span>
                 </h1>
@@ -79,7 +92,6 @@ function LandingPageContent() {
                   <a
                     href="/waitlist"
                     data-cuelume-press
-                    data-auth-primary-action="true"
                     className="inline-flex h-7 w-[6.75rem] items-center justify-center whitespace-nowrap rounded-[min(var(--radius-md),12px)] border border-transparent bg-primary px-2 text-[0.8rem] font-medium text-primary-foreground transition-all hover:bg-primary/90 active:translate-y-px active:scale-[0.96]"
                   >
                     {t.hero.waitlist}

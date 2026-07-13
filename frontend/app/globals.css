@@ -37,16 +37,27 @@
 
 .font-thmanyah-serif-display {
   font-family: "Thmanyah Serif Display", var(--font-arabic), "IBM Plex Sans Arabic", serif !important;
-  font-weight: 700;
-  line-height: 1.18;
-  word-spacing: 0.08em;
+  font-weight: 900;
+  line-height: 0.12;
+  letter-spacing: normal;
+  word-spacing: -0.01em;
+  text-wrap: balance;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  font-variant-ligatures: normal;
+  font-feature-settings: "salt" 1, "kern" 1;
 }
 
 .font-arabic-ibm .font-thmanyah-serif-display,
 .font-arabic-ibm .font-thmanyah-serif-display *:not(svg):not(path) {
   font-family: "Thmanyah Serif Display", var(--font-arabic), "IBM Plex Sans Arabic", serif !important;
-  line-height: 1.18;
-  word-spacing: 0.08em;
+  line-height: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  font-kerning: inherit;
+  font-optical-sizing: inherit;
+  font-variant-ligatures: inherit;
+  font-feature-settings: inherit;
 }
 
 .font-arabic-ibm {
@@ -579,6 +590,24 @@
   [data-auth-primary-action="true"] {
     height: 2rem !important;
   }
+  [data-landing-action-menu-trigger="true"] {
+    height: 1.75rem !important;
+    width: 1.75rem !important;
+    border-color: color-mix(
+      in oklab,
+      var(--color-primary-foreground) 22%,
+      transparent
+    ) !important;
+    background-color: var(--color-primary) !important;
+    color: var(--color-primary-foreground) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  [data-landing-action-menu-trigger="true"]:hover,
+  [data-landing-action-menu-trigger="true"][data-popup-open] {
+    background-color: var(--color-primary) !important;
+    color: var(--color-primary-foreground) !important;
+  }
   [data-auth-scope="true"] [data-platform-select-trigger="true"] {
     background-color: var(--color-sidebar-accent) !important;
     border-color: var(--color-sidebar-border) !important;
@@ -736,6 +765,30 @@
     font-size: 1em !important;
     line-height: 1 !important;
     vertical-align: baseline !important;
+  }
+
+  .hero-badge-glow {
+    animation: hero-badge-text-glow 3.8s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-badge-glow {
+      animation: none;
+    }
+  }
+
+  @keyframes hero-badge-text-glow {
+    0%,
+    100% {
+      color: var(--color-muted-foreground);
+      text-shadow: none;
+    }
+    50% {
+      color: var(--color-foreground);
+      text-shadow:
+        0 0 10px color-mix(in oklab, var(--color-foreground) 16%, transparent),
+        0 0 22px color-mix(in oklab, var(--color-foreground) 10%, transparent);
+    }
   }
 
   .dark .ui-badge-blue {
