@@ -16,10 +16,33 @@ function ThemeProvider({
       {...props}
     >
       <ThemeHotkey />
+      <ThemeColorSynchronizer />
       <FixedPrimaryColorInitializer />
       {children}
     </NextThemesProvider>
   )
+}
+
+function ThemeColorSynchronizer() {
+  const { resolvedTheme } = useTheme()
+
+  React.useEffect(() => {
+    const isDark = resolvedTheme === "dark"
+    const themeColor = isDark ? "#131313" : "#ffffff"
+    const root = document.documentElement
+    let themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+
+    if (!themeMeta) {
+      themeMeta = document.createElement("meta")
+      themeMeta.name = "theme-color"
+      document.head.appendChild(themeMeta)
+    }
+
+    themeMeta.content = themeColor
+    root.style.colorScheme = isDark ? "dark" : "light"
+  }, [resolvedTheme])
+
+  return null
 }
 
 function FixedPrimaryColorInitializer() {

@@ -10,6 +10,7 @@ import Header from "@/components/header"
 import { HeroIllustration } from "@/components/illustrations/hero-illustration"
 import { LandingPageProvider, useLandingPage } from "@/components/landing-page-context"
 import { LogoCloud } from "@/components/logo-cloud"
+import { getPublicThemeHref } from "@/lib/public-theme"
 import { cn } from "@/lib/utils"
 
 const dividerPatterns = [
@@ -68,7 +69,7 @@ function LandingPageContent() {
               <div>
                 <div className="mb-4 inline-flex items-center justify-center gap-2">
                   <a
-                    href="/waitlist"
+                    href={getPublicThemeHref("/waitlist", theme)}
                     className="hero-badge-glow inline-flex min-h-7 items-center justify-center rounded-md border border-border/70 bg-muted/60 px-3 text-xs font-medium text-muted-foreground shadow-[0_1px_0_rgb(255_255_255/0.08)_inset] transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <span>{t.hero.badge.split('|')[0].trim()}</span>
@@ -92,14 +93,14 @@ function LandingPageContent() {
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <a
-                    href="/waitlist"
+                    href={getPublicThemeHref("/waitlist", theme)}
                     data-cuelume-press
                     className="inline-flex h-7 w-[6.75rem] items-center justify-center whitespace-nowrap rounded-[min(var(--radius-md),12px)] border border-transparent bg-primary px-2 text-[0.8rem] font-medium text-primary-foreground transition-all hover:bg-primary/90 active:translate-y-px active:scale-[0.96]"
                   >
                     {t.hero.waitlist}
                   </a>
                   <a
-                    href="https://app.atmetai.com/sign-in"
+                    href={getPublicThemeHref("https://app.atmetai.com/sign-in", theme)}
                     className="inline-flex h-7 w-[6.75rem] items-center justify-center whitespace-nowrap rounded-[min(var(--radius-md),12px)] bg-muted px-2 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-muted/75"
                   >
                     {t.hero.openApp}

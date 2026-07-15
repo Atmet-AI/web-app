@@ -2,9 +2,10 @@
 
 import { Logo } from '@/components/logo'
 import { useLandingPage } from '@/components/landing-page-context'
+import { getPublicThemeHref } from '@/lib/public-theme'
 
 export default function FooterSection() {
-    const { t } = useLandingPage()
+    const { t, theme } = useLandingPage()
     const links = [
         {
             group: t.footer.product,
@@ -12,14 +13,14 @@ export default function FooterSection() {
                 { title: t.nav.howItWorks, href: '#how-it-works' },
                 { title: t.footer.platform, href: '#platform' },
                 { title: t.footer.results, href: '#results' },
-                { title: t.footer.openApp, href: 'https://app.atmetai.com/sign-in' },
+                { title: t.footer.openApp, href: getPublicThemeHref('https://app.atmetai.com/sign-in', theme) },
             ],
         },
         {
             group: t.footer.access,
             items: [
-                { title: t.nav.waitlist, href: '/waitlist' },
-                { title: t.footer.signIn, href: 'https://app.atmetai.com/sign-in' },
+                { title: t.nav.waitlist, href: getPublicThemeHref('/waitlist', theme) },
+                { title: t.footer.signIn, href: getPublicThemeHref('https://app.atmetai.com/sign-in', theme) },
                 { title: 'Atmetai.com', href: '/' },
             ],
         },
