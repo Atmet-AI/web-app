@@ -1,5 +1,7 @@
 'use client'
 
+import type { CSSProperties } from "react"
+
 import { HowItWorks } from "@/app/(marketing)/(home)/sections/how-it-works"
 import { PlatformFeatures } from "@/app/(marketing)/(home)/sections/platform-features"
 import { StatsSection } from "@/app/(marketing)/(home)/sections/stats-section"
@@ -46,16 +48,23 @@ export default function LandingPage() {
 
 function LandingPageContent() {
   const { theme, language, dir, t } = useLandingPage()
+  const landingRootStyle = {
+    "--background": theme === "dark" ? "oklch(0.075 0 0)" : "oklch(1 0 0)",
+    "--foreground": theme === "dark" ? "oklch(0.985 0 0)" : "oklch(0.145 0 0)",
+    backgroundColor: theme === "dark" ? "oklch(0.075 0 0)" : "#ffffff",
+    colorScheme: theme,
+  } as CSSProperties
 
   return (
     <div
       lang={language}
       dir={dir}
       data-landing-scroll-root="true"
+      style={landingRootStyle}
       className={cn(
         theme === "dark" && "dark",
         language === "ar" && "font-arabic-ibm",
-        "fixed inset-0 z-[90] overflow-y-auto bg-background text-foreground [scrollbar-gutter:stable_both-edges]"
+        "fixed inset-0 z-[90] isolate overflow-y-auto overscroll-y-contain bg-background text-foreground [scrollbar-gutter:stable_both-edges]"
       )}>
       <Header />
       <div

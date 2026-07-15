@@ -426,6 +426,25 @@ export function LandingPageProvider({ children }: { children: React.ReactNode })
         setRootTheme(theme)
     }, [setRootTheme, theme])
 
+    React.useEffect(() => {
+        const root = document.documentElement
+        const body = document.body
+        const previousRootBackground = root.style.backgroundColor
+        const previousBodyBackground = body.style.backgroundColor
+        const previousColorScheme = root.style.colorScheme
+        const background = theme === 'dark' ? 'oklch(0.075 0 0)' : '#ffffff'
+
+        root.style.backgroundColor = background
+        body.style.backgroundColor = background
+        root.style.colorScheme = theme
+
+        return () => {
+            root.style.backgroundColor = previousRootBackground
+            body.style.backgroundColor = previousBodyBackground
+            root.style.colorScheme = previousColorScheme
+        }
+    }, [theme])
+
     const toggleTheme = React.useCallback(() => {
         setLandingTheme((current) => (current === 'dark' ? 'light' : 'dark'))
     }, [])
