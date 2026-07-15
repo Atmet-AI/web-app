@@ -2,10 +2,11 @@
 
 import { FlickeringGrid } from '@/components/ui/flickering-grid'
 import { useLandingPage } from '@/components/landing-page-context'
+import { getPublicThemeHref } from '@/lib/public-theme'
 import { cn } from '@/lib/utils'
 
 export function CallToAction() {
-    const { language, t } = useLandingPage()
+    const { language, theme, t } = useLandingPage()
 
     return (
         <section id="waitlist" className="py-0">
@@ -29,7 +30,7 @@ export function CallToAction() {
 
                         <div className="flex flex-wrap items-center justify-center">
                             <a
-                                href="/waitlist"
+                                href={getPublicThemeHref('/waitlist', theme)}
                                 data-cuelume-press
                                 className="inline-flex h-7 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-transparent bg-white px-2.5 text-[0.8rem] font-medium text-black transition-all hover:bg-white/90 active:translate-y-px active:scale-[0.96]">
                                 {t.cta.button}

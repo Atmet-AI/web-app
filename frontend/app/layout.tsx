@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from "next/font/google"
 import { headers } from "next/headers"
 
@@ -76,6 +76,14 @@ export const metadata: Metadata = {
     description: "Build, automate, and operate AI-powered workflows with Atmet.",
     images: ["/Atmet%20Preview%20Link.png"],
   },
+}
+
+export const viewport: Viewport = {
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#131313" },
+  ],
 }
 
 export default async function RootLayout({

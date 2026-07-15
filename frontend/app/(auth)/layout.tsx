@@ -1,9 +1,11 @@
 import Link from "next/link"
 import Image from "next/image"
+import { Suspense } from "react"
 
 import { AuthModeSwitch } from "@/components/auth-mode-switch"
 import { AuthPageTransition } from "@/components/auth-page-transition"
 import { AuthCapabilityShowcase } from "@/components/auth-capability-showcase"
+import { PublicThemeHandoff } from "@/components/public-theme-handoff"
 import { FlickeringGrid } from "@/components/ui/flickering-grid"
 
 export default function AuthLayout({
@@ -13,6 +15,9 @@ export default function AuthLayout({
 }>) {
   return (
     <div className="fixed inset-0 z-[90] grid min-h-0 bg-sidebar p-2 dark:bg-black lg:grid-cols-2">
+      <Suspense fallback={null}>
+        <PublicThemeHandoff />
+      </Suspense>
       <section
         data-auth-scope="true"
         className="relative flex min-h-0 flex-col rounded-2xl bg-background px-6 py-6 dark:bg-sidebar sm:px-10 sm:py-8 lg:px-16"

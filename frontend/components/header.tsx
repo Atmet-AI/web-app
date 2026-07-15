@@ -5,6 +5,7 @@ import { ChevronDown, Languages, Menu, Moon, Sun, X } from 'lucide-react'
 
 import { Logo } from '@/components/logo'
 import { useLandingPage } from '@/components/landing-page-context'
+import { getPublicThemeHref } from '@/lib/public-theme'
 import { cn } from '@/lib/utils'
 import {
     DropdownMenu,
@@ -135,7 +136,7 @@ export default function Header() {
                                     dir === 'rtl' && 'flex-row-reverse'
                                 )}>
                                 <a
-                                    href="/waitlist"
+                                    href={getPublicThemeHref('/waitlist', theme)}
                                     dir={dir}
                                     className="inline-flex h-7 items-center justify-center !bg-primary px-2.5 text-[12px] font-semibold !text-primary-foreground transition-colors hover:!bg-primary/90">
                                     {t.nav.waitlist}
@@ -184,7 +185,7 @@ const MobileMenu = ({ closeMenu }: { closeMenu: () => void }) => {
         { name: t.nav.useCases, href: '#use-cases', primary: false },
         { name: t.nav.contact, href: '#contact', primary: false },
         { name: t.nav.docs, href: 'https://atmet.mintlify.site/', primary: false },
-        { name: t.nav.waitlist, href: '/waitlist', primary: true },
+        { name: t.nav.waitlist, href: getPublicThemeHref('/waitlist', theme), primary: true },
     ]
 
     return (
