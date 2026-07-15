@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     default: "Atmet",
     template: "%s | Atmet",
   },
-  description: "Atmet helps teams build, automate, and operate AI-powered workflows.",
+  description: "Atmet helps teams build AI coworker agents that understand workflows, connect apps, and run business work safely.",
   alternates: {
     canonical: "/",
   },
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
     url: "https://atmetai.com",
     siteName: "Atmet",
     title: "Atmet",
-    description: "Build, automate, and operate AI-powered workflows with Atmet.",
+    description: "Build AI coworker agents that understand workflows, connect apps, and run business work safely with Atmet.",
     images: [
       {
         url: "/Atmet%20Preview%20Link.png",
@@ -73,7 +73,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Atmet",
-    description: "Build, automate, and operate AI-powered workflows with Atmet.",
+    description: "Build AI coworker agents that understand workflows, connect apps, and run business work safely with Atmet.",
     images: ["/Atmet%20Preview%20Link.png"],
   },
 }

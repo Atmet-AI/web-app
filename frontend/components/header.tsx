@@ -48,6 +48,7 @@ export default function Header() {
         { name: t.nav.features, href: '#platform' },
         { name: t.nav.useCases, href: '#use-cases' },
         { name: t.nav.contact, href: '#contact' },
+        { name: t.nav.customSolution, href: 'https://technologies.atemtai.com', external: true },
     ]
     React.useEffect(() => {
         const handleScroll = () => {
@@ -109,6 +110,8 @@ export default function Header() {
                                     <a
                                         key={link.name}
                                         href={link.href}
+                                        target={link.external ? '_blank' : undefined}
+                                        rel={link.external ? 'noreferrer' : undefined}
                                         onClick={(event) => {
                                             if (scrollToSection(link.href)) {
                                                 event.preventDefault()
@@ -184,6 +187,7 @@ const MobileMenu = ({ closeMenu }: { closeMenu: () => void }) => {
         { name: t.nav.features, href: '#platform', primary: false },
         { name: t.nav.useCases, href: '#use-cases', primary: false },
         { name: t.nav.contact, href: '#contact', primary: false },
+        { name: t.nav.customSolution, href: 'https://technologies.atemtai.com', primary: false, external: true },
         { name: t.nav.docs, href: 'https://atmet.mintlify.site/', primary: false },
         { name: t.nav.waitlist, href: getPublicThemeHref('/waitlist', theme), primary: true },
     ]
@@ -198,6 +202,8 @@ const MobileMenu = ({ closeMenu }: { closeMenu: () => void }) => {
                     <a
                         key={link.name}
                         href={link.href}
+                        target={link.external ? '_blank' : undefined}
+                        rel={link.external ? 'noreferrer' : undefined}
                         onClick={(event) => {
                             if (scrollToSection(link.href)) {
                                 event.preventDefault()
