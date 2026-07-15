@@ -18,14 +18,15 @@ export const landingCopy = {
             features: 'Features',
             useCases: 'Use cases',
             contact: 'Contact',
+            customSolution: 'Custom Solution?',
             waitlist: 'Join waitlist',
             docs: 'Docs',
         },
         hero: {
             badge: 'Join the waitlist | Get early access to the alpha',
-            titleStart: 'Your AI coworker agent for',
-            titleAccent: 'business workflows',
-            subtitle: 'Connect your apps, describe the work, and let Atmet automate repeatable tasks across your business.',
+            titleStart: 'Building AI agents has never been this easy.',
+            titleAccent: 'Build your AI coworker brain for business',
+            subtitle: 'Create workspace agents that understand your workflows, connect to your apps, and run business work from plan to execution.',
             waitlist: 'Join waitlist',
             openApp: 'Open app',
         },
@@ -34,46 +35,46 @@ export const landingCopy = {
             operations: 'Operations',
             finance: 'Finance',
             engineering: 'Engineering',
-            sales: 'Sale',
+            sales: 'Sales',
             marketing: 'Marketing',
             more: 'More',
         },
         how: {
             eyebrow: 'How it works',
-            title: 'Automate the work that slows teams down',
-            description: 'Atmet learns your apps, tasks, and approvals so your team can delegate repeatable work without losing control.',
+            title: 'From workflow idea to deployed agent',
+            description: 'Atmet helps your team describe the work, turn it into an agent plan, connect the right apps, test the run, and deploy with control.',
             steps: [
                 {
-                    title: '1. Connect your apps',
-                    description: <>Bring your <span className="text-foreground font-medium">business tools</span> into one AI workspace.</>,
+                    title: '1. Describe the agent',
+                    description: <>Tell Atmet what your <span className="text-foreground font-medium">AI coworker</span> should own, when it should run, and what success looks like.</>,
                 },
                 {
-                    title: '2. Describe the workflow',
-                    description: 'Tell Atmet what needs to happen, who approves it, and when it should run.',
+                    title: '2. Connect the tools',
+                    description: 'Atmet identifies the needed apps, checks permissions, and maps each step to real actions.',
                 },
                 {
-                    title: '3. Let the agent execute',
-                    description: 'Review sensitive steps and get a clear trail of every completed action.',
+                    title: '3. Deploy and monitor',
+                    description: 'Test the plan, approve sensitive actions, then watch every run, tool call, and result.',
                 },
             ],
         },
         platform: {
             eyebrow: 'Platform',
-            title: 'A control center for AI-run workflows',
-            description: 'Give teams one place to connect apps, define automation, monitor progress, and approve the moments that matter.',
-            skillsTitle: 'Skills library',
-            skillsDescription: 'Choose a ready-made skill for common work, or create your own skill when your team needs a custom agent capability.',
-            modelTitle: 'Choose your model',
-            modelDescription: 'Pick the AI model that fits each workflow, from fast daily automation to deeper reasoning tasks.',
+            title: 'The operating layer for business agents',
+            description: 'Give teams one place to build agents, connect apps, define permissions, monitor progress, and approve the moments that matter.',
+            skillsTitle: 'Agent templates',
+            skillsDescription: 'Start from a reusable agent template, then adapt it through conversation to match the way your business really works.',
+            modelTitle: 'Agent builder and runtime',
+            modelDescription: 'Use AI to understand the task, compile the plan, and run the work through approved tools and connections.',
             memoryTitle: 'Workspace memory',
             memoryDescription: 'Keep decisions, files, app context, and team preferences attached so agents remember how your business works.',
-            automationTitle: 'Full automation, 24/7',
-            automationDescription: 'Let agents monitor triggers, run recurring workflows, and complete routine work around the clock.',
+            automationTitle: 'Always-on execution',
+            automationDescription: 'Let workspace agents monitor triggers, run recurring work, request approvals, and complete routine tasks around the clock.',
         },
         useCases: {
             eyebrow: 'Use cases',
-            title: 'Run the work that sits between every team and tool',
-            description: 'Atmet is built for multi-step operations: it watches for triggers, gathers context from your apps, follows your rules, updates systems, and brings people in only when a decision matters.',
+            title: 'Build agents for the work between every team and tool',
+            description: 'Atmet is built for multi-step operations: agents watch for triggers, gather context from your apps, follow your rules, update systems, and bring people in only when a decision matters.',
             items: [
                 {
                     title: 'Finance: order-to-cash and collections',
@@ -126,13 +127,13 @@ export const landingCopy = {
             repeatableText: 'more repeatable workflows with less manual handoff.',
         },
         cta: {
-            title: 'Put your workflow on',
-            accent: 'AI autopilot',
-            subtitle: 'Join the early access list and help shape the Atmet alpha for real business automation.',
+            title: 'Build your first',
+            accent: 'AI coworker',
+            subtitle: 'Join the early access list and help shape the Atmet alpha for real workspace agents.',
             button: 'Join waitlist',
         },
         footer: {
-            description: 'Atmet is an AI coworker agent that automates repeatable business workflows across your tools.',
+            description: 'Atmet helps teams build AI coworker agents that understand workflows, connect apps, and run business work safely.',
             product: 'Product',
             access: 'Access',
             community: 'Community',
@@ -149,17 +150,17 @@ export const landingCopy = {
             workspaceSub: 'Alpha workspace',
             title: 'New Project',
             run: 'Run',
-            greeting: 'What are we building today?',
-            placeholder: 'Tell Atmet what to automate, connect, or build...',
+            greeting: 'What agent are we building today?',
+            placeholder: 'Describe the agent, workflow, apps, and rules...',
             model: 'Atmet',
             attach: 'Attach',
             files: 'Files',
             image: 'Image',
             chats: 'Chats',
-            chatItems: ['Invoice collection agent', 'Weekly sales summary', 'Support escalation flow'],
-            suggestions: ['Create a follow-up agent', 'Analyze overdue invoices', 'Draft customer replies'],
-            sidebarItems: ['Build Project', 'Agents', 'Skills', 'Apps'],
-            tabs: ['Build agent', 'Run workflow', 'Connect apps', 'Review output'],
+            chatItems: ['Invoice collection agent', 'Weekly sales agent', 'Support escalation agent'],
+            suggestions: ['Create a follow-up agent', 'Build an invoice agent', 'Connect a CRM workflow'],
+            sidebarItems: ['Build Agent', 'Agents', 'Templates', 'Apps'],
+            tabs: ['Plan agent', 'Connect apps', 'Test run', 'Monitor'],
         },
         illustrations: {
             integrationsTitle: 'Integrations',
@@ -208,14 +209,15 @@ export const landingCopy = {
             features: 'المزايا',
             useCases: 'حالات الاستخدام',
             contact: 'تواصل',
+            customSolution: 'حل مخصص؟',
             waitlist: 'قائمة الإنتظار',
             docs: 'المستندات',
         },
         hero: {
             badge: 'قائمة الإنتظار | احصل على وصول مبكر لنسخة ألفا',
-            titleStart: 'أتمت يؤتمت شغلك كامل،',
-            titleAccent: 'ابنِ وكيـل ذكاء إصطناعي لأي مجال',
-            subtitle: 'اربط تطبيقاتك، صف العمل المطلوب، ودع أتمت يؤتمت المهام المتكررة عبر شركتك.',
+            titleStart: 'بناء وكلاء الذكاء الاصطناعي صار أسهل من أي وقت.',
+            titleAccent: 'ابنِ عقل زميلك الذكي لشركتك',
+            subtitle: 'أنشئ وكلاء لمساحة عملك يفهمون سير العمل، يتصلون بتطبيقاتك، وينجزون العمل من الخطة إلى التنفيذ.',
             waitlist: 'قائمة الإنتظار',
             openApp: 'افتح التطبيق',
         },
@@ -230,40 +232,40 @@ export const landingCopy = {
         },
         how: {
             eyebrow: 'كيف يعمل',
-            title: 'أتمتة العمل الذي يبطئ الفرق',
-            description: 'يتعلم أتمت تطبيقاتك ومهامك والموافقات المطلوبة حتى يفوض فريقك العمل المتكرر بدون فقدان التحكم.',
+            title: 'من فكرة سير العمل إلى وكيل جاهز للتشغيل',
+            description: 'يساعد أتمت فريقك على وصف العمل، تحويله إلى خطة وكيل، ربط التطبيقات المناسبة، اختبار التشغيل، ثم النشر مع التحكم.',
             steps: [
                 {
-                    title: '١. اربط تطبيقاتك',
-                    description: <>اجمع <span className="text-foreground font-medium">أدوات عملك</span> داخل مساحة ذكاء اصطناعي واحدة.</>,
+                    title: '١. صف الوكيل',
+                    description: <>أخبر أتمت بما يجب أن يتولاه <span className="text-foreground font-medium">زميلك الذكي</span>، ومتى يعمل، وكيف يبدو النجاح.</>,
                 },
                 {
-                    title: '٢. صف سير العمل',
-                    description: 'اخبر أتمت بما يجب أن يحدث، ومن يوافق عليه، ومتى يجب تشغيله.',
+                    title: '٢. اربط الأدوات',
+                    description: 'يحدد أتمت التطبيقات المطلوبة، يفحص الصلاحيات، ويربط كل خطوة بإجراء حقيقي.',
                 },
                 {
-                    title: '٣. دع الوكيل ينفذ',
-                    description: 'راجع الخطوات الحساسة واحصل على سجل واضح لكل إجراء مكتمل.',
+                    title: '٣. انشر وراقب',
+                    description: 'اختبر الخطة، وافق على الإجراءات الحساسة، ثم راقب كل تشغيل واستدعاء أداة ونتيجة.',
                 },
             ],
         },
         platform: {
             eyebrow: 'المنصة',
-            title: 'مركز تحكم لسير العمل المدعوم بالذكاء الاصطناعي',
-            description: 'مكان واحد للفرق لربط التطبيقات، تعريف الأتمتة، مراقبة التقدم، والموافقة على اللحظات المهمة.',
-            skillsTitle: 'مكتبة المهارات',
-            skillsDescription: 'اختر مهارة جاهزة للعمل الشائع، أو أنشئ مهارة خاصة عندما يحتاج فريقك قدرة مخصصة للوكيل.',
-            modelTitle: 'اختر النموذج',
-            modelDescription: 'اختر نموذج الذكاء الاصطناعي المناسب لكل سير عمل، من الأتمتة اليومية السريعة إلى مهام التفكير العميق.',
+            title: 'طبقة التشغيل لوكلاء الأعمال',
+            description: 'مكان واحد للفرق لبناء الوكلاء، ربط التطبيقات، تعريف الصلاحيات، مراقبة التقدم، والموافقة على اللحظات المهمة.',
+            skillsTitle: 'قوالب الوكلاء',
+            skillsDescription: 'ابدأ من قالب وكيل جاهز، ثم عدله بالمحادثة ليطابق طريقة عمل شركتك فعلاً.',
+            modelTitle: 'بناء الوكيل وتشغيله',
+            modelDescription: 'استخدم الذكاء الاصطناعي لفهم المهمة، تجميع الخطة، وتشغيل العمل عبر الأدوات والاتصالات المعتمدة.',
             memoryTitle: 'ذاكرة مساحة العمل',
             memoryDescription: 'احتفظ بالقرارات والملفات وسياق التطبيقات وتفضيلات الفريق حتى يتذكر الوكلاء طريقة عمل شركتك.',
-            automationTitle: 'أتمتة كاملة على مدار الساعة',
-            automationDescription: 'دع الوكلاء يراقبون المحفزات، يشغلون سير العمل المتكرر، وينجزون العمل الروتيني طوال الوقت.',
+            automationTitle: 'تنفيذ دائم',
+            automationDescription: 'دع وكلاء مساحة العمل يراقبون المحفزات، يشغلون العمل المتكرر، يطلبون الموافقات، وينجزون المهام الروتينية طوال الوقت.',
         },
         useCases: {
             eyebrow: 'حالات الاستخدام',
-            title: 'شغّل العمل الذي يقع بين كل فريق وكل أداة',
-            description: 'أتمت مصمم للعمليات متعددة الخطوات: يراقب المحفزات، يجمع السياق من تطبيقاتك، يتبع قواعدك، يحدّث الأنظمة، ويدخل الأشخاص فقط عندما يحتاج القرار إلى حكم أو موافقة.',
+            title: 'ابنِ وكلاء للعمل الذي يقع بين كل فريق وكل أداة',
+            description: 'أتمت مصمم للعمليات متعددة الخطوات: يراقب الوكلاء المحفزات، يجمعون السياق من تطبيقاتك، يتبعون قواعدك، يحدّثون الأنظمة، ويدخلون الأشخاص فقط عندما يحتاج القرار إلى حكم أو موافقة.',
             items: [
                 {
                     title: 'المالية: التحصيل من الفاتورة إلى الدفع',
@@ -316,13 +318,13 @@ export const landingCopy = {
             repeatableText: 'سير عمل متكرر أكثر مع تسليم يدوي أقل.',
         },
         cta: {
-            title: 'ضع سير عملك على',
-            accent: 'القيادة التلقائية بالذكاء الاصطناعي',
-            subtitle: 'انضم لقائمة الوصول المبكر وساعد في تشكيل نسخة أتمت Alpha لأتمتة الأعمال الحقيقية.',
+            title: 'ابنِ أول',
+            accent: 'زميل ذكي',
+            subtitle: 'انضم لقائمة الوصول المبكر وساعد في تشكيل نسخة أتمت Alpha لوكلاء مساحات العمل الحقيقية.',
             button: 'قائمة الإنتظار',
         },
         footer: {
-            description: 'أتمت وكيل ذكاء اصطناعي ينجز معك ويؤتمت سير العمل التجاري المتكرر عبر أدواتك.',
+            description: 'يساعد أتمت الفرق على بناء وكلاء ذكاء اصطناعي يفهمون سير العمل، يتصلون بالتطبيقات، وينجزون العمل بأمان.',
             product: 'المنتج',
             access: 'الوصول',
             community: 'المجتمع',
@@ -339,17 +341,17 @@ export const landingCopy = {
             workspaceSub: 'مساحة Alpha',
             title: 'مشروع جديد',
             run: 'تشغيل',
-            greeting: 'ماذا سنبني اليوم؟',
-            placeholder: 'اكتب لـ أتمت ما تريد أتمتته أو ربطه أو بناؤه...',
+            greeting: 'أي وكيل سنبني اليوم؟',
+            placeholder: 'صف الوكيل وسير العمل والتطبيقات والقواعد...',
             model: 'أتمت',
             attach: 'إرفاق',
             files: 'ملفات',
             image: 'صورة',
             chats: 'المحادثات',
-            chatItems: ['وكيل تحصيل الفواتير', 'ملخص المبيعات الأسبوعي', 'تدفق تصعيد الدعم'],
-            suggestions: ['أنشئ وكيل متابعة', 'حلل الفواتير المتأخرة', 'اكتب ردود العملاء'],
-            sidebarItems: ['بناء مشروع', 'الوكلاء', 'المهارات', 'التطبيقات'],
-            tabs: ['بناء وكيل', 'تشغيل سير العمل', 'ربط التطبيقات', 'مراجعة المخرجات'],
+            chatItems: ['وكيل تحصيل الفواتير', 'وكيل المبيعات الأسبوعي', 'وكيل تصعيد الدعم'],
+            suggestions: ['أنشئ وكيل متابعة', 'ابنِ وكيل فواتير', 'اربط سير عمل CRM'],
+            sidebarItems: ['بناء وكيل', 'الوكلاء', 'القوالب', 'التطبيقات'],
+            tabs: ['تخطيط الوكيل', 'ربط التطبيقات', 'اختبار التشغيل', 'المراقبة'],
         },
         illustrations: {
             integrationsTitle: 'التكاملات',
@@ -425,6 +427,25 @@ export function LandingPageProvider({ children }: { children: React.ReactNode })
         window.localStorage.setItem('atmet-landing-theme', theme)
         setRootTheme(theme)
     }, [setRootTheme, theme])
+
+    React.useEffect(() => {
+        const root = document.documentElement
+        const body = document.body
+        const previousRootBackground = root.style.backgroundColor
+        const previousBodyBackground = body.style.backgroundColor
+        const previousColorScheme = root.style.colorScheme
+        const background = theme === 'dark' ? 'oklch(0.075 0 0)' : '#ffffff'
+
+        root.style.backgroundColor = background
+        body.style.backgroundColor = background
+        root.style.colorScheme = theme
+
+        return () => {
+            root.style.backgroundColor = previousRootBackground
+            body.style.backgroundColor = previousBodyBackground
+            root.style.colorScheme = previousColorScheme
+        }
+    }, [theme])
 
     const toggleTheme = React.useCallback(() => {
         setLandingTheme((current) => (current === 'dark' ? 'light' : 'dark'))
