@@ -7,24 +7,8 @@ import AvatarGroupTooltipTransitionDemo, {
   type ChatParticipant,
 } from "@/components/shadcn-studio/avatar/avatar-18"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,68 +37,40 @@ import {
   type WorkflowSetAutoRunEventDetail,
   type WorkflowStateEventDetail,
 } from "@/lib/workflow-events"
-import { OPEN_NEW_SKILL_DIALOG_EVENT } from "@/lib/skills-events"
-import { ATMET_AUTH_CHANGED_EVENT, ATMET_USER_UPDATED_EVENT, useWorkspace } from "@/lib/workspace-context"
 import {
-  Bell,
+  ATMET_AUTH_CHANGED_EVENT,
+  ATMET_USER_UPDATED_EVENT,
+  useWorkspace,
+} from "@/lib/workspace-context"
+import { cn } from "@/lib/utils"
+import {
+  AppWindow,
+  Brain,
   Check,
   ChevronDown,
   ChevronRight,
   Clock3,
   FileClock,
+  GitBranch,
   Loader2,
-  Mail,
   Play,
   Plus,
+  RefreshCw,
   Rocket,
+  Settings,
+  ShieldCheck,
   X,
 } from "lucide-react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { SidebarLeftIcon } from "@hugeicons/core-free-icons"
 
 const OPEN_MANAGE_CHAT_USERS_EVENT = "open-manage-chat-users"
-const WORKFLOW_PROJECT_PARTICIPANTS_STORAGE_KEY = "workflow-project-participants"
-const AI_CORE_CHATS_STORAGE_KEY = "ai-core-chats"
-const AI_CORE_CHATS_UPDATED_EVENT = "ai-core-chats-updated"
-
-type StoredChatItem = {
-  id: string
-  title: string
-}
-
+const CHANGELOGS_EXTERNAL_URL = "https://chanaloge.com"
+const WORKFLOW_PROJECT_PARTICIPANTS_STORAGE_KEY =
+  "workflow-project-participants"
 type WorkspaceUser = ChatParticipant & {
   id: string
   email: string
-}
-
-type PendingInvitation = {
-  id: string
-  token: string
-  role: string
-  created_at: string
-  expires_at: string
-  workspace:
-    | {
-        id: string
-        name: string
-        avatar_url: string | null
-      }
-    | Array<{
-        id: string
-        name: string
-        avatar_url: string | null
-      }>
-    | null
-  inviter:
-    | {
-        full_name: string | null
-        email: string | null
-      }
-    | Array<{
-        full_name: string | null
-        email: string | null
-      }>
-    | null
 }
 
 type WorkflowControlState = Omit<WorkflowStateEventDetail, "projectId">
@@ -125,48 +81,6 @@ const defaultWorkflowControlState: WorkflowControlState = {
   publishState: "Draft",
   hasUnpublishedChanges: false,
   runSchedule: { mode: "off" },
-}
-
-const routeTitles: Record<string, string> = {
-  "/ai-core": "New Chat",
-  "/workflow": "Agents",
-  "/automations": "Automations",
-  "/skills": "Skills",
-  "/integrations": "Apps",
-  "/settings": "Settings",
-  "/dashboard": "Dashboard",
-}
-
-function getPageTitle(pathname: string) {
-  if (pathname.startsWith("/workflow")) {
-    return "Agents"
-  }
-  return routeTitles[pathname] ?? "Platform"
-}
-
-const integrationAppNameOverrides: Record<string, string> = {
-  aws: "AWS",
-  github: "GitHub",
-  gitlab: "GitLab",
-  "google-drive": "Google Drive",
-  "google-calendar": "Google Calendar",
-  onedrive: "OneDrive",
-  "monday.com": "Monday.com",
-  monday: "Monday.com",
-  clickup: "ClickUp",
-  cloudflare: "Cloudflare",
-}
-
-function formatIntegrationAppName(appId: string) {
-  const normalized = appId.trim().toLowerCase()
-  if (integrationAppNameOverrides[normalized]) {
-    return integrationAppNameOverrides[normalized]
-  }
-
-  return normalized
-    .split("-")
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(" ")
 }
 
 function buildFallbackFromName(name: string) {
@@ -219,86 +133,61 @@ export function PlatformNavbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { activeWorkspaceId, apiFetch, refreshWorkspaces } = useWorkspace()
+  const { activeWorkspaceId, apiFetch } = useWorkspace()
   const { state: sidebarState, toggleSidebar } = useSidebar()
   const userPickerCardRef = useRef<HTMLDivElement>(null)
   const isAiCore = pathname.startsWith("/ai-core")
   const activeChatId = searchParams.get("chat")
-  const [activeChatTitle, setActiveChatTitle] = useState("New Chat")
-  useEffect(() => {
-    if (!isAiCore || !activeChatId) {
-      setActiveChatTitle("New Chat")
-      return
-    }
-
-    const syncActiveChatTitle = () => {
-      try {
-        const stored = JSON.parse(
-          window.localStorage.getItem(AI_CORE_CHATS_STORAGE_KEY) ?? "[]"
-        ) as StoredChatItem[]
-        setActiveChatTitle(
-          stored.find((chat) => chat.id === activeChatId)?.title ?? "New Chat"
-        )
-      } catch {
-        setActiveChatTitle("New Chat")
-      }
-    }
-
-    syncActiveChatTitle()
-    window.addEventListener(
-      AI_CORE_CHATS_UPDATED_EVENT,
-      syncActiveChatTitle as EventListener
-    )
-    window.addEventListener("storage", syncActiveChatTitle)
-    return () => {
-      window.removeEventListener(
-        AI_CORE_CHATS_UPDATED_EVENT,
-        syncActiveChatTitle as EventListener
-      )
-      window.removeEventListener("storage", syncActiveChatTitle)
-    }
-  }, [activeChatId, isAiCore])
   const workflowProjectId = useMemo(() => {
     if (!pathname.startsWith("/workflow/")) return null
     const segments = pathname.split("/").filter(Boolean)
     return segments[1] ?? null
   }, [pathname])
   const activeWorkflowProject = useMemo(
-    () => (workflowProjectId ? getWorkflowProject(workflowProjectId) ?? null : null),
+    () =>
+      workflowProjectId
+        ? (getWorkflowProject(workflowProjectId) ?? null)
+        : null,
     [workflowProjectId]
   )
   const isWorkflowProject = Boolean(workflowProjectId)
-  const isSkills = pathname.startsWith("/skills")
-  const integrationAppId = pathname.startsWith("/integrations")
-    ? searchParams.get("app")
-    : null
-  const activeIntegrationAppName = useMemo(
-    () => (integrationAppId ? formatIntegrationAppName(integrationAppId) : null),
-    [integrationAppId]
-  )
   const canManageUsersFromNavbar = isAiCore || isWorkflowProject
-  const manageUsersLabel = isWorkflowProject ? "Invite users" : "Manage chat users"
+  const manageUsersLabel = isWorkflowProject
+    ? "Invite users"
+    : "Manage chat users"
   const isChatOwner = true
   const [liveUser, setLiveUser] = useState<{
     id: string
     full_name: string | null
     email: string | null
     avatar_url?: string | null
+    platform_role?: string | null
   } | null>(null)
-  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
-  const [isLoadingInvitations, setIsLoadingInvitations] = useState(false)
-  const [activeInvitationToken, setActiveInvitationToken] = useState<string | null>(null)
-  const [invitationError, setInvitationError] = useState<string | null>(null)
-  const [declineInvitation, setDeclineInvitation] = useState<PendingInvitation | null>(null)
-  const [workspaceUserRows, setWorkspaceUserRows] = useState<WorkspaceUser[]>([])
+  const [workspaceUserRows, setWorkspaceUserRows] = useState<WorkspaceUser[]>(
+    []
+  )
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false)
   const [userSearchQuery, setUserSearchQuery] = useState("")
   const refreshLiveUser = useCallback(() => {
     fetch("/api/users/me", { cache: "no-store", credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { user?: { id: string; full_name: string | null; email: string | null; avatar_url?: string | null } } } | null) => {
-        if (payload?.data?.user) setLiveUser(payload.data.user)
-      })
+      .then(
+        (
+          payload: {
+            data?: {
+              user?: {
+                id: string
+                full_name: string | null
+                email: string | null
+                avatar_url?: string | null
+                platform_role?: string | null
+              }
+            }
+          } | null
+        ) => {
+          if (payload?.data?.user) setLiveUser(payload.data.user)
+        }
+      )
       .catch(() => undefined)
   }, [])
 
@@ -311,74 +200,10 @@ export function PlatformNavbar() {
       window.removeEventListener(ATMET_USER_UPDATED_EVENT, refreshLiveUser)
     }
   }, [refreshLiveUser])
+  const isPlatformAdmin =
+    liveUser?.platform_role === "super_admin" ||
+    liveUser?.platform_role === "admin"
 
-  const loadPendingInvitations = useCallback(async () => {
-    setIsLoadingInvitations(true)
-    setInvitationError(null)
-    try {
-      const response = await fetch("/api/invitations")
-      const payload = (await response.json().catch(() => null)) as
-        | { data?: { invitations?: PendingInvitation[] }; error?: { message?: string } }
-        | null
-
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Unable to load invitations.")
-      }
-
-      setPendingInvitations(payload?.data?.invitations ?? [])
-    } catch (error) {
-      setInvitationError(error instanceof Error ? error.message : "Unable to load invitations.")
-      setPendingInvitations([])
-    } finally {
-      setIsLoadingInvitations(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!liveUser?.email) return
-    void loadPendingInvitations()
-
-    const interval = window.setInterval(() => {
-      void loadPendingInvitations()
-    }, 60_000)
-
-    return () => window.clearInterval(interval)
-  }, [liveUser?.email, loadPendingInvitations])
-
-  const respondToInvitation = useCallback(
-    async (invitation: PendingInvitation, action: "accept" | "decline") => {
-      setActiveInvitationToken(invitation.token)
-      setInvitationError(null)
-      try {
-        const response = await fetch(`/api/invitations/${invitation.token}/respond`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action }),
-        })
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: { message?: string } }
-          | null
-
-        if (!response.ok) {
-          throw new Error(payload?.error?.message ?? `Unable to ${action} invitation.`)
-        }
-
-        setPendingInvitations((previous) =>
-          previous.filter((item) => item.token !== invitation.token)
-        )
-
-        if (action === "accept") {
-          await refreshWorkspaces().catch(() => {})
-        }
-      } catch (error) {
-        setInvitationError(error instanceof Error ? error.message : `Unable to ${action} invitation.`)
-      } finally {
-        setActiveInvitationToken(null)
-        if (action === "decline") setDeclineInvitation(null)
-      }
-    },
-    [refreshWorkspaces]
-  )
   useEffect(() => {
     if (!activeWorkspaceId) {
       setWorkspaceUserRows([])
@@ -388,19 +213,21 @@ export function PlatformNavbar() {
     apiFetch(`/api/workspaces/${activeWorkspaceId}/members`)
       .then((response) => (response.ok ? response.json() : null))
       .then(
-        (payload: {
-          data?: {
-            members?: Array<{
-              user?: {
-                id: string
-                email: string | null
-                full_name: string | null
-                avatar_url: string | null
-                status: string | null
-              } | null
-            }>
-          }
-        } | null) => {
+        (
+          payload: {
+            data?: {
+              members?: Array<{
+                user?: {
+                  id: string
+                  email: string | null
+                  full_name: string | null
+                  avatar_url: string | null
+                  status: string | null
+                } | null
+              }>
+            }
+          } | null
+        ) => {
           setWorkspaceUserRows(
             (payload?.data?.members ?? []).flatMap((member) => {
               const user = member.user
@@ -425,9 +252,15 @@ export function PlatformNavbar() {
     () => workspaceUserRows,
     [workspaceUserRows]
   )
-  const [aiCoreParticipants, setAiCoreParticipants] = useState<WorkspaceUser[]>([])
-  const [chatParticipantError, setChatParticipantError] = useState<string | null>(null)
-  const [updatingParticipantId, setUpdatingParticipantId] = useState<string | null>(null)
+  const [aiCoreParticipants, setAiCoreParticipants] = useState<WorkspaceUser[]>(
+    []
+  )
+  const [chatParticipantError, setChatParticipantError] = useState<
+    string | null
+  >(null)
+  const [updatingParticipantId, setUpdatingParticipantId] = useState<
+    string | null
+  >(null)
   useEffect(() => {
     if (!isAiCore || !activeChatId) {
       setAiCoreParticipants([])
@@ -439,34 +272,34 @@ export function PlatformNavbar() {
 
     apiFetch(`/api/chats/${activeChatId}/users`, { cache: "no-store" })
       .then(async (response) => {
-        const payload = (await response.json().catch(() => null)) as
-          | {
-              data?: {
-                users?: Array<{
-                  user?:
-                    | {
-                        id: string
-                        email: string | null
-                        full_name: string | null
-                        avatar_url?: string | null
-                        status?: string | null
-                      }
-                    | Array<{
-                        id: string
-                        email: string | null
-                        full_name: string | null
-                        avatar_url?: string | null
-                        status?: string | null
-                      }>
-                    | null
-                }>
-              }
-              error?: { message?: string }
-            }
-          | null
+        const payload = (await response.json().catch(() => null)) as {
+          data?: {
+            users?: Array<{
+              user?:
+                | {
+                    id: string
+                    email: string | null
+                    full_name: string | null
+                    avatar_url?: string | null
+                    status?: string | null
+                  }
+                | Array<{
+                    id: string
+                    email: string | null
+                    full_name: string | null
+                    avatar_url?: string | null
+                    status?: string | null
+                  }>
+                | null
+            }>
+          }
+          error?: { message?: string }
+        } | null
 
         if (!response.ok) {
-          throw new Error(payload?.error?.message ?? "Unable to load chat users.")
+          throw new Error(
+            payload?.error?.message ?? "Unable to load chat users."
+          )
         }
 
         return payload?.data?.users ?? []
@@ -504,9 +337,8 @@ export function PlatformNavbar() {
       cancelled = true
     }
   }, [activeChatId, apiFetch, isAiCore, liveUser?.email])
-  const [workflowParticipantsByProject, setWorkflowParticipantsByProject] = useState<
-    Record<string, ChatParticipant[]>
-  >({})
+  const [workflowParticipantsByProject, setWorkflowParticipantsByProject] =
+    useState<Record<string, ChatParticipant[]>>({})
   const activeParticipants = useMemo(() => {
     if (isAiCore) return aiCoreParticipants
     if (isWorkflowProject && workflowProjectId) {
@@ -542,12 +374,49 @@ export function PlatformNavbar() {
     [activeParticipants]
   )
   const shouldShowParticipantsTrigger = isWorkflowProject || isAiCore
-  const [workflowControlStateByProject, setWorkflowControlStateByProject] = useState<
-    Record<string, WorkflowControlState>
-  >({})
+  const shouldShowWorkflowActionsInNavbar = false
+  const platformNavItems = useMemo(
+    () => [
+      { title: "Build Project", url: "/ai-core", icon: Plus },
+      { title: "Agents", url: "/workflow", icon: GitBranch },
+      { title: "Skills", url: "/skills", icon: Brain },
+      { title: "Apps", url: "/integrations", icon: AppWindow },
+    ],
+    []
+  )
+  const utilityNavItems = useMemo(
+    () => [
+      {
+        title: "Changelogs",
+        icon: RefreshCw,
+        onClick: () =>
+          window.open(CHANGELOGS_EXTERNAL_URL, "_blank", "noopener,noreferrer"),
+      },
+      {
+        title: "Settings",
+        icon: Settings,
+        onClick: () => router.push("/settings"),
+      },
+      ...(isPlatformAdmin
+        ? [
+            {
+              title: "Admin",
+              icon: ShieldCheck,
+              onClick: () => router.push("/admin-console"),
+            },
+          ]
+        : []),
+    ],
+    [isPlatformAdmin, router]
+  )
+  const [workflowControlStateByProject, setWorkflowControlStateByProject] =
+    useState<Record<string, WorkflowControlState>>({})
   const activeWorkflowControlState = useMemo<WorkflowControlState>(() => {
     if (!workflowProjectId) return defaultWorkflowControlState
-    return workflowControlStateByProject[workflowProjectId] ?? defaultWorkflowControlState
+    return (
+      workflowControlStateByProject[workflowProjectId] ??
+      defaultWorkflowControlState
+    )
   }, [workflowControlStateByProject, workflowProjectId])
   const workflowPublishButtonLabel = activeWorkflowControlState.isPublishing
     ? "Publishing..."
@@ -590,7 +459,9 @@ export function PlatformNavbar() {
     const [hoursRaw, minutesRaw] = atTimeValue.split(":")
     const parsedHours = Number.parseInt(hoursRaw ?? "", 10)
     const parsedMinutes = Number.parseInt(minutesRaw ?? "", 10)
-    const hours = Number.isFinite(parsedHours) ? Math.max(0, Math.min(23, parsedHours)) : 0
+    const hours = Number.isFinite(parsedHours)
+      ? Math.max(0, Math.min(23, parsedHours))
+      : 0
     const minutes = Number.isFinite(parsedMinutes)
       ? Math.max(0, Math.min(59, parsedMinutes))
       : 0
@@ -602,7 +473,9 @@ export function PlatformNavbar() {
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(WORKFLOW_PROJECT_PARTICIPANTS_STORAGE_KEY)
+      const raw = window.localStorage.getItem(
+        WORKFLOW_PROJECT_PARTICIPANTS_STORAGE_KEY
+      )
       if (!raw) return
       const parsed = JSON.parse(raw)
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return
@@ -611,14 +484,13 @@ export function PlatformNavbar() {
       Object.entries(parsed).forEach(([projectId, participants]) => {
         if (!Array.isArray(participants)) return
         cleaned[projectId] = participants
-          .filter(
-            (participant): participant is ChatParticipant =>
-              Boolean(
-                participant &&
-                  typeof participant === "object" &&
-                  typeof participant.name === "string" &&
-                  typeof participant.fallback === "string"
-              )
+          .filter((participant): participant is ChatParticipant =>
+            Boolean(
+              participant &&
+              typeof participant === "object" &&
+              typeof participant.name === "string" &&
+              typeof participant.fallback === "string"
+            )
           )
           .map((participant) => ({
             name: participant.name,
@@ -685,21 +557,23 @@ export function PlatformNavbar() {
         ) => {
           if (cancelled) return
 
-          const participants = (payload?.data?.chatUsers ?? []).flatMap((row) => {
-            const user = unwrapRelation(row.user)
-            if (!user?.id) return []
-            if (user.status && user.status !== "active") return []
-            if (liveUser?.email && user.email === liveUser.email) return []
+          const participants = (payload?.data?.chatUsers ?? []).flatMap(
+            (row) => {
+              const user = unwrapRelation(row.user)
+              if (!user?.id) return []
+              if (user.status && user.status !== "active") return []
+              if (liveUser?.email && user.email === liveUser.email) return []
 
-            const name = user.full_name || user.email || "Workspace user"
-            return {
-              id: user.id,
-              name,
-              fallback: buildFallbackFromName(name),
-              email: user.email ?? "",
-              src: user.avatar_url ?? undefined,
+              const name = user.full_name || user.email || "Workspace user"
+              return {
+                id: user.id,
+                name,
+                fallback: buildFallbackFromName(name),
+                email: user.email ?? "",
+                src: user.avatar_url ?? undefined,
+              }
             }
-          })
+          )
 
           if (participants.length === 0) return
 
@@ -752,7 +626,10 @@ export function PlatformNavbar() {
       }))
     }
 
-    window.addEventListener(WORKFLOW_STATE_EVENT, onWorkflowStateUpdated as EventListener)
+    window.addEventListener(
+      WORKFLOW_STATE_EVENT,
+      onWorkflowStateUpdated as EventListener
+    )
     return () =>
       window.removeEventListener(
         WORKFLOW_STATE_EVENT,
@@ -784,7 +661,9 @@ export function PlatformNavbar() {
   const dispatchWorkflowControlEvent = useCallback(
     (eventName: string) => {
       if (!workflowProjectId) return
-      const detail: WorkflowControlEventDetail = { projectId: workflowProjectId }
+      const detail: WorkflowControlEventDetail = {
+        projectId: workflowProjectId,
+      }
       try {
         window.dispatchEvent(new CustomEvent(eventName, { detail }))
       } catch (error) {
@@ -813,7 +692,9 @@ export function PlatformNavbar() {
         schedule,
       }
       try {
-        window.dispatchEvent(new CustomEvent(WORKFLOW_SET_AUTORUN_EVENT, { detail }))
+        window.dispatchEvent(
+          new CustomEvent(WORKFLOW_SET_AUTORUN_EVENT, { detail })
+        )
       } catch (error) {
         console.error("Failed to dispatch workflow auto-run event:", error)
       }
@@ -821,134 +702,166 @@ export function PlatformNavbar() {
     [workflowProjectId]
   )
 
-  const handleAddUser = useCallback(async (user: WorkspaceUser) => {
-    const nextParticipant: WorkspaceUser = {
-      id: user.id,
-      name: user.name,
-      fallback: user.fallback,
-      email: user.email,
-      src: user.src,
-    }
-
-    if (isAiCore) {
-      if (!activeChatId) {
-        setChatParticipantError("Send a message first to create this chat, then add people.")
-        return
+  const handleAddUser = useCallback(
+    async (user: WorkspaceUser) => {
+      const nextParticipant: WorkspaceUser = {
+        id: user.id,
+        name: user.name,
+        fallback: user.fallback,
+        email: user.email,
+        src: user.src,
       }
 
-      setChatParticipantError(null)
-      setUpdatingParticipantId(user.id)
-      try {
-        const response = await apiFetch(`/api/chats/${activeChatId}/users`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: user.id }),
-        })
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: { message?: string } }
-          | null
-
-        if (!response.ok) {
-          throw new Error(payload?.error?.message ?? "Unable to add this user.")
+      if (isAiCore) {
+        if (!activeChatId) {
+          setChatParticipantError(
+            "Send a message first to create this chat, then add people."
+          )
+          return
         }
 
-        setAiCoreParticipants((previous) => {
-          if (previous.some((participant) => participant.id === nextParticipant.id)) {
-            return previous
+        setChatParticipantError(null)
+        setUpdatingParticipantId(user.id)
+        try {
+          const response = await apiFetch(`/api/chats/${activeChatId}/users`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: user.id }),
+          })
+          const payload = (await response.json().catch(() => null)) as {
+            error?: { message?: string }
+          } | null
+
+          if (!response.ok) {
+            throw new Error(
+              payload?.error?.message ?? "Unable to add this user."
+            )
           }
-          return [...previous, nextParticipant]
-        })
-      } catch (error) {
-        setChatParticipantError(
-          error instanceof Error ? error.message : "Unable to add this user."
-        )
-      } finally {
-        setUpdatingParticipantId(null)
-      }
-      return
-    }
 
-    if (!isWorkflowProject || !workflowProjectId) return
-
-    setWorkflowParticipantsByProject((previous) => {
-      const currentParticipants = Object.prototype.hasOwnProperty.call(
-        previous,
-        workflowProjectId
-      )
-        ? previous[workflowProjectId] ?? []
-        : getDefaultParticipantsForProject(activeWorkflowProject)
-
-      if (
-        currentParticipants.some(
-          (participant) => participant.name === nextParticipant.name
-        )
-      ) {
-        return previous
-      }
-
-      return {
-        ...previous,
-        [workflowProjectId]: [...currentParticipants, nextParticipant],
-      }
-    })
-  }, [activeChatId, activeWorkflowProject, apiFetch, isAiCore, isWorkflowProject, workflowProjectId])
-
-  const handleRemoveUser = useCallback(async (user: WorkspaceUser) => {
-    if (isAiCore) {
-      if (!activeChatId) {
-        setAiCoreParticipants((previous) =>
-          previous.filter((participant) => participant.id !== user.id)
-        )
+          setAiCoreParticipants((previous) => {
+            if (
+              previous.some(
+                (participant) => participant.id === nextParticipant.id
+              )
+            ) {
+              return previous
+            }
+            return [...previous, nextParticipant]
+          })
+        } catch (error) {
+          setChatParticipantError(
+            error instanceof Error ? error.message : "Unable to add this user."
+          )
+        } finally {
+          setUpdatingParticipantId(null)
+        }
         return
       }
 
-      setChatParticipantError(null)
-      setUpdatingParticipantId(user.id)
-      try {
-        const response = await apiFetch(`/api/chats/${activeChatId}/users`, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: user.id }),
-        })
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: { message?: string } }
-          | null
+      if (!isWorkflowProject || !workflowProjectId) return
 
-        if (!response.ok) {
-          throw new Error(payload?.error?.message ?? "Unable to remove this user.")
+      setWorkflowParticipantsByProject((previous) => {
+        const currentParticipants = Object.prototype.hasOwnProperty.call(
+          previous,
+          workflowProjectId
+        )
+          ? (previous[workflowProjectId] ?? [])
+          : getDefaultParticipantsForProject(activeWorkflowProject)
+
+        if (
+          currentParticipants.some(
+            (participant) => participant.name === nextParticipant.name
+          )
+        ) {
+          return previous
         }
 
-        setAiCoreParticipants((previous) =>
-          previous.filter((participant) => participant.id !== user.id)
-        )
-      } catch (error) {
-        setChatParticipantError(
-          error instanceof Error ? error.message : "Unable to remove this user."
-        )
-      } finally {
-        setUpdatingParticipantId(null)
+        return {
+          ...previous,
+          [workflowProjectId]: [...currentParticipants, nextParticipant],
+        }
+      })
+    },
+    [
+      activeChatId,
+      activeWorkflowProject,
+      apiFetch,
+      isAiCore,
+      isWorkflowProject,
+      workflowProjectId,
+    ]
+  )
+
+  const handleRemoveUser = useCallback(
+    async (user: WorkspaceUser) => {
+      if (isAiCore) {
+        if (!activeChatId) {
+          setAiCoreParticipants((previous) =>
+            previous.filter((participant) => participant.id !== user.id)
+          )
+          return
+        }
+
+        setChatParticipantError(null)
+        setUpdatingParticipantId(user.id)
+        try {
+          const response = await apiFetch(`/api/chats/${activeChatId}/users`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: user.id }),
+          })
+          const payload = (await response.json().catch(() => null)) as {
+            error?: { message?: string }
+          } | null
+
+          if (!response.ok) {
+            throw new Error(
+              payload?.error?.message ?? "Unable to remove this user."
+            )
+          }
+
+          setAiCoreParticipants((previous) =>
+            previous.filter((participant) => participant.id !== user.id)
+          )
+        } catch (error) {
+          setChatParticipantError(
+            error instanceof Error
+              ? error.message
+              : "Unable to remove this user."
+          )
+        } finally {
+          setUpdatingParticipantId(null)
+        }
+        return
       }
-      return
-    }
 
-    if (!isWorkflowProject || !workflowProjectId) return
+      if (!isWorkflowProject || !workflowProjectId) return
 
-    setWorkflowParticipantsByProject((previous) => {
-      const currentParticipants = Object.prototype.hasOwnProperty.call(
-        previous,
-        workflowProjectId
-      )
-        ? previous[workflowProjectId] ?? []
-        : getDefaultParticipantsForProject(activeWorkflowProject)
+      setWorkflowParticipantsByProject((previous) => {
+        const currentParticipants = Object.prototype.hasOwnProperty.call(
+          previous,
+          workflowProjectId
+        )
+          ? (previous[workflowProjectId] ?? [])
+          : getDefaultParticipantsForProject(activeWorkflowProject)
 
-      return {
-        ...previous,
-        [workflowProjectId]: currentParticipants.filter(
-          (participant) => participant.name !== user.name
-        ),
-      }
-    })
-  }, [activeChatId, activeWorkflowProject, apiFetch, isAiCore, isWorkflowProject, workflowProjectId])
+        return {
+          ...previous,
+          [workflowProjectId]: currentParticipants.filter(
+            (participant) => participant.name !== user.name
+          ),
+        }
+      })
+    },
+    [
+      activeChatId,
+      activeWorkflowProject,
+      apiFetch,
+      isAiCore,
+      isWorkflowProject,
+      workflowProjectId,
+    ]
+  )
 
   useEffect(() => {
     const handleOpenEvent = () => {
@@ -956,9 +869,15 @@ export function PlatformNavbar() {
       openUserPicker()
     }
 
-    window.addEventListener(OPEN_MANAGE_CHAT_USERS_EVENT, handleOpenEvent as EventListener)
+    window.addEventListener(
+      OPEN_MANAGE_CHAT_USERS_EVENT,
+      handleOpenEvent as EventListener
+    )
     return () =>
-      window.removeEventListener(OPEN_MANAGE_CHAT_USERS_EVENT, handleOpenEvent as EventListener)
+      window.removeEventListener(
+        OPEN_MANAGE_CHAT_USERS_EVENT,
+        handleOpenEvent as EventListener
+      )
   }, [canManageUsersFromNavbar, openUserPicker])
 
   useEffect(() => {
@@ -990,74 +909,72 @@ export function PlatformNavbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex h-10 shrink-0 items-center justify-between gap-1 border-b bg-background px-3">
-        <div className="flex items-center gap-1.5">
-          {sidebarState === "collapsed" && (
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              aria-label="Expand sidebar"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <HugeiconsIcon icon={SidebarLeftIcon} strokeWidth={1.5} className="size-4 rtl:rotate-180" />
-            </button>
-          )}
-          <Breadcrumb>
-            <BreadcrumbList>
-              {isWorkflowProject ? (
-                <>
-                  <BreadcrumbItem>
-                    <BreadcrumbLink
-                      render={<button type="button" />}
-                      onClick={() => router.push("/workflow")}
-                    >
-                      Agents
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>{activeWorkflowProject?.title ?? "Project"}</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </>
-              ) : activeIntegrationAppName ? (
-                <>
-                  <BreadcrumbItem>
-                    <BreadcrumbLink
-                      render={<button type="button" />}
-                      onClick={() => router.push("/integrations")}
-                    >
-                      Apps
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>{activeIntegrationAppName}</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </>
-              ) : (
-                <BreadcrumbItem>
-                  <BreadcrumbPage>
-                    {isAiCore ? activeChatTitle : getPageTitle(pathname)}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
+      <header className="sticky top-0 z-40 flex h-10 shrink-0 items-center justify-between gap-1 rounded-t-[inherit] border-b bg-background px-3 dark:bg-sidebar">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={
+              sidebarState === "collapsed" ? "Open chats" : "Close chats"
+            }
+            aria-expanded={sidebarState !== "collapsed"}
+            className={cn(
+              "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+              sidebarState !== "collapsed" && "bg-accent text-foreground"
+            )}
+          >
+            <HugeiconsIcon
+              icon={SidebarLeftIcon}
+              strokeWidth={1.5}
+              className={cn(
+                "size-4 transition-transform rtl:rotate-180",
+                sidebarState !== "collapsed" && "rotate-180 rtl:rotate-0"
               )}
-            </BreadcrumbList>
-          </Breadcrumb>
+            />
+          </button>
+          <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
+            {platformNavItems.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname.startsWith(item.url)
+
+              return (
+                <button
+                  key={item.title}
+                  type="button"
+                  onClick={() => router.push(item.url)}
+                  className={cn(
+                    "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors",
+                    isActive
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{item.title}</span>
+                </button>
+              )
+            })}
+          </nav>
         </div>
         <div className="flex items-center gap-1.5">
-          {isSkills && (
-            <Button
-              size="sm"
-              className="h-7 gap-1.5 px-2.5 text-xs"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent(OPEN_NEW_SKILL_DIALOG_EVENT))
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New skill
-            </Button>
-          )}
-          {isWorkflowProject && (
+          <div className="hidden items-center gap-1 md:flex">
+            {utilityNavItems.map((item) => {
+              const Icon = item.icon
+
+              return (
+                <button
+                  key={item.title}
+                  type="button"
+                  onClick={item.onClick}
+                  className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{item.title}</span>
+                </button>
+              )
+            })}
+          </div>
+          {shouldShowWorkflowActionsInNavbar && isWorkflowProject && (
             <>
               <Button
                 type="button"
@@ -1136,107 +1053,148 @@ export function PlatformNavbar() {
                         Run now
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => requestWorkflowSetAutoRun({ mode: "off" })}>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          requestWorkflowSetAutoRun({ mode: "off" })
+                        }
+                      >
                         Off
                         <span className="ms-auto text-xs text-muted-foreground">
-                          {activeWorkflowControlState.runSchedule.mode === "off" ? "Active" : ""}
+                          {activeWorkflowControlState.runSchedule.mode === "off"
+                            ? "Active"
+                            : ""}
                         </span>
                       </DropdownMenuItem>
                       <DropdownMenuSub>
                         <DropdownMenuSubTrigger>Every</DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent align="end" className="min-w-56">
-                          {(["minutes", "hours", "days", "weeks", "months"] as const).map(
-                            (unit) => {
-                              const isActive =
-                                activeWorkflowControlState.runSchedule.mode === "every" &&
-                                activeWorkflowControlState.runSchedule.unit === unit
+                        <DropdownMenuSubContent
+                          align="end"
+                          className="min-w-56"
+                        >
+                          {(
+                            [
+                              "minutes",
+                              "hours",
+                              "days",
+                              "weeks",
+                              "months",
+                            ] as const
+                          ).map((unit) => {
+                            const isActive =
+                              activeWorkflowControlState.runSchedule.mode ===
+                                "every" &&
+                              activeWorkflowControlState.runSchedule.unit ===
+                                unit
 
-                              return (
-                                <DropdownMenuSub key={unit}>
-                                  <DropdownMenuSubTrigger
-                                    className="justify-between"
+                            return (
+                              <DropdownMenuSub key={unit}>
+                                <DropdownMenuSubTrigger className="justify-between">
+                                  <span>
+                                    {unit.charAt(0).toUpperCase() +
+                                      unit.slice(1)}
+                                  </span>
+                                  <span className="ms-auto text-xs text-muted-foreground">
+                                    {isActive ? "Active" : ""}
+                                  </span>
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent
+                                  align="end"
+                                  className="min-w-52"
+                                >
+                                  <div
+                                    className="px-2 py-2"
+                                    onClick={(event) => event.stopPropagation()}
+                                    onPointerDown={(event) =>
+                                      event.stopPropagation()
+                                    }
                                   >
-                                    <span>{unit.charAt(0).toUpperCase() + unit.slice(1)}</span>
-                                    <span className="ms-auto text-xs text-muted-foreground">
-                                      {isActive ? "Active" : ""}
-                                    </span>
-                                  </DropdownMenuSubTrigger>
-                                  <DropdownMenuSubContent align="end" className="min-w-52">
-                                    <div
-                                      className="px-2 py-2"
-                                      onClick={(event) => event.stopPropagation()}
-                                      onPointerDown={(event) => event.stopPropagation()}
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs text-muted-foreground">Every</span>
-                                        <Input
-                                          type="number"
-                                          min={1}
-                                          step={1}
-                                          value={everyIntervalValue}
-                                          onChange={(event) => {
-                                            const rawValue = event.target.value
-                                            if (rawValue === "") {
-                                              setEveryIntervalValue("")
-                                              return
-                                            }
-                                            const nextValue = Number.parseInt(rawValue, 10)
-                                            if (!Number.isFinite(nextValue)) return
-                                            setEveryIntervalValue(
-                                              String(Math.max(1, Math.min(9999, nextValue)))
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-muted-foreground">
+                                        Every
+                                      </span>
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        step={1}
+                                        value={everyIntervalValue}
+                                        onChange={(event) => {
+                                          const rawValue = event.target.value
+                                          if (rawValue === "") {
+                                            setEveryIntervalValue("")
+                                            return
+                                          }
+                                          const nextValue = Number.parseInt(
+                                            rawValue,
+                                            10
+                                          )
+                                          if (!Number.isFinite(nextValue))
+                                            return
+                                          setEveryIntervalValue(
+                                            String(
+                                              Math.max(
+                                                1,
+                                                Math.min(9999, nextValue)
+                                              )
                                             )
-                                          }}
-                                          onKeyDown={(event) => {
-                                            event.stopPropagation()
-                                            if (event.key !== "Enter") return
-                                            event.preventDefault()
-                                            const nextValue =
-                                              everyIntervalValue.trim() === ""
-                                                ? 1
-                                                : parsedEveryIntervalValue
-                                            setEveryIntervalValue(String(nextValue))
-                                            requestWorkflowSetAutoRun({
-                                              mode: "every",
-                                              value: nextValue,
-                                              unit,
-                                            })
-                                          }}
-                                          className="h-8 w-20 text-xs"
-                                        />
-                                        <span className="text-xs text-muted-foreground">
-                                          {unit}
-                                        </span>
-                                        <button
-                                          type="button"
-                                          aria-label={`Save ${unit} auto-run interval`}
-                                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                                          onClick={() => {
-                                            const nextValue =
-                                              everyIntervalValue.trim() === ""
-                                                ? 1
-                                                : parsedEveryIntervalValue
-                                            setEveryIntervalValue(String(nextValue))
-                                            requestWorkflowSetAutoRun({
-                                              mode: "every",
-                                              value: nextValue,
-                                              unit,
-                                            })
-                                          }}
-                                        >
-                                          <Check className="h-4 w-4" />
-                                        </button>
-                                      </div>
+                                          )
+                                        }}
+                                        onKeyDown={(event) => {
+                                          event.stopPropagation()
+                                          if (event.key !== "Enter") return
+                                          event.preventDefault()
+                                          const nextValue =
+                                            everyIntervalValue.trim() === ""
+                                              ? 1
+                                              : parsedEveryIntervalValue
+                                          setEveryIntervalValue(
+                                            String(nextValue)
+                                          )
+                                          requestWorkflowSetAutoRun({
+                                            mode: "every",
+                                            value: nextValue,
+                                            unit,
+                                          })
+                                        }}
+                                        className="h-8 w-20 text-xs"
+                                      />
+                                      <span className="text-xs text-muted-foreground">
+                                        {unit}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        aria-label={`Save ${unit} auto-run interval`}
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                        onClick={() => {
+                                          const nextValue =
+                                            everyIntervalValue.trim() === ""
+                                              ? 1
+                                              : parsedEveryIntervalValue
+                                          setEveryIntervalValue(
+                                            String(nextValue)
+                                          )
+                                          requestWorkflowSetAutoRun({
+                                            mode: "every",
+                                            value: nextValue,
+                                            unit,
+                                          })
+                                        }}
+                                      >
+                                        <Check className="h-4 w-4" />
+                                      </button>
                                     </div>
-                                  </DropdownMenuSubContent>
-                                </DropdownMenuSub>
-                              )
-                            }
-                          )}
+                                  </div>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                            )
+                          })}
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>
                       <DropdownMenuSub>
                         <DropdownMenuSubTrigger>At</DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent align="end" className="w-fit min-w-0 p-0">
+                        <DropdownMenuSubContent
+                          align="end"
+                          className="w-fit min-w-0 p-0"
+                        >
                           <div
                             className="space-y-3 p-3"
                             onClick={(event) => event.stopPropagation()}
@@ -1262,8 +1220,12 @@ export function PlatformNavbar() {
                                 type="time"
                                 step={60}
                                 value={atTimeValue}
-                                onChange={(event) => setAtTimeValue(event.target.value)}
-                                onPointerDown={(event) => event.stopPropagation()}
+                                onChange={(event) =>
+                                  setAtTimeValue(event.target.value)
+                                }
+                                onPointerDown={(event) =>
+                                  event.stopPropagation()
+                                }
                                 onKeyDown={(event) => event.stopPropagation()}
                                 className="h-8 text-xs"
                               />
@@ -1282,7 +1244,8 @@ export function PlatformNavbar() {
                               </Button>
                             </div>
                             <p className="text-[11px] text-muted-foreground">
-                              {activeWorkflowControlState.runSchedule.mode === "at"
+                              {activeWorkflowControlState.runSchedule.mode ===
+                              "at"
                                 ? "Active"
                                 : "Select date and time, then save"}
                             </p>
@@ -1302,128 +1265,13 @@ export function PlatformNavbar() {
                     <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                   </DropdownMenuItem>
                   <div className="px-2 py-1 text-[11px] text-muted-foreground">
-                    Auto-run: {getAutoRunLabel(activeWorkflowControlState.runSchedule)}
+                    Auto-run:{" "}
+                    {getAutoRunLabel(activeWorkflowControlState.runSchedule)}
                   </div>
                 </DropdownMenuContent>
               </DropdownMenu>
             </>
           )}
-          <DropdownMenu onOpenChange={(open) => {
-            if (open) void loadPendingInvitations()
-          }}>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="relative h-7 w-7"
-                  aria-label="Notifications"
-                />
-              }
-            >
-              <Bell className="h-4 w-4" />
-              {pendingInvitations.length > 0 ? (
-                <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-medium leading-none text-primary-foreground tabular-nums">
-                  {pendingInvitations.length > 9 ? "9+" : pendingInvitations.length}
-                </span>
-              ) : null}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-86 p-0">
-              <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-popover-foreground">Notifications</p>
-                  <p className="text-xs text-muted-foreground">
-                    Workspace invitations
-                  </p>
-                </div>
-                {isLoadingInvitations ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
-              </div>
-              <div className="max-h-96 overflow-y-auto p-2">
-                {invitationError ? (
-                  <p className="rounded-md bg-destructive/10 px-2 py-2 text-xs text-destructive">
-                    {invitationError}
-                  </p>
-                ) : null}
-                {pendingInvitations.map((invitation) => {
-                  const workspace = unwrapRelation(invitation.workspace)
-                  const inviter = unwrapRelation(invitation.inviter)
-                  const workspaceName = workspace?.name ?? "Workspace"
-                  const inviterName = inviter?.full_name || inviter?.email || "A teammate"
-                  const isResponding = activeInvitationToken === invitation.token
-
-                  return (
-                    <div
-                      key={invitation.id}
-                      className="rounded-lg px-2 py-2 transition-colors hover:bg-accent/60"
-                    >
-                      <div className="flex items-start gap-2">
-                        <Avatar size="sm" className="mt-0.5 rounded-lg">
-                          <AvatarImage src={workspace?.avatar_url ?? undefined} alt={workspaceName} />
-                          <AvatarFallback className="rounded-lg text-[10px]">
-                            {buildFallbackFromName(workspaceName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-popover-foreground">
-                            {workspaceName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Invited by {inviterName}
-                          </p>
-                          <p className="mt-0.5 text-[11px] capitalize text-muted-foreground">
-                            Role: {invitation.role}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex gap-2 ps-8">
-                        <Button
-                          type="button"
-                          size="xs"
-                          className="flex-1"
-                          disabled={isResponding}
-                          onClick={(event) => {
-                            event.preventDefault()
-                            void respondToInvitation(invitation, "accept")
-                          }}
-                        >
-                          {isResponding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                          Accept
-                        </Button>
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="outline"
-                          className="flex-1"
-                          disabled={isResponding}
-                          onClick={(event) => {
-                            event.preventDefault()
-                            setDeclineInvitation(invitation)
-                          }}
-                        >
-                          <X className="h-3 w-3" />
-                          Decline
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-                {!isLoadingInvitations && pendingInvitations.length === 0 ? (
-                  <div className="px-3 py-8 text-center">
-                    <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                      <Mail className="h-4 w-4" />
-                    </div>
-                    <p className="text-sm font-medium text-popover-foreground">
-                      No invitations
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      New workspace invites will appear here.
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
           {shouldShowParticipantsTrigger && (
             <AvatarGroupTooltipTransitionDemo
               users={activeParticipants}
@@ -1433,47 +1281,11 @@ export function PlatformNavbar() {
           )}
         </div>
       </header>
-      <Dialog open={Boolean(declineInvitation)} onOpenChange={(open) => {
-        if (!open) setDeclineInvitation(null)
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Decline invitation?</DialogTitle>
-            <DialogDescription>
-              This will remove the pending invitation for{" "}
-              {unwrapRelation(declineInvitation?.workspace)?.name ?? "this workspace"}.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeclineInvitation(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={!declineInvitation || activeInvitationToken === declineInvitation.token}
-              onClick={() => {
-                if (!declineInvitation) return
-                void respondToInvitation(declineInvitation, "decline")
-              }}
-            >
-              {declineInvitation && activeInvitationToken === declineInvitation.token ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : null}
-              Decline
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       {canManageUsersFromNavbar && isUserPickerOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center p-4">
           <div
             ref={userPickerCardRef}
-            className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-popover p-3 shadow-xl pointer-events-auto"
+            className="pointer-events-auto relative z-10 w-full max-w-md rounded-2xl border border-border bg-popover p-3 shadow-xl"
           >
             <div className="mb-2 flex items-center justify-between px-1">
               <p className="text-base font-semibold text-popover-foreground">
@@ -1521,9 +1333,14 @@ export function PlatformNavbar() {
                     className="flex items-center justify-between gap-2 rounded-md px-1 py-1"
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <Avatar size="sm" className="ring-background ring-2">
-                        <AvatarImage src={workspaceUser.src} alt={workspaceUser.name} />
-                        <AvatarFallback className="text-[10px]">{workspaceUser.fallback}</AvatarFallback>
+                      <Avatar size="sm" className="ring-2 ring-background">
+                        <AvatarImage
+                          src={workspaceUser.src}
+                          alt={workspaceUser.name}
+                        />
+                        <AvatarFallback className="text-[10px]">
+                          {workspaceUser.fallback}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
                         <p className="truncate text-sm text-popover-foreground">
@@ -1545,7 +1362,11 @@ export function PlatformNavbar() {
                       </button>
                     ) : isIncluded ? (
                       <Button size="xs" variant="secondary" disabled>
-                        {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Added"}
+                        {isUpdating ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          "Added"
+                        )}
                       </Button>
                     ) : (
                       <Button
@@ -1554,7 +1375,11 @@ export function PlatformNavbar() {
                         disabled={!canAdd || isUpdating}
                         onClick={() => void handleAddUser(workspaceUser)}
                       >
-                        {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+                        {isUpdating ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          "Add"
+                        )}
                       </Button>
                     )}
                   </div>

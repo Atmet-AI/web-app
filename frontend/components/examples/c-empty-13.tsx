@@ -85,9 +85,9 @@ export function Pattern({
           <EmptyMedia>
             <AutomationIllustration />
           </EmptyMedia>
-          <EmptyTitle>No automations yet</EmptyTitle>
+          <EmptyTitle>No agents yet</EmptyTitle>
           <EmptyDescription>
-            Hook up your favorite tools and let the automation magic begin.
+            Build an AI coworker, connect its tools, and let it run real workspace tasks.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
@@ -96,7 +96,7 @@ export function Pattern({
             variant="default"
             onClick={onCreateAutomation}
           >
-            Create new automation
+            Create new agent
           </Button>
         </EmptyContent>
       </Empty>

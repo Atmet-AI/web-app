@@ -8,6 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin"
 const updateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   slug: z.string().min(1).max(120).nullable().optional(),
+  avatar_url: z.string().nullable().optional(),
   plan: z.enum(["free", "pro", "enterprise"]).optional(),
   status: z.enum(["active", "suspended", "cancelled"]).optional(),
   country: z.string().nullable().optional(),
@@ -31,19 +32,25 @@ export async function PATCH(
   }
 
   const parsed = updateSchema.safeParse(body)
-  if (!parsed.success) return Errors.validationError(parsed.error.issues[0].message)
+  if (!parsed.success)
+    return Errors.validationError(parsed.error.issues[0].message)
 
   const { id } = await params
   const { data, error } = await supabaseAdmin
     .from("workspace")
     .update({ ...parsed.data, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .select("id, name, slug, plan, status, owner_id, avatar_url, country, monthly_token_cap, seat_limit, features, created_at, updated_at")
+    .select(
+      "id, name, slug, plan, status, owner_id, avatar_url, country, monthly_token_cap, seat_limit, features, created_at, updated_at"
+    )
     .single()
 
   if (error || !data) return Errors.notFound("Workspace")
 
-  if (parsed.data.status === "suspended" || parsed.data.status === "cancelled") {
+  if (
+    parsed.data.status === "suspended" ||
+    parsed.data.status === "cancelled"
+  ) {
     const { error: memberError } = await supabaseAdmin
       .from("workspace_member")
       .update({ status: "suspended" })

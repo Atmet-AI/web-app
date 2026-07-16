@@ -59,8 +59,8 @@ function AiCorePageContent({ activeChatId }: AiCorePageContentProps) {
       className={cn(
         "relative flex flex-1 justify-center px-3",
         shouldDockToBottom
-          ? "h-[calc(100svh-2.5rem)] min-h-0 items-stretch overflow-hidden py-0"
-          : "min-h-[calc(100svh-2.5rem)] items-center py-4"
+          ? "h-full min-h-0 items-stretch overflow-hidden py-0"
+          : "min-h-0 items-center py-4"
       )}
     >
       <div

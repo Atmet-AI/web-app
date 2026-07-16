@@ -72,6 +72,15 @@ DROP TABLE IF EXISTS api_key          CASCADE;
 DROP TABLE IF EXISTS message          CASCADE;
 DROP TABLE IF EXISTS chat             CASCADE;
 DROP TABLE IF EXISTS schedule         CASCADE;
+DROP TABLE IF EXISTS agent_approval   CASCADE;
+DROP TABLE IF EXISTS agent_run_step   CASCADE;
+DROP TABLE IF EXISTS agent_run        CASCADE;
+DROP TABLE IF EXISTS agent_event      CASCADE;
+DROP TABLE IF EXISTS agent_memory     CASCADE;
+DROP TABLE IF EXISTS agent_trigger    CASCADE;
+DROP TABLE IF EXISTS agent_tool       CASCADE;
+DROP TABLE IF EXISTS agent            CASCADE;
+DROP TABLE IF EXISTS agent_template   CASCADE;
 DROP TABLE IF EXISTS automation       CASCADE;
 DROP TABLE IF EXISTS skill            CASCADE;
 DROP TABLE IF EXISTS integration_secret             CASCADE;
@@ -98,6 +107,12 @@ DROP TYPE IF EXISTS invitation_role         CASCADE;
 DROP TYPE IF EXISTS chat_status             CASCADE;
 DROP TYPE IF EXISTS message_role            CASCADE;
 DROP TYPE IF EXISTS automation_status       CASCADE;
+DROP TYPE IF EXISTS agent_status            CASCADE;
+DROP TYPE IF EXISTS agent_trigger_status    CASCADE;
+DROP TYPE IF EXISTS agent_run_status        CASCADE;
+DROP TYPE IF EXISTS agent_step_status       CASCADE;
+DROP TYPE IF EXISTS agent_approval_status   CASCADE;
+DROP TYPE IF EXISTS agent_event_status      CASCADE;
 DROP TYPE IF EXISTS schedule_status         CASCADE;
 DROP TYPE IF EXISTS skill_status            CASCADE;
 DROP TYPE IF EXISTS skill_type              CASCADE;
@@ -118,6 +133,12 @@ CREATE TYPE invitation_role       AS ENUM ('member');
 CREATE TYPE chat_status           AS ENUM ('active', 'archived');
 CREATE TYPE message_role          AS ENUM ('system', 'user', 'assistant', 'tool');
 CREATE TYPE automation_status     AS ENUM ('active', 'inactive', 'draft');
+CREATE TYPE agent_status          AS ENUM ('draft', 'active', 'paused', 'archived');
+CREATE TYPE agent_trigger_status  AS ENUM ('inactive', 'active', 'error');
+CREATE TYPE agent_run_status      AS ENUM ('queued', 'running', 'waiting_for_approval', 'succeeded', 'failed', 'cancelled');
+CREATE TYPE agent_step_status     AS ENUM ('pending', 'running', 'succeeded', 'failed', 'skipped', 'waiting_for_approval');
+CREATE TYPE agent_approval_status AS ENUM ('pending', 'approved', 'rejected', 'cancelled');
+CREATE TYPE agent_event_status    AS ENUM ('received', 'queued', 'processed', 'ignored', 'failed');
 CREATE TYPE schedule_status       AS ENUM ('active', 'paused', 'disabled');
 CREATE TYPE skill_status          AS ENUM ('active', 'inactive');
 CREATE TYPE skill_type            AS ENUM ('action', 'trigger', 'tool', 'agent');
@@ -418,6 +439,156 @@ CREATE TABLE automation (
   updated_at   timestamp with time zone NOT NULL DEFAULT now()
 );
 
+CREATE TABLE agent_template (
+  id             uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id   uuid                              REFERENCES workspace(id) ON DELETE CASCADE,
+  created_by     uuid                              REFERENCES users(id) ON DELETE SET NULL,
+  name           text                     NOT NULL,
+  description    text,
+  category       text,
+  blueprint_json jsonb                    NOT NULL DEFAULT '{"version":1,"steps":[]}'::jsonb,
+  status         text                     NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at     timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at     timestamp with time zone NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(blueprint_json) = 'object'),
+  CHECK (
+    (workspace_id IS NULL AND created_by IS NULL)
+    OR
+    (workspace_id IS NOT NULL AND created_by IS NOT NULL)
+  )
+);
+
+CREATE TABLE agent (
+  id                   uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id         uuid                     NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+  created_by           uuid                     NOT NULL REFERENCES users(id),
+  template_id          uuid                              REFERENCES agent_template(id) ON DELETE SET NULL,
+  legacy_automation_id uuid                              UNIQUE REFERENCES automation(id) ON DELETE SET NULL,
+  name                 text                     NOT NULL,
+  description          text,
+  goal                 text,
+  status               agent_status             NOT NULL DEFAULT 'draft',
+  instructions         text,
+  blueprint_json       jsonb                    NOT NULL DEFAULT '{"version":1,"steps":[],"required_apps":[],"approval_policy":{}}'::jsonb,
+  runtime_config_json  jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  activated_at         timestamp with time zone,
+  created_at           timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at           timestamp with time zone NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(blueprint_json) = 'object'),
+  CHECK (jsonb_typeof(runtime_config_json) = 'object')
+);
+
+CREATE TABLE agent_tool (
+  id               uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id         uuid                     NOT NULL REFERENCES agent(id) ON DELETE CASCADE,
+  provider         text                     NOT NULL,
+  tool_name        text                     NOT NULL,
+  connection_id    uuid                              REFERENCES workspace_integration(id) ON DELETE SET NULL,
+  permissions_json jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  created_at       timestamp with time zone NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(permissions_json) = 'object'),
+  UNIQUE (agent_id, provider, tool_name, connection_id)
+);
+
+CREATE TABLE agent_trigger (
+  id                  uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id            uuid                     NOT NULL REFERENCES agent(id) ON DELETE CASCADE,
+  connection_id        uuid                              REFERENCES workspace_integration(id) ON DELETE SET NULL,
+  provider            text,
+  type                text                     NOT NULL,
+  event_type          text,
+  config_json         jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  status              agent_trigger_status     NOT NULL DEFAULT 'inactive',
+  cursor_json         jsonb,
+  external_provider   text,
+  external_trigger_id text,
+  external_metadata   jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  last_run_at         timestamp with time zone,
+  last_received_at    timestamp with time zone,
+  error               text,
+  created_at          timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at          timestamp with time zone NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(config_json) = 'object'),
+  CHECK (jsonb_typeof(external_metadata) = 'object')
+);
+
+CREATE TABLE agent_memory (
+  id         uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id   uuid                     NOT NULL REFERENCES agent(id) ON DELETE CASCADE,
+  scope      text                     NOT NULL DEFAULT 'workspace',
+  key        text                     NOT NULL,
+  value_json jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(value_json) = 'object'),
+  UNIQUE (agent_id, scope, key)
+);
+
+CREATE TABLE agent_run (
+  id              uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id        uuid                     NOT NULL REFERENCES agent(id) ON DELETE CASCADE,
+  trigger_id      uuid                              REFERENCES agent_trigger(id) ON DELETE SET NULL,
+  idempotency_key text                     UNIQUE NOT NULL DEFAULT gen_random_uuid()::text,
+  status          agent_run_status         NOT NULL DEFAULT 'queued',
+  input_json      jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  output_json     jsonb,
+  error           text,
+  queued_at       timestamp with time zone NOT NULL DEFAULT now(),
+  started_at      timestamp with time zone,
+  finished_at     timestamp with time zone,
+  created_at      timestamp with time zone NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(input_json) = 'object')
+);
+
+CREATE TABLE agent_event (
+  id                uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  trigger_id        uuid                     NOT NULL REFERENCES agent_trigger(id) ON DELETE CASCADE,
+  provider_event_id text,
+  headers           jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  payload           jsonb                    NOT NULL,
+  status            agent_event_status       NOT NULL DEFAULT 'received',
+  error             text,
+  received_at       timestamp with time zone NOT NULL DEFAULT now(),
+  processed_at      timestamp with time zone,
+  external_provider text,
+  external_event_id text,
+  external_metadata jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  CHECK (jsonb_typeof(headers) = 'object'),
+  CHECK (jsonb_typeof(external_metadata) = 'object'),
+  UNIQUE (trigger_id, provider_event_id)
+);
+
+CREATE TABLE agent_run_step (
+  id          uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id      uuid                     NOT NULL REFERENCES agent_run(id) ON DELETE CASCADE,
+  step_index  integer                  NOT NULL CHECK (step_index >= 0),
+  step_name   text                     NOT NULL,
+  tool_called text,
+  status      agent_step_status        NOT NULL DEFAULT 'pending',
+  input_json  jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  output_json jsonb,
+  error       text,
+  duration_ms integer                           CHECK (duration_ms IS NULL OR duration_ms >= 0),
+  started_at  timestamp with time zone,
+  finished_at timestamp with time zone,
+  created_at  timestamp with time zone NOT NULL DEFAULT now(),
+  CHECK (jsonb_typeof(input_json) = 'object'),
+  UNIQUE (run_id, step_index)
+);
+
+CREATE TABLE agent_approval (
+  id                  uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id            uuid                     NOT NULL REFERENCES agent(id) ON DELETE CASCADE,
+  run_id              uuid                              REFERENCES agent_run(id) ON DELETE CASCADE,
+  requested_by_run_step_id uuid                         REFERENCES agent_run_step(id) ON DELETE SET NULL,
+  action_json         jsonb                    NOT NULL DEFAULT '{}'::jsonb,
+  status              agent_approval_status    NOT NULL DEFAULT 'pending',
+  requested_at        timestamp with time zone NOT NULL DEFAULT now(),
+  resolved_at         timestamp with time zone,
+  resolved_by_user_id uuid                              REFERENCES users(id) ON DELETE SET NULL,
+  CHECK (jsonb_typeof(action_json) = 'object')
+);
+
 -- schedule: now has name, created_by, and automation_id so it knows what to trigger
 CREATE TABLE schedule (
   id              uuid                     PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -513,6 +684,23 @@ CREATE INDEX ON message (chat_id, created_at);
 CREATE INDEX ON automation (workspace_id);
 CREATE INDEX ON automation (created_by);
 
+CREATE INDEX ON agent_template (workspace_id, status);
+CREATE INDEX ON agent (workspace_id, status);
+CREATE INDEX ON agent (created_by);
+CREATE INDEX ON agent_tool (agent_id);
+CREATE INDEX ON agent_tool (connection_id);
+CREATE INDEX ON agent_trigger (agent_id, status);
+CREATE INDEX ON agent_trigger (connection_id);
+CREATE INDEX ON agent_trigger (external_provider, external_trigger_id);
+CREATE INDEX ON agent_memory (agent_id, scope);
+CREATE INDEX ON agent_run (agent_id, created_at DESC);
+CREATE INDEX ON agent_run (status, queued_at);
+CREATE INDEX ON agent_event (status, received_at);
+CREATE INDEX ON agent_event (trigger_id, received_at DESC);
+CREATE INDEX ON agent_event (external_provider, external_event_id);
+CREATE INDEX ON agent_run_step (run_id, step_index);
+CREATE INDEX ON agent_approval (agent_id, status);
+
 CREATE INDEX ON schedule (workspace_id);
 CREATE INDEX ON schedule (automation_id);
 
@@ -564,6 +752,10 @@ CREATE TRIGGER trg_chat_updated_at       BEFORE UPDATE ON chat       FOR EACH RO
 CREATE TRIGGER trg_message_updated_at    BEFORE UPDATE ON message    FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 CREATE TRIGGER trg_skill_updated_at      BEFORE UPDATE ON skill      FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 CREATE TRIGGER trg_automation_updated_at BEFORE UPDATE ON automation FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_agent_template_updated_at BEFORE UPDATE ON agent_template FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_agent_updated_at BEFORE UPDATE ON agent FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_agent_trigger_updated_at BEFORE UPDATE ON agent_trigger FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+CREATE TRIGGER trg_agent_memory_updated_at BEFORE UPDATE ON agent_memory FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 CREATE TRIGGER trg_schedule_updated_at   BEFORE UPDATE ON schedule   FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 
 
@@ -666,6 +858,15 @@ ALTER TABLE chat            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE skill           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE automation      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_template  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_tool      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_trigger   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_memory    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_run       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_event     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_run_step  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_approval  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schedule        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_key         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE file            ENABLE ROW LEVEL SECURITY;
@@ -863,6 +1064,228 @@ CREATE POLICY "automation: creator or admin can update"
 CREATE POLICY "automation: creator or admin can delete"
   ON automation FOR DELETE
   USING (created_by = auth.uid() OR is_workspace_admin(workspace_id));
+
+-- ── agent templates and agents ─────────────────────────────
+CREATE POLICY "agent_template: members can view"
+  ON agent_template FOR SELECT
+  USING (workspace_id IS NULL OR is_workspace_member(workspace_id));
+
+CREATE POLICY "agent_template: members can create"
+  ON agent_template FOR INSERT
+  WITH CHECK (workspace_id IS NOT NULL AND is_workspace_member(workspace_id) AND created_by = auth.uid());
+
+CREATE POLICY "agent_template: creator or admin can update"
+  ON agent_template FOR UPDATE
+  USING (workspace_id IS NOT NULL AND (created_by = auth.uid() OR is_workspace_admin(workspace_id)));
+
+CREATE POLICY "agent_template: creator or admin can delete"
+  ON agent_template FOR DELETE
+  USING (workspace_id IS NOT NULL AND (created_by = auth.uid() OR is_workspace_admin(workspace_id)));
+
+CREATE POLICY "agent: members can view"
+  ON agent FOR SELECT
+  USING (is_workspace_member(workspace_id));
+
+CREATE POLICY "agent: members can create"
+  ON agent FOR INSERT
+  WITH CHECK (is_workspace_member(workspace_id) AND created_by = auth.uid());
+
+CREATE POLICY "agent: creator or admin can update"
+  ON agent FOR UPDATE
+  USING (created_by = auth.uid() OR is_workspace_admin(workspace_id));
+
+CREATE POLICY "agent: creator or admin can delete"
+  ON agent FOR DELETE
+  USING (created_by = auth.uid() OR is_workspace_admin(workspace_id));
+
+CREATE POLICY "agent_tool: members can view"
+  ON agent_tool FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_tool.agent_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_tool: editors can manage"
+  ON agent_tool FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_tool.agent_id
+        AND (agent.created_by = auth.uid() OR is_workspace_admin(agent.workspace_id))
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_tool.agent_id
+        AND (agent.created_by = auth.uid() OR is_workspace_admin(agent.workspace_id))
+    )
+  );
+
+CREATE POLICY "agent_trigger: members can view"
+  ON agent_trigger FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_trigger.agent_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_trigger: editors can manage"
+  ON agent_trigger FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_trigger.agent_id
+        AND (agent.created_by = auth.uid() OR is_workspace_admin(agent.workspace_id))
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_trigger.agent_id
+        AND (agent.created_by = auth.uid() OR is_workspace_admin(agent.workspace_id))
+    )
+  );
+
+CREATE POLICY "agent_memory: members can view"
+  ON agent_memory FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_memory.agent_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_memory: editors can manage"
+  ON agent_memory FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_memory.agent_id
+        AND (agent.created_by = auth.uid() OR is_workspace_admin(agent.workspace_id))
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_memory.agent_id
+        AND (agent.created_by = auth.uid() OR is_workspace_admin(agent.workspace_id))
+    )
+  );
+
+CREATE POLICY "agent_run: members can view"
+  ON agent_run FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_run.agent_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_run: members can create"
+  ON agent_run FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_run.agent_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_run: members can update"
+  ON agent_run FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_run.agent_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_event: members can view"
+  ON agent_event FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM agent_trigger
+      JOIN agent ON agent.id = agent_trigger.agent_id
+      WHERE agent_trigger.id = agent_event.trigger_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_run_step: members can view"
+  ON agent_run_step FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM agent_run
+      JOIN agent ON agent.id = agent_run.agent_id
+      WHERE agent_run.id = agent_run_step.run_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_run_step: members can create"
+  ON agent_run_step FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM agent_run
+      JOIN agent ON agent.id = agent_run.agent_id
+      WHERE agent_run.id = agent_run_step.run_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_run_step: members can update"
+  ON agent_run_step FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM agent_run
+      JOIN agent ON agent.id = agent_run.agent_id
+      WHERE agent_run.id = agent_run_step.run_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_approval: members can view"
+  ON agent_approval FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_approval.agent_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_approval: members can create"
+  ON agent_approval FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_approval.agent_id
+        AND is_workspace_member(agent.workspace_id)
+    )
+  );
+
+CREATE POLICY "agent_approval: admins can resolve"
+  ON agent_approval FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM agent
+      WHERE agent.id = agent_approval.agent_id
+        AND is_workspace_admin(agent.workspace_id)
+    )
+  );
 
 -- ── schedule ───────────────────────────────────────────────
 CREATE POLICY "schedule: members can view"
