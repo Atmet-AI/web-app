@@ -5,20 +5,24 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import packageJson from "@/package.json"
-import { ATMET_AUTH_CHANGED_EVENT, ATMET_USER_UPDATED_EVENT, useWorkspace } from "@/lib/workspace-context"
+import {
+  ATMET_AUTH_CHANGED_EVENT,
+  ATMET_USER_UPDATED_EVENT,
+  useWorkspace,
+} from "@/lib/workspace-context"
 import {
   ATMET_APPEARANCE_SETTINGS_STORAGE_KEY,
   announceSoundsEnabled,
   appearanceSettingsStorageKey,
 } from "@/lib/sound-preferences"
 import { countries } from "@/lib/countries"
-import { buildInternationalPhone, buildWhatsappUrl, getPhoneCountry } from "@/lib/phone-countries"
-
-import { SearchForm } from "@/components/search-form"
 import {
-  VersionSwitcher,
-  type WorkspaceSwitcherItem,
-} from "@/components/version-switcher"
+  buildInternationalPhone,
+  buildWhatsappUrl,
+  getPhoneCountry,
+} from "@/lib/phone-countries"
+
+import { type WorkspaceSwitcherItem } from "@/components/version-switcher"
 import { BarInteractive } from "@/components/charts/bar-interactive"
 import { ChartBarPattern } from "@/components/examples/c-chart-5"
 import { Pattern as EmptyIntegrationsPattern } from "@/components/examples/c-empty-19"
@@ -62,16 +66,13 @@ import {
   SidebarGroup,
   SidebarMenuAction,
   SidebarGroupContent,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { HugeiconsIcon } from "@hugeicons/react"
-import {
-  WorkflowCircle01Icon,
-} from "@hugeicons/core-free-icons"
+import { WorkflowCircle01Icon } from "@hugeicons/core-free-icons"
 import {
   IconApps,
   IconBell,
@@ -170,7 +171,7 @@ const navItems = [
 function AppVersionMarker() {
   return (
     <div className="flex items-center gap-1.5 px-4 py-3">
-      <span className="whitespace-nowrap text-[10px] text-sidebar-foreground/55">
+      <span className="text-[10px] whitespace-nowrap text-sidebar-foreground/55">
         Version {packageJson.version}
       </span>
       <Badge variant="blue" size="sm" className="pointer-events-none shrink-0">
@@ -229,12 +230,15 @@ const workspaceCountries = [
   "Singapore",
 ] as const
 
+const ATMET_OPEN_CREATE_WORKSPACE_EVENT = "atmet-open-create-workspace"
+const ATMET_OPEN_WORKSPACE_MEMBERS_EVENT = "atmet-open-workspace-members"
+const ATMET_OPEN_WORKSPACE_PROFILE_EVENT = "atmet-open-workspace-profile"
+const ATMET_OPEN_ACCOUNT_PROFILE_EVENT = "atmet-open-account-profile"
+const ATMET_OPEN_SETTINGS_EVENT = "atmet-open-settings"
+const ATMET_OPEN_ADMIN_CONSOLE_EVENT = "atmet-open-admin-console"
+
 function deriveInitialsFromName(name: string) {
-  const tokens = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
+  const tokens = name.trim().split(/\s+/).filter(Boolean).slice(0, 2)
 
   if (tokens.length === 0) return "W"
   return tokens.map((token) => token[0]?.toUpperCase() ?? "").join("")
@@ -248,12 +252,7 @@ type WorkspaceMemberApp = {
   lastUsed: string
 }
 
-type PlatformRole =
-  | "Super Admin"
-  | "Admin"
-  | "Owner"
-  | "Member"
-  | "Pending"
+type PlatformRole = "Super Admin" | "Admin" | "Owner" | "Member" | "Pending"
 
 const platformRoles: readonly PlatformRole[] = [
   "Super Admin",
@@ -501,7 +500,7 @@ const adminConsoleSectionIcons: Record<
 > = {
   "Admin overview": IconLayoutDashboard,
   "Workspace provisioning": IconBuilding,
-  "Requests": IconListDetails,
+  Requests: IconListDetails,
   "Users & workspaces": IconUsers,
   "Roles & permissions": IconShield,
   "Access policies": IconLock,
@@ -513,7 +512,7 @@ const adminConsoleDescriptions: Record<AdminConsoleSection, string> = {
     "Monitor workspace health, recent activity, and common admin actions.",
   "Workspace provisioning":
     "Create workspaces, assign initial users, and configure access, API, and usage defaults.",
-  "Requests":
+  Requests:
     "Review waitlist submissions and approve or reject access requests.",
   "Users & workspaces":
     "Manage users, workspace assignments, invitations, roles, and account status.",
@@ -644,40 +643,62 @@ function AccountSettingsContent() {
   React.useEffect(() => {
     fetch("/api/users/me")
       .then((r) => r.json())
-      .then((res: { data?: { user: { id: string; public_user_id?: string | null; full_name: string | null; email: string | null; avatar_url: string | null; job_role?: string | null; phone_number?: string | null } } }) => {
-        const u = res.data?.user
-        if (!u) return
-        const parts = (u.full_name ?? "").trim().split(/\s+/).filter(Boolean)
-        const fn = parts[0] ?? ""
-        const ln = parts.slice(1).join(" ")
-        const initials = parts.slice(0, 2).map(p => p[0]?.toUpperCase() ?? "").join("") || "U"
-        const roleValue = u.job_role ?? ""
-        const selectedRoleValue = roleOptions.includes(roleValue as (typeof roleOptions)[number])
-          ? roleValue
-          : roleValue
-            ? "Other"
-            : ""
-        const profile = {
-          firstName: fn,
-          lastName: ln,
-          email: u.email ?? "",
-          phoneNumber: u.phone_number ?? "",
-          selectedRole: selectedRoleValue as (typeof roleOptions)[number] | string,
-          customRole: selectedRoleValue === "Other" ? roleValue : "",
-          avatarUrl: u.avatar_url ?? null,
+      .then(
+        (res: {
+          data?: {
+            user: {
+              id: string
+              public_user_id?: string | null
+              full_name: string | null
+              email: string | null
+              avatar_url: string | null
+              job_role?: string | null
+              phone_number?: string | null
+            }
+          }
+        }) => {
+          const u = res.data?.user
+          if (!u) return
+          const parts = (u.full_name ?? "").trim().split(/\s+/).filter(Boolean)
+          const fn = parts[0] ?? ""
+          const ln = parts.slice(1).join(" ")
+          const initials =
+            parts
+              .slice(0, 2)
+              .map((p) => p[0]?.toUpperCase() ?? "")
+              .join("") || "U"
+          const roleValue = u.job_role ?? ""
+          const selectedRoleValue = roleOptions.includes(
+            roleValue as (typeof roleOptions)[number]
+          )
+            ? roleValue
+            : roleValue
+              ? "Other"
+              : ""
+          const profile = {
+            firstName: fn,
+            lastName: ln,
+            email: u.email ?? "",
+            phoneNumber: u.phone_number ?? "",
+            selectedRole: selectedRoleValue as
+              | (typeof roleOptions)[number]
+              | string,
+            customRole: selectedRoleValue === "Other" ? roleValue : "",
+            avatarUrl: u.avatar_url ?? null,
+          }
+          setUserId(u.id)
+          setPublicUserId(u.public_user_id ?? "")
+          setUserInitials(initials)
+          setSavedProfile(profile)
+          setFirstName(fn)
+          setLastName(ln)
+          setEmail(u.email ?? "")
+          setPhoneNumber(u.phone_number ?? "")
+          setSelectedRole(profile.selectedRole)
+          setCustomRole(profile.customRole)
+          setAvatarUrl(u.avatar_url ?? null)
         }
-        setUserId(u.id)
-        setPublicUserId(u.public_user_id ?? "")
-        setUserInitials(initials)
-        setSavedProfile(profile)
-        setFirstName(fn)
-        setLastName(ln)
-        setEmail(u.email ?? "")
-        setPhoneNumber(u.phone_number ?? "")
-        setSelectedRole(profile.selectedRole)
-        setCustomRole(profile.customRole)
-        setAvatarUrl(u.avatar_url ?? null)
-      })
+      )
       .catch(() => {})
   }, [])
 
@@ -757,55 +778,44 @@ function AccountSettingsContent() {
           onChange={handleProfileImageUpload}
         />
         <div className="flex items-center gap-2.5">
-          <DropdownMenu>
-            <div className="group/avatar-edit relative">
-              <Avatar className="size-14 !rounded-lg ring-1 ring-border after:!rounded-lg">
-                <AvatarImage
-                  src={avatarUrl ?? undefined}
-                  alt={`${firstName} ${lastName} avatar`}
-                  className="!rounded-lg object-cover"
-                />
-                <AvatarFallback className="!rounded-lg text-sm font-semibold">
-                  {userInitials}
-                </AvatarFallback>
-              </Avatar>
-              <span className="pointer-events-none absolute inset-0 rounded-lg bg-background/20 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-focus-within/avatar-edit:opacity-100 group-hover/avatar-edit:opacity-100" />
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    className="absolute inset-0 z-10 flex cursor-pointer items-center justify-center rounded-lg opacity-0 transition-opacity duration-200 group-focus-within/avatar-edit:opacity-100 group-hover/avatar-edit:opacity-100"
-                    aria-label="Edit profile image"
-                  />
-                }
-              >
-                <span className="inline-flex size-8 items-center justify-center rounded-lg border border-border/70 bg-background/90 shadow-xs">
-                  <PenLine className="h-3.5 w-3.5" />
-                </span>
-              </DropdownMenuTrigger>
-            </div>
-            <DropdownMenuContent
-              align="start"
-              className="min-w-44 rounded-lg p-1"
-            >
-              <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
-                <Camera className="h-3.5 w-3.5" />
-                Upload image
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setAvatarUrl(null)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete image
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="space-y-0.5 leading-tight">
+          <Avatar className="size-14 !rounded-lg ring-1 ring-border after:!rounded-lg">
+            <AvatarImage
+              src={avatarUrl ?? undefined}
+              alt={`${firstName} ${lastName} avatar`}
+              className="!rounded-lg object-cover"
+            />
+            <AvatarFallback className="!rounded-lg text-sm font-semibold">
+              {userInitials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="space-y-1.5 leading-tight">
             <p className="text-sm font-medium text-foreground">
               {firstName} {lastName}
             </p>
             <p className="text-sm text-muted-foreground">{displayedRole}</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <Camera className="h-3.5 w-3.5" />
+                Upload image
+              </Button>
+              {avatarUrl ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setAvatarUrl(null)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete image
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -1019,7 +1029,9 @@ function PersonalizationSettingsContent() {
       const parsed = JSON.parse(rawSettings) as Partial<typeof initialAnswers>
       const nextAnswers = {
         aboutMe:
-          typeof parsed.aboutMe === "string" ? parsed.aboutMe : initialAnswers.aboutMe,
+          typeof parsed.aboutMe === "string"
+            ? parsed.aboutMe
+            : initialAnswers.aboutMe,
         communicationStyle:
           typeof parsed.communicationStyle === "string"
             ? parsed.communicationStyle
@@ -1413,7 +1425,9 @@ function GeneralSettingsContent({
     "German",
     "Japanese",
   ] as const
-  const initializedUserKeyRef = React.useRef<string | null | undefined>(undefined)
+  const initializedUserKeyRef = React.useRef<string | null | undefined>(
+    undefined
+  )
   const [appearanceSettings, setAppearanceSettings] =
     React.useState<AppearanceSettings>({
       theme: "system",
@@ -1468,7 +1482,10 @@ function GeneralSettingsContent({
       return
     }
 
-    const nextSettings = parseStoredAppearanceSettings(rawSettings, fallbackSettings)
+    const nextSettings = parseStoredAppearanceSettings(
+      rawSettings,
+      fallbackSettings
+    )
     setAppearanceSettings(nextSettings)
     setSavedAppearanceSettings(nextSettings)
     applyFixedPrimaryColor()
@@ -1821,12 +1838,6 @@ function WorkspaceSettingsContent({
     const payload = (await response.json()) as { data?: { url?: string } }
     if (payload.data?.url) setAvatarUrl(payload.data.url)
   }
-  const openWorkspaceImagePicker = React.useCallback(() => {
-    window.setTimeout(() => {
-      imageInputRef.current?.click()
-    }, 0)
-  }, [])
-
   const displayName = workspaceName.trim() || "Workspace"
   const displayInitials = deriveInitialsFromName(displayName)
 
@@ -1841,57 +1852,42 @@ function WorkspaceSettingsContent({
           onChange={handleWorkspaceImageUpload}
         />
         <div className="flex items-center gap-2.5">
-          <DropdownMenu>
-            <div className="group/workspace-avatar relative">
-              <Avatar className="size-14 !rounded-lg ring-1 ring-border after:!rounded-lg">
-                <AvatarImage
-                  src={avatarUrl ?? undefined}
-                  alt={`${displayName} avatar`}
-                  className="!rounded-lg"
-                />
-                <AvatarFallback className="!rounded-lg text-sm font-semibold">
-                  {displayInitials}
-                </AvatarFallback>
-              </Avatar>
-              <span className="pointer-events-none absolute inset-0 rounded-lg bg-background/20 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-focus-within/workspace-avatar:opacity-100 group-hover/workspace-avatar:opacity-100" />
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    className="absolute inset-0 z-10 flex cursor-pointer items-center justify-center rounded-lg opacity-0 transition-opacity duration-200 group-focus-within/workspace-avatar:opacity-100 group-hover/workspace-avatar:opacity-100"
-                    aria-label="Edit workspace image"
-                  />
-                }
-              >
-                <span className="inline-flex size-8 items-center justify-center rounded-lg border border-border/70 bg-background/90 shadow-xs">
-                  <PenLine className="h-3.5 w-3.5" />
-                </span>
-              </DropdownMenuTrigger>
-            </div>
-            <DropdownMenuContent
-              align="start"
-              className="min-w-44 rounded-lg p-1"
-            >
-              <DropdownMenuItem
-                onClick={openWorkspaceImagePicker}
+          <Avatar className="size-14 !rounded-lg ring-1 ring-border after:!rounded-lg">
+            <AvatarImage
+              src={avatarUrl ?? undefined}
+              alt={`${displayName} avatar`}
+              className="!rounded-lg object-cover"
+            />
+            <AvatarFallback className="!rounded-lg text-sm font-semibold">
+              {displayInitials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="space-y-1.5 leading-tight">
+            <p className="text-sm font-medium text-foreground">{displayName}</p>
+            <p className="text-sm text-muted-foreground">Workspace profile</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() => imageInputRef.current?.click()}
               >
                 <Camera className="h-3.5 w-3.5" />
                 Upload image
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setAvatarUrl(null)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete image
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="space-y-0.5 leading-tight">
-            <p className="text-sm font-medium text-foreground">
-              {displayName}
-            </p>
-            <p className="text-sm text-muted-foreground">Workspace profile</p>
+              </Button>
+              {avatarUrl ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setAvatarUrl(null)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete image
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -2136,8 +2132,12 @@ function MembersSettingsContent({
       ] = await Promise.all([
         apiFetch(`/api/workspaces/${activeWorkspaceId}/members`),
         apiFetch(`/api/workspaces/${activeWorkspaceId}/usage-limits?range=all`),
-        apiFetch(`/api/workspaces/${activeWorkspaceId}/usage-limits?range=month`),
-        apiFetch(`/api/workspaces/${activeWorkspaceId}/usage-limits?range=week`),
+        apiFetch(
+          `/api/workspaces/${activeWorkspaceId}/usage-limits?range=month`
+        ),
+        apiFetch(
+          `/api/workspaces/${activeWorkspaceId}/usage-limits?range=week`
+        ),
       ])
       if (!response.ok) {
         setMembers([])
@@ -2216,59 +2216,57 @@ function MembersSettingsContent({
       }
       setCurrentMemberRole(payload.data?.currentMemberRole ?? null)
       setSeatsLimit(payload.data?.seatLimit ?? 10)
-      setMembers(
-        [
-          ...(payload.data?.members ?? []).map((row) => {
-            const user = Array.isArray(row.user) ? row.user[0] : row.user
-            const name = user?.full_name || user?.email || "Unknown user"
-            const initials = deriveInitialsFromName(name)
-            const role: PlatformRole =
-              row.role === "owner"
-                ? "Owner"
-                : row.role === "admin"
-                  ? "Admin"
-                  : "Member"
-            return {
-              id: user?.id ?? `${row.role}-${row.joined_at}`,
-              name,
-              email: user?.email ?? "",
-              role,
-              membershipStatus: "active" as const,
-              profileRole: user?.status ?? "active",
-              lastLogin: row.joined_at
-                ? new Date(row.joined_at).toLocaleDateString()
-                : "Unknown",
-              initials,
-              avatarUrl: user?.avatar_url ?? "",
-              creditsUsage: {
-                allTime: user?.id ? usageByRange.all.get(user.id) ?? 0 : 0,
-                thisMonth: user?.id ? usageByRange.month.get(user.id) ?? 0 : 0,
-                thisWeek: user?.id ? usageByRange.week.get(user.id) ?? 0 : 0,
-              },
-              integratedApps: [],
-            }
-          }),
-          ...(payload.data?.pendingInvitations ?? []).map((invitation) => ({
-            id: `invitation-${invitation.id}`,
-            name: invitation.email,
-            email: invitation.email,
-            role: "Pending" as const,
-            membershipStatus: "pending" as const,
-            profileRole: `Invited as ${invitation.role}`,
-            lastLogin: invitation.created_at
-              ? `Invited ${new Date(invitation.created_at).toLocaleDateString()}`
-              : "Pending",
-            initials: deriveInitialsFromName(invitation.email),
-            avatarUrl: "",
+      setMembers([
+        ...(payload.data?.members ?? []).map((row) => {
+          const user = Array.isArray(row.user) ? row.user[0] : row.user
+          const name = user?.full_name || user?.email || "Unknown user"
+          const initials = deriveInitialsFromName(name)
+          const role: PlatformRole =
+            row.role === "owner"
+              ? "Owner"
+              : row.role === "admin"
+                ? "Admin"
+                : "Member"
+          return {
+            id: user?.id ?? `${row.role}-${row.joined_at}`,
+            name,
+            email: user?.email ?? "",
+            role,
+            membershipStatus: "active" as const,
+            profileRole: user?.status ?? "active",
+            lastLogin: row.joined_at
+              ? new Date(row.joined_at).toLocaleDateString()
+              : "Unknown",
+            initials,
+            avatarUrl: user?.avatar_url ?? "",
             creditsUsage: {
-              allTime: 0,
-              thisMonth: 0,
-              thisWeek: 0,
+              allTime: user?.id ? (usageByRange.all.get(user.id) ?? 0) : 0,
+              thisMonth: user?.id ? (usageByRange.month.get(user.id) ?? 0) : 0,
+              thisWeek: user?.id ? (usageByRange.week.get(user.id) ?? 0) : 0,
             },
             integratedApps: [],
-          })),
-        ]
-      )
+          }
+        }),
+        ...(payload.data?.pendingInvitations ?? []).map((invitation) => ({
+          id: `invitation-${invitation.id}`,
+          name: invitation.email,
+          email: invitation.email,
+          role: "Pending" as const,
+          membershipStatus: "pending" as const,
+          profileRole: `Invited as ${invitation.role}`,
+          lastLogin: invitation.created_at
+            ? `Invited ${new Date(invitation.created_at).toLocaleDateString()}`
+            : "Pending",
+          initials: deriveInitialsFromName(invitation.email),
+          avatarUrl: "",
+          creditsUsage: {
+            allTime: 0,
+            thisMonth: 0,
+            thisWeek: 0,
+          },
+          integratedApps: [],
+        })),
+      ])
     } finally {
       setIsMembersLoading(false)
     }
@@ -2294,7 +2292,10 @@ function MembersSettingsContent({
   const seatsUsed = workspaceMembers.filter(
     (member) => member.membershipStatus !== "pending"
   ).length
-  const seatsProgress = Math.min(100, (seatsUsed / Math.max(seatsLimit, 1)) * 100)
+  const seatsProgress = Math.min(
+    100,
+    (seatsUsed / Math.max(seatsLimit, 1)) * 100
+  )
   const selectedMember = React.useMemo(
     () =>
       workspaceMembers.find(
@@ -2322,7 +2323,9 @@ function MembersSettingsContent({
       return [{ label: "All time", value: selectedMember.creditsUsage.allTime }]
     }
     if (creditsRange === "This month") {
-      return [{ label: "This month", value: selectedMember.creditsUsage.thisMonth }]
+      return [
+        { label: "This month", value: selectedMember.creditsUsage.thisMonth },
+      ]
     }
     return [{ label: "This week", value: selectedMember.creditsUsage.thisWeek }]
   }, [selectedMember, creditsRange])
@@ -2439,11 +2442,14 @@ function MembersSettingsContent({
     setIsInviteSending(true)
     const results = await Promise.all(
       merged.map(async (email) => {
-        const response = await apiFetch(`/api/workspaces/${activeWorkspaceId}/members`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, role }),
-        })
+        const response = await apiFetch(
+          `/api/workspaces/${activeWorkspaceId}/members`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, role }),
+          }
+        )
         const payload = (await response.json().catch(() => null)) as {
           data?: {
             invitationEmailSent?: boolean
@@ -2459,9 +2465,13 @@ function MembersSettingsContent({
     const failedResults = results.filter((result) => !result.response.ok)
     const failed = failedResults.length
     if (failed > 0) {
-      const firstError = failedResults.find((result) => result.payload?.error?.message)
-        ?.payload?.error?.message
-      setInviteError(firstError ?? `${failed} invite${failed === 1 ? "" : "s"} could not be sent.`)
+      const firstError = failedResults.find(
+        (result) => result.payload?.error?.message
+      )?.payload?.error?.message
+      setInviteError(
+        firstError ??
+          `${failed} invite${failed === 1 ? "" : "s"} could not be sent.`
+      )
       return
     }
 
@@ -2469,7 +2479,9 @@ function MembersSettingsContent({
       (result) => result.payload?.data?.invitationEmailSent === false
     ).length
     if (emailFailed > 0) {
-      setInviteError(`${emailFailed} invite email${emailFailed === 1 ? "" : "s"} could not be sent. Check Resend settings.`)
+      setInviteError(
+        `${emailFailed} invite email${emailFailed === 1 ? "" : "s"} could not be sent. Check Resend settings.`
+      )
       void loadMembers()
       return
     }
@@ -2804,7 +2816,8 @@ function MembersSettingsContent({
                         {member.lastLogin}
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        {canInviteMembers && member.membershipStatus !== "pending" ? (
+                        {canInviteMembers &&
+                        member.membershipStatus !== "pending" ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger
                               render={
@@ -2835,7 +2848,9 @@ function MembersSettingsContent({
                                 onClick={async (event) => {
                                   event.stopPropagation()
                                   if (!activeWorkspaceId) return
-                                  const confirmed = window.confirm(`Remove ${member.name} from this workspace?`)
+                                  const confirmed = window.confirm(
+                                    `Remove ${member.name} from this workspace?`
+                                  )
                                   if (!confirmed) return
                                   const response = await apiFetch(
                                     `/api/workspaces/${activeWorkspaceId}/members/${member.id}`,
@@ -2843,7 +2858,9 @@ function MembersSettingsContent({
                                   ).catch(() => null)
                                   if (response?.ok) {
                                     setMembers((previous) =>
-                                      previous.filter((item) => item.id !== member.id)
+                                      previous.filter(
+                                        (item) => item.id !== member.id
+                                      )
                                     )
                                   }
                                 }}
@@ -2975,7 +2992,7 @@ function MembersSettingsContent({
                     placeholder={
                       inviteEmails.length === 0 ? "name@company.com" : ""
                     }
-                    className="h-6 min-w-[180px] flex-1 border-0 bg-transparent text-[0.8rem] text-foreground shadow-none outline-none ring-0 placeholder:text-muted-foreground focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+                    className="h-6 min-w-[180px] flex-1 border-0 bg-transparent text-[0.8rem] text-foreground shadow-none ring-0 outline-none placeholder:text-muted-foreground focus:border-0 focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
                   />
                 </div>
               </div>
@@ -3026,7 +3043,12 @@ function MembersSettingsContent({
               >
                 Cancel
               </Button>
-              <Button type="button" size="sm" disabled={isInviteSending} onClick={submitInvite}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={isInviteSending}
+                onClick={submitInvite}
+              >
                 {isInviteSending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
@@ -3124,7 +3146,7 @@ function UsageLimitsSettingsContent() {
         setUsageScope((current) =>
           payload.data?.scopeOptions.includes(current)
             ? current
-            : payload.data?.scopeOptions[0] ?? "user"
+            : (payload.data?.scopeOptions[0] ?? "user")
         )
       })
       .catch((error: Error) => {
@@ -3192,7 +3214,13 @@ function UsageLimitsSettingsContent() {
       { label: "Automations", value: stats.automationsActive },
       { label: "Chats", value: stats.chatsActive },
     ],
-    [stats.automationsActive, stats.chatsActive, stats.creditsUsed, stats.filesUsed, usageScope]
+    [
+      stats.automationsActive,
+      stats.chatsActive,
+      stats.creditsUsed,
+      stats.filesUsed,
+      usageScope,
+    ]
   )
 
   const saveUserLimits = React.useCallback(async () => {
@@ -3243,7 +3271,13 @@ function UsageLimitsSettingsContent() {
     } finally {
       setIsSavingLimits(false)
     }
-  }, [activeWorkspaceId, apiFetch, loadUsage, usageData?.canManageLimits, userLimits])
+  }, [
+    activeWorkspaceId,
+    apiFetch,
+    loadUsage,
+    usageData?.canManageLimits,
+    userLimits,
+  ])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -3274,7 +3308,10 @@ function UsageLimitsSettingsContent() {
                 </span>
                 <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-32 rounded-lg p-1">
+              <DropdownMenuContent
+                align="end"
+                className="min-w-32 rounded-lg p-1"
+              >
                 <DropdownMenuItem onClick={() => setUsageScope("workspace")}>
                   Workspace
                 </DropdownMenuItem>
@@ -3298,7 +3335,10 @@ function UsageLimitsSettingsContent() {
               <span>{usageRange}</span>
               <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-32 rounded-lg p-1">
+            <DropdownMenuContent
+              align="end"
+              className="min-w-32 rounded-lg p-1"
+            >
               {usageRanges.map((range) => (
                 <DropdownMenuItem
                   key={range}
@@ -3340,35 +3380,35 @@ function UsageLimitsSettingsContent() {
         ) : usageData ? (
           <>
             <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
-              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-                <p className="text-[11px] text-muted-foreground">Tokens</p>
-                <p className="text-sm font-semibold text-foreground">
+              <div className="rounded-lg bg-muted px-3 py-3">
+                <p className="text-[13px] text-muted-foreground">Tokens</p>
+                <p className="mt-1 text-2xl font-medium text-foreground tabular-nums">
                   {stats.creditsUsed.toLocaleString()} /{" "}
                   {stats.creditsLimit.toLocaleString()}
                 </p>
               </div>
-              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-                <p className="text-[11px] text-muted-foreground">Files</p>
-                <p className="text-sm font-semibold text-foreground">
+              <div className="rounded-lg bg-muted px-3 py-3">
+                <p className="text-[13px] text-muted-foreground">Files</p>
+                <p className="mt-1 text-2xl font-medium text-foreground tabular-nums">
                   {stats.filesUsed.toLocaleString()} /{" "}
                   {stats.filesLimit.toLocaleString()}
                 </p>
               </div>
-              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-                <p className="text-[11px] text-muted-foreground">Storage</p>
-                <p className="text-sm font-semibold text-foreground">
+              <div className="rounded-lg bg-muted px-3 py-3">
+                <p className="text-[13px] text-muted-foreground">Storage</p>
+                <p className="mt-1 text-2xl font-medium text-foreground tabular-nums">
                   {stats.storageUsedGb}GB / {stats.storageLimitGb}GB
                 </p>
               </div>
-              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-                <p className="text-[11px] text-muted-foreground">Automations</p>
-                <p className="text-sm font-semibold text-foreground">
+              <div className="rounded-lg bg-muted px-3 py-3">
+                <p className="text-[13px] text-muted-foreground">Automations</p>
+                <p className="mt-1 text-2xl font-medium text-foreground tabular-nums">
                   {stats.automationsActive.toLocaleString()}
                 </p>
               </div>
-              <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-                <p className="text-[11px] text-muted-foreground">Chats</p>
-                <p className="text-sm font-semibold text-foreground">
+              <div className="rounded-lg bg-muted px-3 py-3">
+                <p className="text-[13px] text-muted-foreground">Chats</p>
+                <p className="mt-1 text-2xl font-medium text-foreground tabular-nums">
                   {stats.chatsActive.toLocaleString()}
                 </p>
               </div>
@@ -3389,79 +3429,81 @@ function UsageLimitsSettingsContent() {
               />
             </section>
 
-            <section className="overflow-hidden rounded-xl border border-border bg-background">
-              <table className="w-full table-fixed border-collapse text-[0.8rem]">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground">
-                    <th className="w-[30%] px-2.5 py-1.5 text-left font-medium">
-                      Resource
-                    </th>
-                    <th className="w-[35%] px-2.5 py-1.5 text-left font-medium">
-                      Usage
-                    </th>
-                    <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
-                      Limit
-                    </th>
-                    <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usageLimitsRows.map((row) => {
-                    const used = stats[row.usedKey]
-                    const limit = stats[row.limitKey]
-                    const progress = Math.min(
-                      100,
-                      (used / Math.max(limit, 1)) * 100
-                    )
-                    const nearLimit = progress >= 80
-                    return (
-                      <tr
-                        key={row.key}
-                        className="border-b border-border/70 last:border-b-0"
-                      >
-                        <td className="px-2.5 py-1.5 font-medium text-foreground">
-                          {row.label}
-                        </td>
-                        <td className="px-2.5 py-1.5">
-                          <div className="space-y-1">
-                            <p className="text-[11px] text-muted-foreground">
-                              {used.toLocaleString()}
-                              {row.unit ? ` ${row.unit}` : ""}
-                            </p>
-                            <div className="h-1.5 rounded-full bg-muted">
-                              <div
-                                className={cn(
-                                  "h-full rounded-full",
-                                  nearLimit
-                                    ? "bg-destructive/70"
-                                    : "bg-primary/70"
-                                )}
-                                style={{ width: `${progress}%` }}
-                              />
+            <section className="rounded-xl bg-muted p-1 shadow-[0_1px_0_rgba(0,0,0,0.04)] ring-1 ring-border/70">
+              <div className="overflow-hidden rounded-lg">
+                <table className="w-full table-fixed border-collapse text-[0.8rem]">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/35 text-muted-foreground">
+                      <th className="w-[30%] px-2.5 py-1.5 text-left font-medium">
+                        Resource
+                      </th>
+                      <th className="w-[35%] px-2.5 py-1.5 text-left font-medium">
+                        Usage
+                      </th>
+                      <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
+                        Limit
+                      </th>
+                      <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usageLimitsRows.map((row) => {
+                      const used = stats[row.usedKey]
+                      const limit = stats[row.limitKey]
+                      const progress = Math.min(
+                        100,
+                        (used / Math.max(limit, 1)) * 100
+                      )
+                      const nearLimit = progress >= 80
+                      return (
+                        <tr
+                          key={row.key}
+                          className="border-b border-border/70 last:border-b-0"
+                        >
+                          <td className="px-2.5 py-1.5 font-medium text-foreground">
+                            {row.label}
+                          </td>
+                          <td className="px-2.5 py-1.5">
+                            <div className="space-y-1">
+                              <p className="text-[11px] text-muted-foreground">
+                                {used.toLocaleString()}
+                                {row.unit ? ` ${row.unit}` : ""}
+                              </p>
+                              <div className="h-1.5 rounded-full bg-muted">
+                                <div
+                                  className={cn(
+                                    "h-full rounded-full",
+                                    nearLimit
+                                      ? "bg-destructive/70"
+                                      : "bg-primary/70"
+                                  )}
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-2.5 py-1.5 text-muted-foreground">
-                          {limit.toLocaleString()}
-                          {row.unit ? ` ${row.unit}` : ""}
-                        </td>
-                        <td className="px-2.5 py-1.5">
-                          <Badge variant={nearLimit ? "red" : "green"}>
-                            {nearLimit ? "Near limit" : "Within limit"}
-                          </Badge>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="px-2.5 py-1.5 text-muted-foreground">
+                            {limit.toLocaleString()}
+                            {row.unit ? ` ${row.unit}` : ""}
+                          </td>
+                          <td className="px-2.5 py-1.5">
+                            <Badge variant={nearLimit ? "red" : "green"}>
+                              {nearLimit ? "Near limit" : "Within limit"}
+                            </Badge>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             {usageData.canManageLimits ? (
-              <section className="overflow-hidden rounded-xl border border-border bg-background">
-                <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <section className="rounded-xl bg-muted p-1 shadow-[0_1px_0_rgba(0,0,0,0.04)] ring-1 ring-border/70">
+                <div className="flex flex-col gap-1 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-0.5">
                     <p className="text-sm font-semibold text-foreground">
                       Per-user limits
@@ -3484,102 +3526,104 @@ function UsageLimitsSettingsContent() {
                     Save limits
                   </Button>
                 </div>
-                <table className="w-full table-fixed border-collapse text-[0.8rem]">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground">
-                      <th className="w-[38%] px-2.5 py-1.5 text-left font-medium">
-                        User
-                      </th>
-                      <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">
-                        Role
-                      </th>
-                      <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">
-                        Tokens used
-                      </th>
-                      <th className="w-[28%] px-2.5 py-1.5 text-left font-medium">
-                        Monthly token cap
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usageData.members.map((member) => {
-                      const displayName = member.fullName || member.email
-                      const inheritedLimit =
-                        member.monthlyTokenCap === null
-                          ? usageData.workspaceLimits.monthlyTokenCap
-                          : member.monthlyTokenCap
-                      return (
-                        <tr
-                          key={member.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openUserProfile(displayName)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault()
-                              openUserProfile(displayName)
-                            }
-                          }}
-                          className="cursor-pointer border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                        >
-                          <td className="px-2.5 py-1.5">
-                            <div className="flex items-center gap-2.5">
-                              <Avatar className="size-7 !rounded-full">
-                                <AvatarImage
-                                  src={member.avatarUrl}
-                                  alt={displayName}
-                                  className="!rounded-full object-cover"
-                                />
-                                <AvatarFallback className="!rounded-full text-[10px] font-semibold">
-                                  {deriveInitialsFromName(displayName)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0">
-                                <p className="truncate text-[0.8rem] font-medium text-foreground">
-                                  {displayName}
-                                </p>
-                                <p className="truncate text-[11px] text-muted-foreground">
-                                  {member.email}
-                                </p>
+                <div className="overflow-hidden rounded-lg">
+                  <table className="w-full table-fixed border-collapse text-[0.8rem]">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/35 text-muted-foreground">
+                        <th className="w-[38%] px-2.5 py-1.5 text-left font-medium">
+                          User
+                        </th>
+                        <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">
+                          Role
+                        </th>
+                        <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">
+                          Tokens used
+                        </th>
+                        <th className="w-[28%] px-2.5 py-1.5 text-left font-medium">
+                          Monthly token cap
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usageData.members.map((member) => {
+                        const displayName = member.fullName || member.email
+                        const inheritedLimit =
+                          member.monthlyTokenCap === null
+                            ? usageData.workspaceLimits.monthlyTokenCap
+                            : member.monthlyTokenCap
+                        return (
+                          <tr
+                            key={member.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openUserProfile(displayName)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault()
+                                openUserProfile(displayName)
+                              }
+                            }}
+                            className="cursor-pointer border-b border-border/70 transition-colors last:border-b-0 hover:bg-muted/35 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+                          >
+                            <td className="px-2.5 py-1.5">
+                              <div className="flex items-center gap-2.5">
+                                <Avatar className="size-7 !rounded-full">
+                                  <AvatarImage
+                                    src={member.avatarUrl}
+                                    alt={displayName}
+                                    className="!rounded-full object-cover"
+                                  />
+                                  <AvatarFallback className="!rounded-full text-[10px] font-semibold">
+                                    {deriveInitialsFromName(displayName)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0">
+                                  <p className="truncate text-[0.8rem] font-medium text-foreground">
+                                    {displayName}
+                                  </p>
+                                  <p className="truncate text-[11px] text-muted-foreground">
+                                    {member.email}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-2.5 py-1.5">
-                            <Badge
-                              variant={
-                                member.role === "owner" ? "violet" : "neutral"
-                              }
-                            >
-                              {member.role === "owner" ? "Owner" : "Member"}
-                            </Badge>
-                          </td>
-                          <td className="px-2.5 py-1.5 text-muted-foreground">
-                            {member.usage.tokens.toLocaleString()} /{" "}
-                            {inheritedLimit.toLocaleString()}
-                          </td>
-                          <td className="px-2.5 py-1.5">
-                            <Input
-                              type="number"
-                              min={1}
-                              step={100}
-                              placeholder={`${usageData.workspaceLimits.monthlyTokenCap}`}
-                              value={userLimits[member.id] ?? ""}
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => event.stopPropagation()}
-                              onChange={(event) =>
-                                setUserLimits((previous) => ({
-                                  ...previous,
-                                  [member.id]: event.target.value,
-                                }))
-                              }
-                              className="h-7"
-                            />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                            </td>
+                            <td className="px-2.5 py-1.5">
+                              <Badge
+                                variant={
+                                  member.role === "owner" ? "violet" : "neutral"
+                                }
+                              >
+                                {member.role === "owner" ? "Owner" : "Member"}
+                              </Badge>
+                            </td>
+                            <td className="px-2.5 py-1.5 text-muted-foreground">
+                              {member.usage.tokens.toLocaleString()} /{" "}
+                              {inheritedLimit.toLocaleString()}
+                            </td>
+                            <td className="px-2.5 py-1.5">
+                              <Input
+                                type="number"
+                                min={1}
+                                step={100}
+                                placeholder={`${usageData.workspaceLimits.monthlyTokenCap}`}
+                                value={userLimits[member.id] ?? ""}
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                onChange={(event) =>
+                                  setUserLimits((previous) => ({
+                                    ...previous,
+                                    [member.id]: event.target.value,
+                                  }))
+                                }
+                                className="h-7"
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             ) : null}
           </>
@@ -3634,65 +3678,64 @@ function IntegrationsSettingsContent() {
 
     void Promise.all([
       apiFetch("/api/integrations").then((r) => r.json()),
-      apiFetch(`/api/workspaces/${activeWorkspaceId}/members`).then((r) => r.json()),
+      apiFetch(`/api/workspaces/${activeWorkspaceId}/members`).then((r) =>
+        r.json()
+      ),
     ])
-      .then(([integrationsRes, membersRes]: [
-        {
-          data?: {
-            integrations?: typeof integrations
-            memberAccess?: Array<{
-              userId: string
-              connectedCount: number
-              appNames: string[]
-            }>
-          }
-        },
-        {
-          data?: {
-            members?: Array<{
-              role: "owner" | "member"
-              user:
-                | {
-                    id: string
-                    email: string | null
-                    full_name: string | null
-                    avatar_url?: string | null
-                  }
-                | null
-            }>
-          }
-        },
-      ]) => {
-        setIntegrations(integrationsRes.data?.integrations ?? [])
-        setMemberAccessById(
-          Object.fromEntries(
-            (integrationsRes.data?.memberAccess ?? []).map((access) => [
-              access.userId,
-              {
-                connectedCount: access.connectedCount,
-                appNames: access.appNames,
-              },
-            ])
+      .then(
+        ([integrationsRes, membersRes]: [
+          {
+            data?: {
+              integrations?: typeof integrations
+              memberAccess?: Array<{
+                userId: string
+                connectedCount: number
+                appNames: string[]
+              }>
+            }
+          },
+          {
+            data?: {
+              members?: Array<{
+                role: "owner" | "member"
+                user: {
+                  id: string
+                  email: string | null
+                  full_name: string | null
+                  avatar_url?: string | null
+                } | null
+              }>
+            }
+          },
+        ]) => {
+          setIntegrations(integrationsRes.data?.integrations ?? [])
+          setMemberAccessById(
+            Object.fromEntries(
+              (integrationsRes.data?.memberAccess ?? []).map((access) => [
+                access.userId,
+                {
+                  connectedCount: access.connectedCount,
+                  appNames: access.appNames,
+                },
+              ])
+            )
           )
-        )
-        const nextMembers = (membersRes.data?.members ?? []).map((row) => {
-          const user = Array.isArray(row.user) ? row.user[0] : row.user
-          const name = user?.full_name || user?.email || "Unknown user"
-          return {
-            id: user?.id ?? name,
-            name,
-            email: user?.email ?? "",
-            role:
-              row.role === "owner"
-                ? "Owner"
-                : "Member",
-            initials: deriveInitialsFromName(name),
-            avatarUrl: user?.avatar_url ?? "",
-          }
-        })
-        setMembers(nextMembers)
-        setMemberCount(nextMembers.length)
-      })
+          const nextMembers = (membersRes.data?.members ?? []).map((row) => {
+            const user = Array.isArray(row.user) ? row.user[0] : row.user
+            const name = user?.full_name || user?.email || "Unknown user"
+            return {
+              id: user?.id ?? name,
+              name,
+              email: user?.email ?? "",
+              role: row.role === "owner" ? "Owner" : "Member",
+              initials: deriveInitialsFromName(name),
+              avatarUrl: user?.avatar_url ?? "",
+            }
+          })
+          setMembers(nextMembers)
+          setMemberCount(nextMembers.length)
+        }
+      )
       .catch(() => {
         setIntegrations([])
         setMembers([])
@@ -3747,7 +3790,12 @@ function IntegrationsSettingsContent() {
       setIntegrations((previous) =>
         previous.map((integration) =>
           integration.slug === appSlug
-            ? { ...integration, connected: false, status: undefined, connected_at: undefined }
+            ? {
+                ...integration,
+                connected: false,
+                status: undefined,
+                connected_at: undefined,
+              }
             : integration
         )
       )
@@ -3786,221 +3834,221 @@ function IntegrationsSettingsContent() {
             <EmptyIntegrationsPattern />
           ) : (
             <>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="relative w-full sm:max-w-sm">
-                <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="search"
-                  value={nameFilter}
-                  onChange={(event) => setNameFilter(event.target.value)}
-                  placeholder="Search app by name"
-                  className="h-7 pl-8"
-                />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="relative w-full sm:max-w-sm">
+                    <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      value={nameFilter}
+                      onChange={(event) => setNameFilter(event.target.value)}
+                      placeholder="Search app by name"
+                      className="h-7 pl-8"
+                    />
+                  </div>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 justify-between rounded-[min(var(--radius-md),12px)] border border-transparent bg-sidebar px-2.5 text-[0.8rem] font-normal text-foreground hover:bg-sidebar-accent sm:min-w-44"
+                        />
+                      }
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                        {categoryFilterLabel}
+                      </span>
+                      <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="min-w-44 rounded-lg p-1"
+                    >
+                      <DropdownMenuItem
+                        onClick={() => setCategoryFilter("all")}
+                      >
+                        All categories
+                      </DropdownMenuItem>
+                      {categoryOptions.map((category) => (
+                        <DropdownMenuItem
+                          key={category}
+                          onClick={() => setCategoryFilter(category)}
+                        >
+                          {category}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 justify-between rounded-[min(var(--radius-md),12px)] border border-transparent bg-sidebar px-2.5 text-[0.8rem] font-normal text-foreground hover:bg-sidebar-accent sm:min-w-44"
-                    />
-                  }
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-                    {categoryFilterLabel}
-                  </span>
-                  <IconChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="min-w-44 rounded-lg p-1"
-                >
-                  <DropdownMenuItem onClick={() => setCategoryFilter("all")}>
-                    All categories
-                  </DropdownMenuItem>
-                  {categoryOptions.map((category) => (
-                    <DropdownMenuItem
-                      key={category}
-                      onClick={() => setCategoryFilter(category)}
-                    >
-                      {category}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          {filteredAppRows.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              No integrations match your current filters.
-            </div>
-          ) : (
-            <section className="overflow-hidden rounded-xl border border-border bg-background">
-              <table className="w-full table-fixed border-collapse text-[0.8rem]">
-                <thead>
-                  <tr className="border-b border-border bg-muted/25 text-muted-foreground">
-                    <th className="w-[28%] px-2.5 py-1.5 text-left font-medium">
-                      Integration
-                    </th>
-                    <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
-                      Category
-                    </th>
-                    <th className="w-[14%] px-2.5 py-1.5 text-left font-medium">
-                      Connected users
-                    </th>
-                    <th className="w-[38%] px-2.5 py-1.5 text-right font-medium">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAppRows.map((app) => {
-                    return (
-                      <tr
-                        key={app.name}
-                        className="border-b border-border/70 last:border-b-0"
-                      >
-                        <td className="px-2.5 py-1.5">
-                          <div className="flex items-center gap-2.5">
-                            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-[min(var(--radius-md),9px)] border border-border bg-muted/45 text-[10px] font-semibold text-foreground">
-                              {app.name.slice(0, 1).toUpperCase()}
-                            </span>
-                            <div className="flex min-w-0 items-center gap-1.5">
-                              <span className="truncate font-medium text-foreground">
-                                {app.name}
-                              </span>
-                              <Badge
-                                variant="blue"
-                                className="shrink-0"
-                              >
-                                Personal
-                              </Badge>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="truncate px-2.5 py-1.5 text-muted-foreground">
-                          {app.category}
-                        </td>
-                        <td className="px-2.5 py-1.5 text-foreground">
-                          {app.connectedUsers} / {memberCount}
-                        </td>
-                        <td className="px-2.5 py-1.5 text-right">
-                          <div className="flex flex-nowrap justify-end gap-1.5">
-                            <Button
-                              type="button"
-                              size="xs"
-                              variant="ghost"
-                              className="shrink-0 rounded-[min(var(--radius-md),12px)] border border-transparent bg-sidebar text-foreground hover:bg-sidebar-accent"
-                              onClick={() => void handleDisconnectApp(app.slug)}
-                            >
-                              Unconnect
-                            </Button>
-                          </div>
-                        </td>
+              {filteredAppRows.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  No integrations match your current filters.
+                </div>
+              ) : (
+                <section className="overflow-hidden rounded-xl border border-border bg-background">
+                  <table className="w-full table-fixed border-collapse text-[0.8rem]">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/25 text-muted-foreground">
+                        <th className="w-[28%] px-2.5 py-1.5 text-left font-medium">
+                          Integration
+                        </th>
+                        <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
+                          Category
+                        </th>
+                        <th className="w-[14%] px-2.5 py-1.5 text-left font-medium">
+                          Connected users
+                        </th>
+                        <th className="w-[38%] px-2.5 py-1.5 text-right font-medium">
+                          Action
+                        </th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </section>
-          )}
+                    </thead>
+                    <tbody>
+                      {filteredAppRows.map((app) => {
+                        return (
+                          <tr
+                            key={app.name}
+                            className="border-b border-border/70 last:border-b-0"
+                          >
+                            <td className="px-2.5 py-1.5">
+                              <div className="flex items-center gap-2.5">
+                                <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-[min(var(--radius-md),9px)] border border-border bg-muted/45 text-[10px] font-semibold text-foreground">
+                                  {app.name.slice(0, 1).toUpperCase()}
+                                </span>
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <span className="truncate font-medium text-foreground">
+                                    {app.name}
+                                  </span>
+                                  <Badge variant="blue" className="shrink-0">
+                                    Personal
+                                  </Badge>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="truncate px-2.5 py-1.5 text-muted-foreground">
+                              {app.category}
+                            </td>
+                            <td className="px-2.5 py-1.5 text-foreground">
+                              {app.connectedUsers} / {memberCount}
+                            </td>
+                            <td className="px-2.5 py-1.5 text-right">
+                              <div className="flex flex-nowrap justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  variant="ghost"
+                                  className="shrink-0 rounded-[min(var(--radius-md),12px)] border border-transparent bg-sidebar text-foreground hover:bg-sidebar-accent"
+                                  onClick={() =>
+                                    void handleDisconnectApp(app.slug)
+                                  }
+                                >
+                                  Unconnect
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </section>
+              )}
             </>
           )}
         </>
-      ) : (
-        members.length > 0 ? (
-          <section className="overflow-hidden rounded-xl border border-border bg-background">
-            <div className="border-b border-border px-2.5 py-2 text-[11px] text-muted-foreground">
-              Connected apps are personal. Members must connect their own accounts before Atmet can use them.
-            </div>
-            <table className="w-full table-fixed border-collapse text-[0.8rem]">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="w-[34%] px-2.5 py-1.5 text-left font-medium">
-                    Member
-                  </th>
-                  <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
-                    Role
-                  </th>
-                  <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
-                    Personal integrations
-                  </th>
-                  <th className="w-[26%] px-2.5 py-1.5 text-left font-medium">
-                    Connected apps
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((member) => {
-                  const access = memberAccessById[member.id]
-                  const appNames = access?.appNames ?? []
+      ) : members.length > 0 ? (
+        <section className="overflow-hidden rounded-xl border border-border bg-background">
+          <div className="border-b border-border px-2.5 py-2 text-[11px] text-muted-foreground">
+            Connected apps are personal. Members must connect their own accounts
+            before Atmet can use them.
+          </div>
+          <table className="w-full table-fixed border-collapse text-[0.8rem]">
+            <thead>
+              <tr className="border-b border-border text-muted-foreground">
+                <th className="w-[34%] px-2.5 py-1.5 text-left font-medium">
+                  Member
+                </th>
+                <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
+                  Role
+                </th>
+                <th className="w-[20%] px-2.5 py-1.5 text-left font-medium">
+                  Personal integrations
+                </th>
+                <th className="w-[26%] px-2.5 py-1.5 text-left font-medium">
+                  Connected apps
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((member) => {
+                const access = memberAccessById[member.id]
+                const appNames = access?.appNames ?? []
 
-                  return (
-                    <tr
-                      key={member.id}
-                      className="border-b border-border/70 last:border-b-0"
-                    >
-                      <td className="px-2.5 py-1.5 pe-3">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar className="size-7 !rounded-full">
-                            <AvatarImage
-                              src={member.avatarUrl}
-                              alt={member.name}
-                              className="!rounded-full object-cover"
-                            />
-                            <AvatarFallback className="!rounded-full text-[10px] font-semibold">
-                              {member.initials}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <p className="truncate text-[0.8rem] font-medium text-foreground">
-                              {member.name}
-                            </p>
-                            <p className="truncate text-[11px] text-muted-foreground">
-                              {member.email}
-                            </p>
-                          </div>
+                return (
+                  <tr
+                    key={member.id}
+                    className="border-b border-border/70 last:border-b-0"
+                  >
+                    <td className="px-2.5 py-1.5 pe-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="size-7 !rounded-full">
+                          <AvatarImage
+                            src={member.avatarUrl}
+                            alt={member.name}
+                            className="!rounded-full object-cover"
+                          />
+                          <AvatarFallback className="!rounded-full text-[10px] font-semibold">
+                            {member.initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="truncate text-[0.8rem] font-medium text-foreground">
+                            {member.name}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {member.email}
+                          </p>
                         </div>
-                      </td>
-                      <td className="px-2.5 py-1.5 text-foreground">
-                        {member.role}
-                      </td>
-                      <td className="px-2.5 py-1.5 text-foreground">
-                        {access?.connectedCount ?? 0}
-                      </td>
-                      <td className="px-2.5 py-1.5">
-                        {appNames.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {appNames.map((appName) => (
-                              <Badge
-                                key={`${member.id}-${appName}`}
-                                variant="blue"
-                              >
-                                {appName}
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground">
-                            None
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </section>
-        ) : (
-          <EmptyIntegrationsPattern />
-        )
+                      </div>
+                    </td>
+                    <td className="px-2.5 py-1.5 text-foreground">
+                      {member.role}
+                    </td>
+                    <td className="px-2.5 py-1.5 text-foreground">
+                      {access?.connectedCount ?? 0}
+                    </td>
+                    <td className="px-2.5 py-1.5">
+                      {appNames.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {appNames.map((appName) => (
+                            <Badge
+                              key={`${member.id}-${appName}`}
+                              variant="blue"
+                            >
+                              {appName}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">
+                          None
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </section>
+      ) : (
+        <EmptyIntegrationsPattern />
       )}
     </div>
   )
@@ -4116,18 +4164,26 @@ function ReferAndEarnSettingsContent() {
       <div className="space-y-0.5 px-1">
         <p className="text-sm font-semibold text-foreground">Refer and earn</p>
         <p className="text-sm text-muted-foreground">
-          Share your unique link. New clients get 25% for one year, and you
-          earn referral credits when they pay.
+          Share your unique link. New clients get 25% for one year, and you earn
+          referral credits when they pay.
         </p>
       </div>
 
       <section className="p-1">
-        <Label htmlFor="referral-link" className="text-xs text-muted-foreground">
+        <Label
+          htmlFor="referral-link"
+          className="text-xs text-muted-foreground"
+        >
           Your unique referral link
         </Label>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <Input id="referral-link" value={referralLink} readOnly />
-          <Button type="button" variant="outline" size="sm" onClick={handleCopy}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleCopy}
+          >
             <Copy className="h-3.5 w-3.5" />
             {copied ? "Copied" : "Copy"}
           </Button>
@@ -4141,7 +4197,9 @@ function ReferAndEarnSettingsContent() {
       <section className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-xl border border-border bg-background px-3 py-2.5">
           <p className="text-[11px] text-muted-foreground">Referred users</p>
-          <p className="text-sm font-semibold text-foreground">{referredUsers}</p>
+          <p className="text-sm font-semibold text-foreground">
+            {referredUsers}
+          </p>
         </div>
         <div className="rounded-xl border border-border bg-background px-3 py-2.5">
           <p className="text-[11px] text-muted-foreground">Total credits</p>
@@ -4151,7 +4209,12 @@ function ReferAndEarnSettingsContent() {
         </div>
         <div className="rounded-xl border border-border bg-background px-3 py-2.5">
           <p className="text-[11px] text-muted-foreground">Balance payout</p>
-          <Button type="button" size="sm" className="mt-1" onClick={handleRequestMoney}>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-1"
+            onClick={handleRequestMoney}
+          >
             Request money
           </Button>
           {payoutStatus ? (
@@ -4161,7 +4224,9 @@ function ReferAndEarnSettingsContent() {
       </section>
 
       <section className="rounded-xl border border-border bg-sidebar p-3">
-        <p className="text-sm font-semibold text-foreground">Example earnings</p>
+        <p className="text-sm font-semibold text-foreground">
+          Example earnings
+        </p>
         <p className="mt-1 text-sm text-muted-foreground">
           If a referred client stays on the monthly plan for 12 months, you
           receive 120 credits. If they choose the yearly plan, you receive 150
@@ -4345,7 +4410,13 @@ function BillingSettingsContent({
   )
 }
 
-type AdminBadgeTone = "default" | "success" | "info" | "danger" | "warning" | "secondary"
+type AdminBadgeTone =
+  | "default"
+  | "success"
+  | "info"
+  | "danger"
+  | "warning"
+  | "secondary"
 
 const adminBadgeVariants: Record<AdminBadgeTone, BadgeVariant> = {
   default: "neutral",
@@ -4522,7 +4593,9 @@ function AdminPage({
             {adminConsoleDescriptions[section]}
           </p>
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap gap-1.5">{actions}</div> : null}
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap gap-1.5">{actions}</div>
+        ) : null}
       </div>
       <div className="no-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-1 pb-1 [&_input:not([type=checkbox])]:h-7">
         {children}
@@ -4547,7 +4620,9 @@ function AdminSelect({
   disabled?: boolean
 }) {
   return (
-    <div className={cn("space-y-1 text-[13px] text-muted-foreground", className)}>
+    <div
+      className={cn("space-y-1 text-[13px] text-muted-foreground", className)}
+    >
       {label ? <span>{label}</span> : null}
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -4566,7 +4641,10 @@ function AdminSelect({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-40 rounded-lg p-1">
           {options.map((option) => (
-            <DropdownMenuItem key={option} onClick={() => !disabled && onChange(option)}>
+            <DropdownMenuItem
+              key={option}
+              onClick={() => !disabled && onChange(option)}
+            >
               {option}
             </DropdownMenuItem>
           ))}
@@ -4646,7 +4724,10 @@ function AdminEmptyState({
   )
 }
 
-function openUserProfile(name: string, returnToAdminSection?: AdminConsoleSection) {
+function openUserProfile(
+  name: string,
+  returnToAdminSection?: AdminConsoleSection
+) {
   const member = workspaceMembers.find((candidate) => candidate.name === name)
   if (!member) return
 
@@ -4675,7 +4756,11 @@ function AdminAvatar({
 }) {
   const avatar = (
     <Avatar className="size-7 !rounded-full">
-      <AvatarImage src={avatarUrl ?? undefined} alt={name} className="!rounded-full object-cover" />
+      <AvatarImage
+        src={avatarUrl ?? undefined}
+        alt={name}
+        className="!rounded-full object-cover"
+      />
       <AvatarFallback className="!rounded-full text-[10px] font-medium">
         {initials}
       </AvatarFallback>
@@ -4693,7 +4778,7 @@ function AdminAvatar({
         event.stopPropagation()
         openUserProfile(name, returnToAdminSection)
       }}
-      className="rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="rounded-full ring-offset-background outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       aria-label={`Open ${name}'s profile`}
     >
       {avatar}
@@ -4701,7 +4786,11 @@ function AdminAvatar({
   )
 }
 
-function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?: string[] }) {
+function AdminOverviewConsoleContent({
+  workspaceNames = [],
+}: {
+  workspaceNames?: string[]
+}) {
   type AdminOverviewStat = {
     label: string
     value: number
@@ -4717,36 +4806,48 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
   const [datePeriod, setDatePeriod] = React.useState("Last 7 days")
   const [activityQuery, setActivityQuery] = React.useState("")
   const [activityType, setActivityType] = React.useState("All event types")
-  const [activityWorkspace, setActivityWorkspace] = React.useState("All workspaces")
+  const [activityWorkspace, setActivityWorkspace] =
+    React.useState("All workspaces")
   const [activityActor, setActivityActor] = React.useState("All actors")
   const [stats, setStats] = React.useState<AdminOverviewStat[]>([])
-  const [activityRows, setActivityRows] = React.useState<Array<{
-    id: string
-    timestamp: string
-    actor: string
-    description: string
-    workspace: string
-    type: string
-    avatar_url: string | null
-  }>>([])
+  const [activityRows, setActivityRows] = React.useState<
+    Array<{
+      id: string
+      timestamp: string
+      actor: string
+      description: string
+      workspace: string
+      type: string
+      avatar_url: string | null
+    }>
+  >([])
   const [isOverviewLoading, setIsOverviewLoading] = React.useState(true)
 
   const loadOverview = React.useCallback(() => {
     setIsOverviewLoading(true)
     fetch(`/api/admin/overview?period=${encodeURIComponent(datePeriod)}`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { stats?: AdminOverviewStat[]; activity?: Array<{
-        id: string
-        timestamp: string
-        actor: string
-        description: string
-        workspace: string
-        type: string
-        avatar_url: string | null
-      }> } } | null) => {
-        setStats(payload?.data?.stats ?? [])
-        setActivityRows(payload?.data?.activity ?? [])
-      })
+      .then(
+        (
+          payload: {
+            data?: {
+              stats?: AdminOverviewStat[]
+              activity?: Array<{
+                id: string
+                timestamp: string
+                actor: string
+                description: string
+                workspace: string
+                type: string
+                avatar_url: string | null
+              }>
+            }
+          } | null
+        ) => {
+          setStats(payload?.data?.stats ?? [])
+          setActivityRows(payload?.data?.activity ?? [])
+        }
+      )
       .catch(() => {
         setStats([])
         setActivityRows([])
@@ -4769,7 +4870,8 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
     const matchesWorkspace =
       activityWorkspace === "All workspaces" ||
       row.workspace === activityWorkspace
-    const matchesActor = activityActor === "All actors" || row.actor === activityActor
+    const matchesActor =
+      activityActor === "All actors" || row.actor === activityActor
     return matchesQuery && matchesType && matchesWorkspace && matchesActor
   })
 
@@ -4784,7 +4886,12 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
             onChange={setDatePeriod}
             className="w-36"
           />
-          <Button type="button" variant="outline" size="sm" onClick={loadOverview}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={loadOverview}
+          >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
           </Button>
@@ -4792,20 +4899,32 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
       }
     >
       <section className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-        {(isOverviewLoading && stats.length === 0 ? [{ label: "Loading", value: 0 }] : stats).map((stat, index) => (
-          <div key={`${stat.label}-${index}`} className="rounded-lg bg-muted px-3 py-3">
+        {(isOverviewLoading && stats.length === 0
+          ? [{ label: "Loading", value: 0 }]
+          : stats
+        ).map((stat, index) => (
+          <div
+            key={`${stat.label}-${index}`}
+            className="rounded-lg bg-muted px-3 py-3"
+          >
             {stat.placeholder ? null : (
               <>
-                <p className="text-[13px] text-muted-foreground">{stat.label}</p>
+                <p className="text-[13px] text-muted-foreground">
+                  {stat.label}
+                </p>
                 <div className="mt-1 flex items-end gap-4">
-                  <p className="text-2xl font-medium tabular-nums text-foreground">
+                  <p className="text-2xl font-medium text-foreground tabular-nums">
                     {new Intl.NumberFormat("en-US").format(stat.value)}
                   </p>
                   {stat.secondaryLabel ? (
                     <div className="pb-0.5">
-                      <p className="text-[11px] text-muted-foreground">{stat.secondaryLabel}</p>
-                      <p className="text-lg font-medium tabular-nums text-foreground">
-                        {new Intl.NumberFormat("en-US").format(stat.secondaryValue ?? 0)}
+                      <p className="text-[11px] text-muted-foreground">
+                        {stat.secondaryLabel}
+                      </p>
+                      <p className="text-lg font-medium text-foreground tabular-nums">
+                        {new Intl.NumberFormat("en-US").format(
+                          stat.secondaryValue ?? 0
+                        )}
                       </p>
                     </div>
                   ) : null}
@@ -4830,7 +4949,9 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
                   </p>
                 ) : null}
                 {stat.caption ? (
-                  <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{stat.caption}</p>
+                  <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                    {stat.caption}
+                  </p>
                 ) : null}
               </>
             )}
@@ -4843,7 +4964,7 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
           <p className="text-sm font-medium text-foreground">Recent activity</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_150px_150px_150px]">
             <div className="relative">
-              <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <IconSearch className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={activityQuery}
                 onChange={(event) => setActivityQuery(event.target.value)}
@@ -4853,7 +4974,10 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
             </div>
             <AdminSelect
               value={activityType}
-              options={["All event types", ...Array.from(new Set(activityRows.map((row) => row.type)))]}
+              options={[
+                "All event types",
+                ...Array.from(new Set(activityRows.map((row) => row.type))),
+              ]}
               onChange={setActivityType}
             />
             <AdminSelect
@@ -4863,7 +4987,10 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
             />
             <AdminSelect
               value={activityActor}
-              options={["All actors", ...Array.from(new Set(activityRows.map((row) => row.actor)))]}
+              options={[
+                "All actors",
+                ...Array.from(new Set(activityRows.map((row) => row.actor))),
+              ]}
               onChange={setActivityActor}
             />
           </div>
@@ -4879,7 +5006,9 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
                   "cursor-pointer transition-colors hover:bg-muted/35"
               )}
             >
-              <span className="text-[13px] text-muted-foreground">{row.timestamp}</span>
+              <span className="text-[13px] text-muted-foreground">
+                {row.timestamp}
+              </span>
               <span className="flex items-center gap-2 text-foreground">
                 <AdminAvatar
                   initials={deriveInitialsFromName(row.actor)}
@@ -4895,8 +5024,18 @@ function AdminOverviewConsoleContent({ workspaceNames = [] }: { workspaceNames?:
                   {row.actor}
                 </button>
               </span>
-              <span className="truncate text-[13px] text-foreground">{row.workspace}</span>
-              <Badge variant={row.type === "User" ? "green" : row.type === "Workspace" ? "blue" : "amber"}>
+              <span className="truncate text-[13px] text-foreground">
+                {row.workspace}
+              </span>
+              <Badge
+                variant={
+                  row.type === "User"
+                    ? "green"
+                    : row.type === "Workspace"
+                      ? "blue"
+                      : "amber"
+                }
+              >
                 {row.type}
               </Badge>
             </div>
@@ -4928,7 +5067,9 @@ function WorkspaceProvisioningConsoleContent() {
   const [monthlyTokenCap, setMonthlyTokenCap] = React.useState("50000")
   const [seatLimit, setSeatLimit] = React.useState("10")
   const [isProvisioning, setIsProvisioning] = React.useState(false)
-  const [provisionError, setProvisionError] = React.useState<string | null>(null)
+  const [provisionError, setProvisionError] = React.useState<string | null>(
+    null
+  )
   const [createdWorkspaces, setCreatedWorkspaces] = React.useState<
     Array<{
       id: string
@@ -4955,7 +5096,12 @@ function WorkspaceProvisioningConsoleContent() {
           name: trimmedName,
           slug: workspaceSlug.trim() || null,
           country,
-          plan: plan === "Enterprise" ? "enterprise" : plan === "Pro" ? "pro" : "free",
+          plan:
+            plan === "Enterprise"
+              ? "enterprise"
+              : plan === "Pro"
+                ? "pro"
+                : "free",
           ownerName: ownerName.trim() || null,
           ownerEmail: trimmedEmail,
           monthlyTokenCap: Number(monthlyTokenCap) || null,
@@ -4970,13 +5116,20 @@ function WorkspaceProvisioningConsoleContent() {
       })
       const payload = (await response.json()) as {
         data?: {
-          workspace?: { id: string; name: string; country: string | null; plan: string }
+          workspace?: {
+            id: string
+            name: string
+            country: string | null
+            plan: string
+          }
           apiKey?: string | null
         }
         error?: { message?: string }
       }
       if (!response.ok || !payload.data?.workspace) {
-        setProvisionError(payload.error?.message ?? "Unable to create workspace.")
+        setProvisionError(
+          payload.error?.message ?? "Unable to create workspace."
+        )
         return
       }
       const provisioned = payload.data
@@ -5011,10 +5164,16 @@ function WorkspaceProvisioningConsoleContent() {
         <Button
           type="button"
           size="sm"
-          disabled={isProvisioning || !workspaceName.trim() || !ownerEmail.trim()}
+          disabled={
+            isProvisioning || !workspaceName.trim() || !ownerEmail.trim()
+          }
           onClick={() => void provisionWorkspace()}
         >
-          {isProvisioning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <IconPlus className="h-3.5 w-3.5" />}
+          {isProvisioning ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <IconPlus className="h-3.5 w-3.5" />
+          )}
           {isProvisioning ? "Creating" : "Create workspace"}
         </Button>
       }
@@ -5022,7 +5181,9 @@ function WorkspaceProvisioningConsoleContent() {
       <section className="grid gap-3 lg:grid-cols-2">
         <div className="space-y-3 rounded-xl border border-border bg-background p-3">
           <div>
-            <p className="text-sm font-medium text-foreground">Workspace setup</p>
+            <p className="text-sm font-medium text-foreground">
+              Workspace setup
+            </p>
             <p className="text-[13px] text-muted-foreground">
               Define the workspace identity and commercial defaults.
             </p>
@@ -5132,11 +5293,13 @@ function WorkspaceProvisioningConsoleContent() {
               <div className="sm:col-span-2">
                 <p className="text-[13px] text-muted-foreground">Scopes</p>
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {["Chat", "Workflows", "Files", "Apps", "Members"].map((scope) => (
-                    <Badge key={scope} variant="neutral">
-                      {scope}
-                    </Badge>
-                  ))}
+                  {["Chat", "Workflows", "Files", "Apps", "Members"].map(
+                    (scope) => (
+                      <Badge key={scope} variant="neutral">
+                        {scope}
+                      </Badge>
+                    )
+                  )}
                 </div>
               </div>
             </div>
@@ -5145,7 +5308,9 @@ function WorkspaceProvisioningConsoleContent() {
 
         <div className="space-y-3 rounded-xl border border-border bg-background p-3">
           <div>
-            <p className="text-sm font-medium text-foreground">Limits and features</p>
+            <p className="text-sm font-medium text-foreground">
+              Limits and features
+            </p>
             <p className="text-[13px] text-muted-foreground">
               Apply the initial operating guardrails for the workspace.
             </p>
@@ -5182,7 +5347,9 @@ function WorkspaceProvisioningConsoleContent() {
                 </span>
                 <AdminToggle
                   checked={checked as boolean}
-                  onChange={setChecked as React.Dispatch<React.SetStateAction<boolean>>}
+                  onChange={
+                    setChecked as React.Dispatch<React.SetStateAction<boolean>>
+                  }
                 />
               </div>
             ))}
@@ -5206,23 +5373,46 @@ function WorkspaceProvisioningConsoleContent() {
           <table className="w-full table-fixed border-collapse text-[0.8rem]">
             <thead>
               <tr className="border-b border-border text-muted-foreground">
-                <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">Workspace</th>
-                <th className="w-[24%] px-2.5 py-1.5 text-left font-medium">Initial user</th>
-                <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">Country</th>
-                <th className="w-[12%] px-2.5 py-1.5 text-left font-medium">Plan</th>
-                <th className="w-[26%] px-2.5 py-1.5 text-left font-medium">API key</th>
+                <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">
+                  Workspace
+                </th>
+                <th className="w-[24%] px-2.5 py-1.5 text-left font-medium">
+                  Initial user
+                </th>
+                <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">
+                  Country
+                </th>
+                <th className="w-[12%] px-2.5 py-1.5 text-left font-medium">
+                  Plan
+                </th>
+                <th className="w-[26%] px-2.5 py-1.5 text-left font-medium">
+                  API key
+                </th>
               </tr>
             </thead>
             <tbody>
               {createdWorkspaces.map((workspace) => (
-                <tr key={workspace.id} className="border-b border-border/70 last:border-b-0">
-                  <td className="px-2.5 py-2 font-medium text-foreground">{workspace.name}</td>
-                  <td className="truncate px-2.5 py-2 text-muted-foreground">{workspace.owner}</td>
-                  <td className="truncate px-2.5 py-2 text-foreground">{workspace.country}</td>
-                  <td className="px-2.5 py-2"><Badge variant="blue">{workspace.plan}</Badge></td>
+                <tr
+                  key={workspace.id}
+                  className="border-b border-border/70 last:border-b-0"
+                >
+                  <td className="px-2.5 py-2 font-medium text-foreground">
+                    {workspace.name}
+                  </td>
+                  <td className="truncate px-2.5 py-2 text-muted-foreground">
+                    {workspace.owner}
+                  </td>
+                  <td className="truncate px-2.5 py-2 text-foreground">
+                    {workspace.country}
+                  </td>
+                  <td className="px-2.5 py-2">
+                    <Badge variant="blue">{workspace.plan}</Badge>
+                  </td>
                   <td className="px-2.5 py-2 text-muted-foreground">
                     {workspace.apiKey ? (
-                      <span className="font-mono text-xs">{workspace.apiKey}</span>
+                      <span className="font-mono text-xs">
+                        {workspace.apiKey}
+                      </span>
                     ) : (
                       "Disabled"
                     )}
@@ -5289,6 +5479,7 @@ function AdminUserProfilePanel({
     userId: string,
     updates: {
       full_name?: string
+      avatar_url?: string | null
       status?: "active" | "inactive" | "suspended"
       platform_role?: "user" | "admin" | "super_admin"
     },
@@ -5296,29 +5487,61 @@ function AdminUserProfilePanel({
   ) => Promise<void>
   onRemove?: (user: AdminUserRow) => void
 }) {
+  const imageInputRef = React.useRef<HTMLInputElement | null>(null)
   const [isEditing, setIsEditing] = React.useState(false)
   const [name, setName] = React.useState(user.name)
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(
+    user.avatarUrl ?? null
+  )
   const [status, setStatus] = React.useState(user.status)
   const [role, setRole] = React.useState<PlatformRole>(user.role)
 
   React.useEffect(() => {
     setName(user.name)
+    setAvatarUrl(user.avatarUrl ?? null)
     setStatus(user.status)
     setRole(user.role)
     setIsEditing(false)
-  }, [user.id, user.name, user.role, user.status])
+  }, [user.avatarUrl, user.id, user.name, user.role, user.status])
 
   const platformRole =
     role === "Super Admin" ? "super_admin" : role === "Admin" ? "admin" : "user"
   const statusValue =
-    status === "Suspended" ? "suspended" : status === "Not active" ? "inactive" : "active"
-  const usage = user as AdminUserRow & Partial<{
-    tokens: number
-    runs: number
-    files: number
-    storageBytes: number
-    chats: number
-  }>
+    status === "Suspended"
+      ? "suspended"
+      : status === "Not active"
+        ? "inactive"
+        : "active"
+  const usage = user as AdminUserRow &
+    Partial<{
+      tokens: number
+      runs: number
+      files: number
+      storageBytes: number
+      chats: number
+    }>
+
+  const handleAdminUserImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    event.currentTarget.value = ""
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("scope", "user")
+    formData.append("owner_id", user.id)
+
+    const response = await fetch("/api/avatars", {
+      method: "POST",
+      body: formData,
+    }).catch(() => null)
+    if (!response?.ok) return
+
+    const payload = (await response.json()) as { data?: { url?: string } }
+    if (payload.data?.url) setAvatarUrl(payload.data.url)
+  }
 
   return (
     <AdminPage
@@ -5336,6 +5559,7 @@ function AdminUserProfilePanel({
               size="sm"
               onClick={() => {
                 setName(user.name)
+                setAvatarUrl(user.avatarUrl ?? null)
                 setStatus(user.status)
                 setRole(user.role)
                 setIsEditing(false)
@@ -5353,17 +5577,69 @@ function AdminUserProfilePanel({
       }
     >
       <section className="rounded-xl bg-muted/35 p-3">
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={handleAdminUserImageUpload}
+        />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-          <Avatar className="size-14 !rounded-full">
-            <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} className="!rounded-full object-cover" />
-            <AvatarFallback className="!rounded-full text-sm font-medium">{user.initials}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <p className="truncate text-base font-medium text-foreground">{user.name}</p>
-            <p className="truncate text-[13px] text-muted-foreground">{user.email}</p>
+            <Avatar className="size-14 !rounded-full">
+              <AvatarImage
+                src={avatarUrl ?? undefined}
+                alt={user.name}
+                className="!rounded-full object-cover"
+              />
+              <AvatarFallback className="!rounded-full text-sm font-medium">
+                {user.initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-base font-medium text-foreground">
+                {user.name}
+              </p>
+              <p className="truncate text-[13px] text-muted-foreground">
+                {user.email}
+              </p>
+              {isEditing ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={() => imageInputRef.current?.click()}
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    Upload image
+                  </Button>
+                  {avatarUrl ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setAvatarUrl(null)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete image
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-1 flex flex-wrap gap-1.5">
-                <Badge variant={adminBadgeVariants[user.status === "Active" ? "success" : user.status === "Suspended" ? "warning" : "info"]}>
+                <Badge
+                  variant={
+                    adminBadgeVariants[
+                      user.status === "Active"
+                        ? "success"
+                        : user.status === "Suspended"
+                          ? "warning"
+                          : "info"
+                    ]
+                  }
+                >
                   {user.status}
                 </Badge>
                 <Badge variant="neutral">{user.role}</Badge>
@@ -5371,27 +5647,65 @@ function AdminUserProfilePanel({
             </div>
           </div>
           {isEditing ? (
-          <div className="flex flex-wrap gap-1.5">
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={() => void onSave(user.id, { status: user.status === "Suspended" ? "active" : "suspended" }, user.status === "Suspended" ? "User activated." : "User suspended.")}
-            >
-              {user.status === "Suspended" ? "Activate" : "Suspend"}
-            </Button>
-            <Button type="button" size="xs" variant="outline" onClick={() => void onSave(user.id, { platform_role: "admin" }, "User role changed to Admin.")}>
-              Make admin
-            </Button>
-            <Button type="button" size="xs" variant="outline" onClick={() => void onSave(user.id, { platform_role: "super_admin" }, "User role changed to Super Admin.")}>
-              Make super admin
-            </Button>
-            {onRemove ? (
-              <Button type="button" size="xs" variant="destructive" onClick={() => onRemove(user)}>
-                Remove
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  void onSave(
+                    user.id,
+                    {
+                      status:
+                        user.status === "Suspended" ? "active" : "suspended",
+                    },
+                    user.status === "Suspended"
+                      ? "User activated."
+                      : "User suspended."
+                  )
+                }
+              >
+                {user.status === "Suspended" ? "Activate" : "Suspend"}
               </Button>
-            ) : null}
-          </div>
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  void onSave(
+                    user.id,
+                    { platform_role: "admin" },
+                    "User role changed to Admin."
+                  )
+                }
+              >
+                Make admin
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  void onSave(
+                    user.id,
+                    { platform_role: "super_admin" },
+                    "User role changed to Super Admin."
+                  )
+                }
+              >
+                Make super admin
+              </Button>
+              {onRemove ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="destructive"
+                  onClick={() => onRemove(user)}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </section>
@@ -5401,29 +5715,58 @@ function AdminUserProfilePanel({
           <div>
             <p className="text-sm font-medium text-foreground">Profile</p>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              {isEditing ? "Update identity and account access for this user." : "Press Edit to make changes."}
+              {isEditing
+                ? "Update identity and account access for this user."
+                : "Press Edit to make changes."}
             </p>
           </div>
-        <label className="space-y-1 text-[13px] text-muted-foreground">
-          Full name
-            <Input value={name} disabled={!isEditing} onChange={(event) => setName(event.target.value)} className="h-8 text-sm disabled:opacity-100" />
-        </label>
-        <label className="space-y-1 text-[13px] text-muted-foreground">
-          Email
-            <Input value={user.email} readOnly className="h-8 bg-muted/40 text-sm" />
-        </label>
-        <AdminSelect label="Platform role" value={role} options={platformRoles} onChange={(value) => setRole(value as PlatformRole)} disabled={!isEditing} />
-        <AdminSelect label="Status" value={status} options={["Active", "Not active", "Suspended"]} onChange={(value) => setStatus(value as typeof status)} disabled={!isEditing} />
+          <label className="space-y-1 text-[13px] text-muted-foreground">
+            Full name
+            <Input
+              value={name}
+              disabled={!isEditing}
+              onChange={(event) => setName(event.target.value)}
+              className="h-8 text-sm disabled:opacity-100"
+            />
+          </label>
+          <label className="space-y-1 text-[13px] text-muted-foreground">
+            Email
+            <Input
+              value={user.email}
+              readOnly
+              className="h-8 bg-muted/40 text-sm"
+            />
+          </label>
+          <AdminSelect
+            label="Platform role"
+            value={role}
+            options={platformRoles}
+            onChange={(value) => setRole(value as PlatformRole)}
+            disabled={!isEditing}
+          />
+          <AdminSelect
+            label="Status"
+            value={status}
+            options={["Active", "Not active", "Suspended"]}
+            onChange={(value) => setStatus(value as typeof status)}
+            disabled={!isEditing}
+          />
         </div>
         <div className="space-y-3 rounded-lg bg-muted/25 p-3">
           <div>
-            <p className="text-sm font-medium text-foreground">Record details</p>
-            <p className="mt-1 text-[13px] text-muted-foreground">Operational data connected to this profile.</p>
+            <p className="text-sm font-medium text-foreground">
+              Record details
+            </p>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Operational data connected to this profile.
+            </p>
           </div>
           <div className="grid gap-2 text-[13px]">
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">User ID</span>
-              <span className="truncate font-mono text-foreground">{user.publicUserId || user.id}</span>
+              <span className="truncate font-mono text-foreground">
+                {user.publicUserId || user.id}
+              </span>
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Workspace</span>
@@ -5431,11 +5774,15 @@ function AdminUserProfilePanel({
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Last login</span>
-              <span className="truncate text-foreground">{user.lastActive}</span>
+              <span className="truncate text-foreground">
+                {user.lastActive}
+              </span>
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Owned workspaces</span>
-              <span className="tabular-nums text-foreground">{user.ownedWorkspaces.length}</span>
+              <span className="text-foreground tabular-nums">
+                {user.ownedWorkspaces.length}
+              </span>
             </div>
           </div>
         </div>
@@ -5446,15 +5793,44 @@ function AdminUserProfilePanel({
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
           {isEditing ? (
             <>
-              <Button type="button" variant="outline" size="sm" onClick={() => void onSave(user.id, { platform_role: "user" }, "User role changed to User.")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void onSave(
+                    user.id,
+                    { platform_role: "user" },
+                    "User role changed to User."
+                  )
+                }
+              >
                 Make user
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => void onSave(user.id, { status: "inactive" }, "User marked not active.")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void onSave(
+                    user.id,
+                    { status: "inactive" },
+                    "User marked not active."
+                  )
+                }
+              >
                 Mark not active
               </Button>
             </>
           ) : null}
-          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(user.publicUserId || user.id)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              navigator.clipboard?.writeText(user.publicUserId || user.id)
+            }
+          >
             Copy user ID
           </Button>
         </div>
@@ -5469,11 +5845,16 @@ function AdminUserProfilePanel({
               ["Runs", usage.runs],
               ["Files", usage.files],
               ["Chats", usage.chats],
-              ["Storage MB", Math.round((usage.storageBytes ?? 0) / 1024 / 1024)],
+              [
+                "Storage MB",
+                Math.round((usage.storageBytes ?? 0) / 1024 / 1024),
+              ],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg bg-background/60 p-2">
                 <p className="text-[11px] text-muted-foreground">{label}</p>
-                <p className="mt-1 text-lg font-medium tabular-nums text-foreground">{Number(value ?? 0).toLocaleString()}</p>
+                <p className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                  {Number(value ?? 0).toLocaleString()}
+                </p>
               </div>
             ))}
           </div>
@@ -5481,18 +5862,27 @@ function AdminUserProfilePanel({
       ) : null}
 
       {isEditing ? (
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => {
-            void onSave(user.id, { full_name: name.trim(), status: statusValue, platform_role: platformRole }, "User profile updated.")
-            setIsEditing(false)
-          }}
-        >
-          Save profile
-        </Button>
-      </div>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              void onSave(
+                user.id,
+                {
+                  full_name: name.trim(),
+                  avatar_url: avatarUrl,
+                  status: statusValue,
+                  platform_role: platformRole,
+                },
+                "User profile updated."
+              )
+              setIsEditing(false)
+            }}
+          >
+            Save profile
+          </Button>
+        </div>
       ) : null}
     </AdminPage>
   )
@@ -5511,6 +5901,7 @@ function AdminWorkspaceProfilePanel({
     updates: {
       name?: string
       slug?: string | null
+      avatar_url?: string | null
       status?: "active" | "suspended" | "cancelled"
       plan?: "free" | "pro" | "enterprise"
       country?: string | null
@@ -5522,34 +5913,80 @@ function AdminWorkspaceProfilePanel({
   ) => Promise<void>
   onDelete?: (workspace: AdminWorkspaceRow) => void
 }) {
+  const imageInputRef = React.useRef<HTMLInputElement | null>(null)
   const [isEditing, setIsEditing] = React.useState(false)
   const [name, setName] = React.useState(workspace.name)
   const [slug, setSlug] = React.useState(workspace.slug ?? "")
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(
+    workspace.avatar_url ?? null
+  )
   const [status, setStatus] = React.useState(workspace.status)
   const [plan, setPlan] = React.useState(workspace.plan)
   const [country, setCountry] = React.useState(workspace.country ?? "")
-  const [monthlyTokenCap, setMonthlyTokenCap] = React.useState(String(workspace.monthly_token_cap ?? ""))
-  const [seatLimit, setSeatLimit] = React.useState(String(workspace.seat_limit ?? ""))
+  const [monthlyTokenCap, setMonthlyTokenCap] = React.useState(
+    String(workspace.monthly_token_cap ?? "")
+  )
+  const [seatLimit, setSeatLimit] = React.useState(
+    String(workspace.seat_limit ?? "")
+  )
   const features = (workspace.features ?? {}) as Record<string, unknown>
-  const limits = features.limits && typeof features.limits === "object" && !Array.isArray(features.limits)
-    ? features.limits as Record<string, unknown>
-    : {}
-  const [maxFileSizeMb, setMaxFileSizeMb] = React.useState(String(typeof limits.maxFileSizeMb === "number" ? limits.maxFileSizeMb : ""))
-  const [maxFilesPerWorkspace, setMaxFilesPerWorkspace] = React.useState(String(typeof limits.maxFilesPerWorkspace === "number" ? limits.maxFilesPerWorkspace : ""))
-  const isAdjusted = Boolean(workspace.monthly_token_cap || workspace.seat_limit || Object.keys(limits).length)
+  const limits =
+    features.limits &&
+    typeof features.limits === "object" &&
+    !Array.isArray(features.limits)
+      ? (features.limits as Record<string, unknown>)
+      : {}
+  const [maxFileSizeMb, setMaxFileSizeMb] = React.useState(
+    String(typeof limits.maxFileSizeMb === "number" ? limits.maxFileSizeMb : "")
+  )
+  const [maxFilesPerWorkspace, setMaxFilesPerWorkspace] = React.useState(
+    String(
+      typeof limits.maxFilesPerWorkspace === "number"
+        ? limits.maxFilesPerWorkspace
+        : ""
+    )
+  )
+  const isAdjusted = Boolean(
+    workspace.monthly_token_cap ||
+    workspace.seat_limit ||
+    Object.keys(limits).length
+  )
 
   React.useEffect(() => {
     setName(workspace.name)
     setSlug(workspace.slug ?? "")
+    setAvatarUrl(workspace.avatar_url ?? null)
     setStatus(workspace.status)
     setPlan(workspace.plan)
     setCountry(workspace.country ?? "")
     setMonthlyTokenCap(String(workspace.monthly_token_cap ?? ""))
     setSeatLimit(String(workspace.seat_limit ?? ""))
-    setMaxFileSizeMb(String(typeof limits.maxFileSizeMb === "number" ? limits.maxFileSizeMb : ""))
-    setMaxFilesPerWorkspace(String(typeof limits.maxFilesPerWorkspace === "number" ? limits.maxFilesPerWorkspace : ""))
+    setMaxFileSizeMb(
+      String(
+        typeof limits.maxFileSizeMb === "number" ? limits.maxFileSizeMb : ""
+      )
+    )
+    setMaxFilesPerWorkspace(
+      String(
+        typeof limits.maxFilesPerWorkspace === "number"
+          ? limits.maxFilesPerWorkspace
+          : ""
+      )
+    )
     setIsEditing(false)
-  }, [workspace.id, workspace.name, workspace.slug, workspace.status, workspace.plan, workspace.country, workspace.monthly_token_cap, workspace.seat_limit, limits.maxFileSizeMb, limits.maxFilesPerWorkspace])
+  }, [
+    workspace.avatar_url,
+    workspace.id,
+    workspace.name,
+    workspace.slug,
+    workspace.status,
+    workspace.plan,
+    workspace.country,
+    workspace.monthly_token_cap,
+    workspace.seat_limit,
+    limits.maxFileSizeMb,
+    limits.maxFilesPerWorkspace,
+  ])
 
   const numericOrNull = (value: string) => {
     const parsed = Number(value)
@@ -5561,7 +5998,8 @@ function AdminWorkspaceProfilePanel({
     const nextMaxFileSizeMb = numericOrNull(maxFileSizeMb)
     const nextMaxFilesPerWorkspace = numericOrNull(maxFilesPerWorkspace)
     if (nextMaxFileSizeMb !== null) nextLimits.maxFileSizeMb = nextMaxFileSizeMb
-    if (nextMaxFilesPerWorkspace !== null) nextLimits.maxFilesPerWorkspace = nextMaxFilesPerWorkspace
+    if (nextMaxFilesPerWorkspace !== null)
+      nextLimits.maxFilesPerWorkspace = nextMaxFilesPerWorkspace
     if (Object.keys(nextLimits).length > 0) {
       nextFeatures.limits = nextLimits
     } else {
@@ -5573,6 +6011,28 @@ function AdminWorkspaceProfilePanel({
     const nextFeatures = { ...features }
     delete nextFeatures.limits
     return nextFeatures
+  }
+
+  const handleAdminWorkspaceImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    event.currentTarget.value = ""
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("scope", "workspace")
+    formData.append("owner_id", workspace.id)
+
+    const response = await fetch("/api/avatars", {
+      method: "POST",
+      body: formData,
+    }).catch(() => null)
+    if (!response?.ok) return
+
+    const payload = (await response.json()) as { data?: { url?: string } }
+    if (payload.data?.url) setAvatarUrl(payload.data.url)
   }
 
   return (
@@ -5592,13 +6052,26 @@ function AdminWorkspaceProfilePanel({
               onClick={() => {
                 setName(workspace.name)
                 setSlug(workspace.slug ?? "")
+                setAvatarUrl(workspace.avatar_url ?? null)
                 setStatus(workspace.status)
                 setPlan(workspace.plan)
                 setCountry(workspace.country ?? "")
                 setMonthlyTokenCap(String(workspace.monthly_token_cap ?? ""))
                 setSeatLimit(String(workspace.seat_limit ?? ""))
-                setMaxFileSizeMb(String(typeof limits.maxFileSizeMb === "number" ? limits.maxFileSizeMb : ""))
-                setMaxFilesPerWorkspace(String(typeof limits.maxFilesPerWorkspace === "number" ? limits.maxFilesPerWorkspace : ""))
+                setMaxFileSizeMb(
+                  String(
+                    typeof limits.maxFileSizeMb === "number"
+                      ? limits.maxFileSizeMb
+                      : ""
+                  )
+                )
+                setMaxFilesPerWorkspace(
+                  String(
+                    typeof limits.maxFilesPerWorkspace === "number"
+                      ? limits.maxFilesPerWorkspace
+                      : ""
+                  )
+                )
                 setIsEditing(false)
               }}
             >
@@ -5614,113 +6087,249 @@ function AdminWorkspaceProfilePanel({
       }
     >
       <section className="rounded-xl bg-muted/35 p-3">
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={handleAdminWorkspaceImageUpload}
+        />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Avatar className="size-14 !rounded-lg">
-              <AvatarImage src={workspace.avatar_url ?? undefined} alt={workspace.name} className="!rounded-lg object-cover" />
-              <AvatarFallback className="!rounded-lg text-sm font-medium">{deriveInitialsFromName(workspace.name)}</AvatarFallback>
+              <AvatarImage
+                src={avatarUrl ?? undefined}
+                alt={workspace.name}
+                className="!rounded-lg object-cover"
+              />
+              <AvatarFallback className="!rounded-lg text-sm font-medium">
+                {deriveInitialsFromName(workspace.name)}
+              </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="truncate text-base font-medium text-foreground">{workspace.name}</p>
-              <p className="truncate font-mono text-[12px] text-muted-foreground">{workspace.slug ?? workspace.id}</p>
+              <p className="truncate text-base font-medium text-foreground">
+                {workspace.name}
+              </p>
+              <p className="truncate font-mono text-[12px] text-muted-foreground">
+                {workspace.slug ?? workspace.id}
+              </p>
+              {isEditing ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={() => imageInputRef.current?.click()}
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    Upload image
+                  </Button>
+                  {avatarUrl ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setAvatarUrl(null)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete image
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-1 flex flex-wrap gap-1.5">
-                <Badge variant={workspace.status === "active" ? "green" : workspace.status === "suspended" ? "amber" : "neutral"}>
+                <Badge
+                  variant={
+                    workspace.status === "active"
+                      ? "green"
+                      : workspace.status === "suspended"
+                        ? "amber"
+                        : "neutral"
+                  }
+                >
                   {workspace.status}
                 </Badge>
                 <Badge variant="neutral">{workspace.plan}</Badge>
-                {isAdjusted ? <Badge variant="amber">Adjusted limits</Badge> : null}
+                {isAdjusted ? (
+                  <Badge variant="amber">Adjusted limits</Badge>
+                ) : null}
               </div>
             </div>
           </div>
           {isEditing ? (
-          <div className="flex flex-wrap gap-1.5">
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={() => void onSave(workspace.id, { status: workspace.status === "suspended" ? "active" : "suspended" }, workspace.status === "suspended" ? "Workspace activated." : "Workspace suspended.")}
-            >
-              {workspace.status === "suspended" ? "Activate" : "Suspend"}
-            </Button>
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={() =>
-                void onSave(
-                  workspace.id,
-                  { monthly_token_cap: null, seat_limit: null, features: buildResetFeatures() },
-                  "Workspace limit overrides reset."
-                )
-              }
-            >
-              Reset limits
-            </Button>
-            {onDelete ? (
-              <Button type="button" size="xs" variant="destructive" onClick={() => onDelete(workspace)}>
-                Delete
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  void onSave(
+                    workspace.id,
+                    {
+                      status:
+                        workspace.status === "suspended"
+                          ? "active"
+                          : "suspended",
+                    },
+                    workspace.status === "suspended"
+                      ? "Workspace activated."
+                      : "Workspace suspended."
+                  )
+                }
+              >
+                {workspace.status === "suspended" ? "Activate" : "Suspend"}
               </Button>
-            ) : null}
-          </div>
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() =>
+                  void onSave(
+                    workspace.id,
+                    {
+                      monthly_token_cap: null,
+                      seat_limit: null,
+                      features: buildResetFeatures(),
+                    },
+                    "Workspace limit overrides reset."
+                  )
+                }
+              >
+                Reset limits
+              </Button>
+              {onDelete ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="destructive"
+                  onClick={() => onDelete(workspace)}
+                >
+                  Delete
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </section>
 
       {isAdjusted ? (
         <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          This workspace has adjusted limits and does not fully follow the general Usage & limits values.
+          This workspace has adjusted limits and does not fully follow the
+          general Usage & limits values.
         </div>
       ) : null}
 
       <section className="grid gap-3 rounded-xl bg-background/60 p-1 lg:grid-cols-[1fr_1fr]">
         <div className="space-y-3 rounded-lg bg-muted/25 p-3">
           <div>
-            <p className="text-sm font-medium text-foreground">Workspace details</p>
+            <p className="text-sm font-medium text-foreground">
+              Workspace details
+            </p>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              {isEditing ? "Core profile, plan, and lifecycle settings." : "Press Edit to make changes."}
+              {isEditing
+                ? "Core profile, plan, and lifecycle settings."
+                : "Press Edit to make changes."}
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-[13px] text-muted-foreground">
               Workspace name
-              <Input value={name} disabled={!isEditing} onChange={(event) => setName(event.target.value)} className="h-8 text-sm disabled:opacity-100" />
+              <Input
+                value={name}
+                disabled={!isEditing}
+                onChange={(event) => setName(event.target.value)}
+                className="h-8 text-sm disabled:opacity-100"
+              />
             </label>
             <label className="space-y-1 text-[13px] text-muted-foreground">
               Slug
-              <Input value={slug} disabled={!isEditing} onChange={(event) => setSlug(event.target.value)} className="h-8 text-sm disabled:opacity-100" />
+              <Input
+                value={slug}
+                disabled={!isEditing}
+                onChange={(event) => setSlug(event.target.value)}
+                className="h-8 text-sm disabled:opacity-100"
+              />
             </label>
-            <AdminSelect label="Plan" value={plan} options={["free", "pro", "enterprise"]} onChange={(value) => setPlan(value as typeof plan)} disabled={!isEditing} />
-            <AdminSelect label="Status" value={status} options={["active", "suspended", "cancelled"]} onChange={(value) => setStatus(value as typeof status)} disabled={!isEditing} />
+            <AdminSelect
+              label="Plan"
+              value={plan}
+              options={["free", "pro", "enterprise"]}
+              onChange={(value) => setPlan(value as typeof plan)}
+              disabled={!isEditing}
+            />
+            <AdminSelect
+              label="Status"
+              value={status}
+              options={["active", "suspended", "cancelled"]}
+              onChange={(value) => setStatus(value as typeof status)}
+              disabled={!isEditing}
+            />
             <label className="space-y-1 text-[13px] text-muted-foreground sm:col-span-2">
               Country
-              <Input value={country} disabled={!isEditing} onChange={(event) => setCountry(event.target.value)} className="h-8 text-sm disabled:opacity-100" />
+              <Input
+                value={country}
+                disabled={!isEditing}
+                onChange={(event) => setCountry(event.target.value)}
+                className="h-8 text-sm disabled:opacity-100"
+              />
             </label>
           </div>
         </div>
 
         <div className="space-y-3 rounded-lg bg-muted/25 p-3">
           <div>
-            <p className="text-sm font-medium text-foreground">Usage and limits</p>
+            <p className="text-sm font-medium text-foreground">
+              Usage and limits
+            </p>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              {isEditing ? "Blank fields inherit the general Usage & limits values." : "Press Edit to override workspace limits."}
+              {isEditing
+                ? "Blank fields inherit the general Usage & limits values."
+                : "Press Edit to override workspace limits."}
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-[13px] text-muted-foreground">
               Monthly token cap
-              <Input type="number" value={monthlyTokenCap} disabled={!isEditing} onChange={(event) => setMonthlyTokenCap(event.target.value)} className="h-8 text-sm disabled:opacity-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+              <Input
+                type="number"
+                value={monthlyTokenCap}
+                disabled={!isEditing}
+                onChange={(event) => setMonthlyTokenCap(event.target.value)}
+                className="h-8 [appearance:textfield] text-sm disabled:opacity-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
             </label>
             <label className="space-y-1 text-[13px] text-muted-foreground">
               Seat limit
-              <Input type="number" value={seatLimit} disabled={!isEditing} onChange={(event) => setSeatLimit(event.target.value)} className="h-8 text-sm disabled:opacity-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+              <Input
+                type="number"
+                value={seatLimit}
+                disabled={!isEditing}
+                onChange={(event) => setSeatLimit(event.target.value)}
+                className="h-8 [appearance:textfield] text-sm disabled:opacity-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
             </label>
             <label className="space-y-1 text-[13px] text-muted-foreground">
               Max file size MB
-              <Input type="number" value={maxFileSizeMb} disabled={!isEditing} onChange={(event) => setMaxFileSizeMb(event.target.value)} className="h-8 text-sm disabled:opacity-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+              <Input
+                type="number"
+                value={maxFileSizeMb}
+                disabled={!isEditing}
+                onChange={(event) => setMaxFileSizeMb(event.target.value)}
+                className="h-8 [appearance:textfield] text-sm disabled:opacity-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
             </label>
             <label className="space-y-1 text-[13px] text-muted-foreground">
               Max files
-              <Input type="number" value={maxFilesPerWorkspace} disabled={!isEditing} onChange={(event) => setMaxFilesPerWorkspace(event.target.value)} className="h-8 text-sm disabled:opacity-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+              <Input
+                type="number"
+                value={maxFilesPerWorkspace}
+                disabled={!isEditing}
+                onChange={(event) =>
+                  setMaxFilesPerWorkspace(event.target.value)
+                }
+                className="h-8 [appearance:textfield] text-sm disabled:opacity-100 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
             </label>
           </div>
         </div>
@@ -5731,19 +6340,31 @@ function AdminWorkspaceProfilePanel({
         <div className="mt-2 grid gap-2 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <p className="text-muted-foreground">Owner</p>
-            <p className="truncate text-foreground">{workspace.owner?.full_name || workspace.owner?.email || "No owner"}</p>
+            <p className="truncate text-foreground">
+              {workspace.owner?.full_name ||
+                workspace.owner?.email ||
+                "No owner"}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">Members</p>
-            <p className="tabular-nums text-foreground">{workspace.member_count}</p>
+            <p className="text-foreground tabular-nums">
+              {workspace.member_count}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">API keys</p>
-            <p className="tabular-nums text-foreground">{workspace.api_key_count}</p>
+            <p className="text-foreground tabular-nums">
+              {workspace.api_key_count}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">Workspace ID</p>
-            <button type="button" onClick={() => navigator.clipboard?.writeText(workspace.id)} className="truncate font-mono text-foreground hover:text-primary">
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(workspace.id)}
+              className="truncate font-mono text-foreground hover:text-primary"
+            >
               {workspace.id}
             </button>
           </div>
@@ -5755,56 +6376,98 @@ function AdminWorkspaceProfilePanel({
         <div className="mt-2 grid gap-2 sm:grid-cols-4">
           {isEditing ? (
             <>
-              <Button type="button" variant="outline" size="sm" onClick={() => void onSave(workspace.id, { plan: "enterprise" }, "Workspace moved to Enterprise.")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void onSave(
+                    workspace.id,
+                    { plan: "enterprise" },
+                    "Workspace moved to Enterprise."
+                  )
+                }
+              >
                 Set enterprise
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => void onSave(workspace.id, { status: "cancelled" }, "Workspace cancelled.")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void onSave(
+                    workspace.id,
+                    { status: "cancelled" },
+                    "Workspace cancelled."
+                  )
+                }
+              >
                 Cancel workspace
               </Button>
             </>
           ) : null}
-          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(workspace.id)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => navigator.clipboard?.writeText(workspace.id)}
+          >
             Copy workspace ID
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(workspace.owner?.id ?? "")} disabled={!workspace.owner?.id}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              navigator.clipboard?.writeText(workspace.owner?.id ?? "")
+            }
+            disabled={!workspace.owner?.id}
+          >
             Copy owner ID
           </Button>
         </div>
       </section>
 
       {isEditing ? (
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => {
-            void onSave(
-              workspace.id,
-              {
-                name: name.trim(),
-                slug: slug.trim() || null,
-                status,
-                plan,
-                country: country.trim() || null,
-                monthly_token_cap: numericOrNull(monthlyTokenCap),
-                seat_limit: numericOrNull(seatLimit),
-                features: buildFeatureOverrides(),
-              },
-              "Workspace profile updated."
-            )
-            setIsEditing(false)
-          }}
-        >
-          Save workspace
-        </Button>
-      </div>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              void onSave(
+                workspace.id,
+                {
+                  name: name.trim(),
+                  slug: slug.trim() || null,
+                  avatar_url: avatarUrl,
+                  status,
+                  plan,
+                  country: country.trim() || null,
+                  monthly_token_cap: numericOrNull(monthlyTokenCap),
+                  seat_limit: numericOrNull(seatLimit),
+                  features: buildFeatureOverrides(),
+                },
+                "Workspace profile updated."
+              )
+              setIsEditing(false)
+            }}
+          >
+            Save workspace
+          </Button>
+        </div>
       ) : null}
     </AdminPage>
   )
 }
 
-function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames?: string[] }) {
-  const [activeTab, setActiveTab] = React.useState<"users" | "workspaces">("users")
+function UsersWorkspacesConsoleContent({
+  workspaceNames = [],
+}: {
+  workspaceNames?: string[]
+}) {
+  const [activeTab, setActiveTab] = React.useState<"users" | "workspaces">(
+    "users"
+  )
   const [query, setQuery] = React.useState("")
   const [roleFilter, setRoleFilter] = React.useState("All roles")
   const [statusFilter, setStatusFilter] = React.useState("All")
@@ -5813,22 +6476,30 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
   const [inviteEmail, setInviteEmail] = React.useState("")
   const [inviteRole, setInviteRole] = React.useState<PlatformRole>("Member")
   const [adminUsers, setAdminUsers] = React.useState<AdminUserRow[]>([])
-  const [adminWorkspaces, setAdminWorkspaces] = React.useState<AdminWorkspaceRow[]>([])
+  const [adminWorkspaces, setAdminWorkspaces] = React.useState<
+    AdminWorkspaceRow[]
+  >([])
   const [isLoadingUsers, setIsLoadingUsers] = React.useState(true)
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = React.useState(true)
   const [adminNotice, setAdminNotice] = React.useState<string | null>(null)
   const [adminError, setAdminError] = React.useState<string | null>(null)
-  const [selectedAdminUser, setSelectedAdminUser] = React.useState<(typeof adminUsers)[number] | null>(null)
-  const [selectedWorkspace, setSelectedWorkspace] = React.useState<AdminWorkspaceRow | null>(null)
+  const [selectedAdminUser, setSelectedAdminUser] = React.useState<
+    (typeof adminUsers)[number] | null
+  >(null)
+  const [selectedWorkspace, setSelectedWorkspace] =
+    React.useState<AdminWorkspaceRow | null>(null)
   const [pendingRemoveUser, setPendingRemoveUser] = React.useState<{
     id: string
     name: string
     email: string
     ownedWorkspaces: Array<{ id: string; name: string }>
   } | null>(null)
-  const [ownerRemoveWarningOpen, setOwnerRemoveWarningOpen] = React.useState(false)
+  const [ownerRemoveWarningOpen, setOwnerRemoveWarningOpen] =
+    React.useState(false)
   const [isRemovingUser, setIsRemovingUser] = React.useState(false)
-  const [removeUserError, setRemoveUserError] = React.useState<string | null>(null)
+  const [removeUserError, setRemoveUserError] = React.useState<string | null>(
+    null
+  )
   const statusTones: Record<string, AdminBadgeTone> = {
     Active: "success",
     "Not active": "info",
@@ -5840,26 +6511,28 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
     fetch("/api/admin/users")
       .then((response) => (response.ok ? response.json() : null))
       .then(
-        (payload: {
-          data?: {
-            users?: Array<{
-              id: string
-              public_user_id?: string | null
-              email: string | null
-              full_name: string | null
-              avatar_url: string | null
-              status: "active" | "inactive" | "suspended"
-              platform_role: "user" | "super_admin" | "admin"
-              last_sign_in_at: string | null
-              updated_at: string
-              memberships: Array<{
-                role: "owner" | "member"
-                workspace?: { name?: string } | { name?: string }[] | null
+        (
+          payload: {
+            data?: {
+              users?: Array<{
+                id: string
+                public_user_id?: string | null
+                email: string | null
+                full_name: string | null
+                avatar_url: string | null
+                status: "active" | "inactive" | "suspended"
+                platform_role: "user" | "super_admin" | "admin"
+                last_sign_in_at: string | null
+                updated_at: string
+                memberships: Array<{
+                  role: "owner" | "member"
+                  workspace?: { name?: string } | { name?: string }[] | null
+                }>
+                owned_workspaces?: Array<{ id: string; name: string }>
               }>
-              owned_workspaces?: Array<{ id: string; name: string }>
-            }>
-          }
-        } | null) => {
+            }
+          } | null
+        ) => {
           const users = payload?.data?.users ?? []
           setAdminUsers(
             users.map((user) => {
@@ -5887,9 +6560,10 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                 avatarUrl: user.avatar_url ?? null,
                 email: user.email ?? "",
                 workspace:
-                  user.platform_role === "super_admin" || user.platform_role === "admin"
+                  user.platform_role === "super_admin" ||
+                  user.platform_role === "admin"
                     ? "Platform"
-                    : workspace?.name ?? "No workspace",
+                    : (workspace?.name ?? "No workspace"),
                 role,
                 status:
                   user.status === "suspended"
@@ -5916,9 +6590,11 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
     setIsLoadingWorkspaces(true)
     fetch("/api/admin/workspaces")
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { workspaces?: AdminWorkspaceRow[] } } | null) => {
-        setAdminWorkspaces(payload?.data?.workspaces ?? [])
-      })
+      .then(
+        (payload: { data?: { workspaces?: AdminWorkspaceRow[] } } | null) => {
+          setAdminWorkspaces(payload?.data?.workspaces ?? [])
+        }
+      )
       .catch(() => setAdminWorkspaces([]))
       .finally(() => setIsLoadingWorkspaces(false))
   }, [])
@@ -5941,7 +6617,8 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       member.email.toLowerCase().includes(query.toLowerCase()) ||
       member.workspace.toLowerCase().includes(query.toLowerCase())
     const matchesRole = roleFilter === "All roles" || member.role === roleFilter
-    const matchesStatus = statusFilter === "All" || member.status === statusFilter
+    const matchesStatus =
+      statusFilter === "All" || member.status === statusFilter
     return matchesQuery && matchesRole && matchesStatus
   })
   const filteredWorkspaces = adminWorkspaces.filter((workspace) => {
@@ -5954,7 +6631,8 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       (workspace.owner?.full_name ?? "").toLowerCase().includes(q)
     const matchesStatus =
       statusFilter === "All" ||
-      workspace.status === statusFilter.toLowerCase().replace("not active", "inactive")
+      workspace.status ===
+        statusFilter.toLowerCase().replace("not active", "inactive")
     return matchesQuery && matchesStatus
   })
   const allFilteredSelected =
@@ -5966,6 +6644,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       userId: string,
       updates: {
         full_name?: string
+        avatar_url?: string | null
         status?: "active" | "inactive" | "suspended"
         platform_role?: "user" | "admin" | "super_admin"
       },
@@ -5979,7 +6658,9 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updates),
         })
-        const payload = (await response.json()) as { error?: { message?: string } }
+        const payload = (await response.json()) as {
+          error?: { message?: string }
+        }
         if (!response.ok) {
           setAdminError(payload.error?.message ?? "Unable to update this user.")
           return
@@ -5991,7 +6672,13 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
             ? {
                 ...current,
                 name: updates.full_name ?? current.name,
-                initials: updates.full_name ? deriveInitialsFromName(updates.full_name) : current.initials,
+                initials: updates.full_name
+                  ? deriveInitialsFromName(updates.full_name)
+                  : current.initials,
+                avatarUrl:
+                  updates.avatar_url === undefined
+                    ? current.avatarUrl
+                    : updates.avatar_url,
                 status:
                   updates.status === "suspended"
                     ? "Suspended"
@@ -6025,6 +6712,7 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       updates: {
         name?: string
         slug?: string | null
+        avatar_url?: string | null
         status?: "active" | "suspended" | "cancelled"
         plan?: "free" | "pro" | "enterprise"
         country?: string | null
@@ -6042,9 +6730,13 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updates),
         })
-        const payload = (await response.json()) as { error?: { message?: string } }
+        const payload = (await response.json()) as {
+          error?: { message?: string }
+        }
         if (!response.ok) {
-          setAdminError(payload.error?.message ?? "Unable to update this workspace.")
+          setAdminError(
+            payload.error?.message ?? "Unable to update this workspace."
+          )
           return
         }
         setAdminNotice(successMessage)
@@ -6072,9 +6764,13 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
         const response = await fetch(`/api/admin/workspaces/${workspace.id}`, {
           method: "DELETE",
         })
-        const payload = (await response.json()) as { error?: { message?: string } }
+        const payload = (await response.json()) as {
+          error?: { message?: string }
+        }
         if (!response.ok) {
-          setAdminError(payload.error?.message ?? "Unable to delete this workspace.")
+          setAdminError(
+            payload.error?.message ?? "Unable to delete this workspace."
+          )
           return
         }
         setAdminNotice("Workspace deleted.")
@@ -6115,7 +6811,11 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       setInviteOpen(false)
       setInviteEmail("")
       setInviteRole("Member")
-      setAdminNotice(payload.data?.emailSent ? "User invited and email sent." : `User invited, but email was not sent: ${payload.data?.emailWarning ?? "Unknown email error."}`)
+      setAdminNotice(
+        payload.data?.emailSent
+          ? "User invited and email sent."
+          : `User invited, but email was not sent: ${payload.data?.emailWarning ?? "Unknown email error."}`
+      )
       loadAdminUsers()
     } catch {
       setAdminError("Unable to invite this user. Please try again.")
@@ -6153,13 +6853,20 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
         const queryString = confirmWorkspaceDeletion
           ? "?confirmWorkspaceDeletion=true"
           : ""
-        const response = await fetch(`/api/admin/users/${pendingRemoveUser.id}${queryString}`, {
-          method: "DELETE",
-        })
-        const payload = (await response.json()) as { error?: { message?: string } }
+        const response = await fetch(
+          `/api/admin/users/${pendingRemoveUser.id}${queryString}`,
+          {
+            method: "DELETE",
+          }
+        )
+        const payload = (await response.json()) as {
+          error?: { message?: string }
+        }
 
         if (!response.ok) {
-          setRemoveUserError(payload.error?.message ?? "Unable to remove this user.")
+          setRemoveUserError(
+            payload.error?.message ?? "Unable to remove this user."
+          )
           return
         }
 
@@ -6240,11 +6947,15 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
-            <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <IconSearch className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={activeTab === "users" ? "Search by name, email, or workspace" : "Search by workspace, slug, or owner"}
+              placeholder={
+                activeTab === "users"
+                  ? "Search by name, email, or workspace"
+                  : "Search by workspace, slug, or owner"
+              }
               className="h-8 pl-8"
             />
           </div>
@@ -6258,13 +6969,22 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           ) : null}
           <AdminSelect
             value={statusFilter}
-            options={activeTab === "users" ? ["All", "Active", "Not active", "Suspended"] : ["All", "Active", "Suspended", "Cancelled"]}
+            options={
+              activeTab === "users"
+                ? ["All", "Active", "Not active", "Suspended"]
+                : ["All", "Active", "Suspended", "Cancelled"]
+            }
             onChange={setStatusFilter}
             className="sm:w-36"
           />
         </div>
         <div className="flex gap-1.5">
-          <Button type="button" size="sm" variant="outline" onClick={refreshAdminConsole}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={refreshAdminConsole}
+          >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
           </Button>
@@ -6283,14 +7003,18 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
             {selectedRows.length} selected
           </p>
           <div className="flex gap-1.5">
-            <Button type="button" size="xs" variant="outline">Suspend selected</Button>
+            <Button type="button" size="xs" variant="outline">
+              Suspend selected
+            </Button>
             <Button
               type="button"
               size="xs"
               variant="destructive"
               disabled={selectedRows.length !== 1}
               onClick={() => {
-                const selectedUser = adminUsers.find((user) => user.id === selectedRows[0])
+                const selectedUser = adminUsers.find(
+                  (user) => user.id === selectedRows[0]
+                )
                 if (selectedUser) requestRemoveUser(selectedUser)
               }}
             >
@@ -6364,13 +7088,27 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                     aria-label="Select all members"
                   />
                 </th>
-                <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">Name</th>
-                <th className="w-[21%] px-2.5 py-1.5 text-left font-medium">Email</th>
-                <th className="w-[14%] px-2.5 py-1.5 text-left font-medium">Workspace</th>
-                <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">Role</th>
-                <th className="w-[11%] px-2.5 py-1.5 text-left font-medium">Status</th>
-                <th className="w-[17%] px-2.5 py-1.5 text-left font-medium">Last active</th>
-                <th className="w-[9%] px-2.5 py-1.5 text-right font-medium">Actions</th>
+                <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">
+                  Name
+                </th>
+                <th className="w-[21%] px-2.5 py-1.5 text-left font-medium">
+                  Email
+                </th>
+                <th className="w-[14%] px-2.5 py-1.5 text-left font-medium">
+                  Workspace
+                </th>
+                <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">
+                  Role
+                </th>
+                <th className="w-[11%] px-2.5 py-1.5 text-left font-medium">
+                  Status
+                </th>
+                <th className="w-[17%] px-2.5 py-1.5 text-left font-medium">
+                  Last active
+                </th>
+                <th className="w-[9%] px-2.5 py-1.5 text-right font-medium">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -6416,39 +7154,95 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                       </button>
                     </div>
                   </td>
-                  <td className="truncate px-2.5 py-2 text-muted-foreground">{member.email}</td>
-                  <td className="truncate px-2.5 py-2 text-foreground">{member.workspace}</td>
+                  <td className="truncate px-2.5 py-2 text-muted-foreground">
+                    {member.email}
+                  </td>
+                  <td className="truncate px-2.5 py-2 text-foreground">
+                    {member.workspace}
+                  </td>
                   <td className="px-2.5 py-2 text-foreground">{member.role}</td>
                   <td className="px-2.5 py-2">
-                    <Badge variant={adminBadgeVariants[statusTones[member.status]]}>
+                    <Badge
+                      variant={adminBadgeVariants[statusTones[member.status]]}
+                    >
                       {member.status}
                     </Badge>
                   </td>
-                  <td className="px-2.5 py-2 text-muted-foreground">{member.lastActive}</td>
+                  <td className="px-2.5 py-2 text-muted-foreground">
+                    {member.lastActive}
+                  </td>
                   <td className="px-2.5 py-2 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger
-                        render={<Button type="button" variant="ghost" size="icon-xs" aria-label={`${member.name} actions`} onClick={(event) => event.stopPropagation()} />}
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={`${member.name} actions`}
+                            onClick={(event) => event.stopPropagation()}
+                          />
+                        }
                       >
                         <IconDots className="h-3.5 w-3.5" />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-36">
-                        <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { platform_role: "super_admin" }, "User role changed to Super Admin.")}>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void updateAdminUser(
+                              member.id,
+                              { platform_role: "super_admin" },
+                              "User role changed to Super Admin."
+                            )
+                          }
+                        >
                           Make Super Admin
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { platform_role: "admin" }, "User role changed to Admin.")}>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void updateAdminUser(
+                              member.id,
+                              { platform_role: "admin" },
+                              "User role changed to Admin."
+                            )
+                          }
+                        >
                           Make Admin
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { platform_role: "user" }, "User role changed to User.")}>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void updateAdminUser(
+                              member.id,
+                              { platform_role: "user" },
+                              "User role changed to User."
+                            )
+                          }
+                        >
                           Make User
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {member.status === "Suspended" ? (
-                          <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { status: "active" }, "User activated.")}>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              void updateAdminUser(
+                                member.id,
+                                { status: "active" },
+                                "User activated."
+                              )
+                            }
+                          >
                             Activate
                           </DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem onClick={() => void updateAdminUser(member.id, { status: "suspended" }, "User suspended.")}>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              void updateAdminUser(
+                                member.id,
+                                { status: "suspended" },
+                                "User suspended."
+                              )
+                            }
+                          >
                             Suspend
                           </DropdownMenuItem>
                         )}
@@ -6473,7 +7267,9 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
       ) : filteredWorkspaces.length === 0 ? (
         <AdminEmptyState
           icon={IconBuilding}
-          title={isLoadingWorkspaces ? "Loading workspaces" : "No workspaces found"}
+          title={
+            isLoadingWorkspaces ? "Loading workspaces" : "No workspaces found"
+          }
           description={
             isLoadingWorkspaces
               ? "Reading workspaces from the database."
@@ -6485,18 +7281,35 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           <table className="w-full table-fixed border-collapse text-[0.8rem]">
             <thead>
               <tr className="border-b border-border text-muted-foreground">
-                <th className="w-[25%] px-2.5 py-1.5 text-left font-medium">Workspace</th>
-                <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">Owner</th>
-                <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">Plan</th>
-                <th className="w-[11%] px-2.5 py-1.5 text-left font-medium">Status</th>
-                <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">Members</th>
-                <th className="w-[13%] px-2.5 py-1.5 text-left font-medium">Created</th>
-                <th className="w-[9%] px-2.5 py-1.5 text-right font-medium">Actions</th>
+                <th className="w-[25%] px-2.5 py-1.5 text-left font-medium">
+                  Workspace
+                </th>
+                <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">
+                  Owner
+                </th>
+                <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">
+                  Plan
+                </th>
+                <th className="w-[11%] px-2.5 py-1.5 text-left font-medium">
+                  Status
+                </th>
+                <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">
+                  Members
+                </th>
+                <th className="w-[13%] px-2.5 py-1.5 text-left font-medium">
+                  Created
+                </th>
+                <th className="w-[9%] px-2.5 py-1.5 text-right font-medium">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {filteredWorkspaces.map((workspace) => {
-                const ownerName = workspace.owner?.full_name || workspace.owner?.email || "No owner"
+                const ownerName =
+                  workspace.owner?.full_name ||
+                  workspace.owner?.email ||
+                  "No owner"
                 return (
                   <tr
                     key={workspace.id}
@@ -6506,44 +7319,92 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                     <td className="px-2.5 py-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <Avatar className="size-7 !rounded-lg">
-                          <AvatarImage src={workspace.avatar_url ?? undefined} alt={workspace.name} className="!rounded-lg object-cover" />
+                          <AvatarImage
+                            src={workspace.avatar_url ?? undefined}
+                            alt={workspace.name}
+                            className="!rounded-lg object-cover"
+                          />
                           <AvatarFallback className="!rounded-lg text-[10px] font-medium">
                             {deriveInitialsFromName(workspace.name)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-foreground">{workspace.name}</p>
-                          <p className="truncate text-xs text-muted-foreground">{workspace.slug ?? workspace.id}</p>
+                          <p className="truncate font-medium text-foreground">
+                            {workspace.name}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {workspace.slug ?? workspace.id}
+                          </p>
                         </div>
                       </div>
                     </td>
-                    <td className="truncate px-2.5 py-2 text-muted-foreground">{ownerName}</td>
+                    <td className="truncate px-2.5 py-2 text-muted-foreground">
+                      {ownerName}
+                    </td>
                     <td className="px-2.5 py-2 capitalize">{workspace.plan}</td>
                     <td className="px-2.5 py-2">
-                      <Badge variant={workspace.status === "active" ? "green" : workspace.status === "suspended" ? "amber" : "neutral"}>
+                      <Badge
+                        variant={
+                          workspace.status === "active"
+                            ? "green"
+                            : workspace.status === "suspended"
+                              ? "amber"
+                              : "neutral"
+                        }
+                      >
                         {workspace.status}
                       </Badge>
                     </td>
-                    <td className="px-2.5 py-2 tabular-nums text-muted-foreground">{workspace.member_count}</td>
-                    <td className="px-2.5 py-2 text-muted-foreground">{new Date(workspace.created_at).toLocaleDateString()}</td>
+                    <td className="px-2.5 py-2 text-muted-foreground tabular-nums">
+                      {workspace.member_count}
+                    </td>
+                    <td className="px-2.5 py-2 text-muted-foreground">
+                      {new Date(workspace.created_at).toLocaleDateString()}
+                    </td>
                     <td className="px-2.5 py-2 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger
-                          render={<Button type="button" variant="ghost" size="icon-xs" aria-label={`${workspace.name} actions`} onClick={(event) => event.stopPropagation()} />}
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              aria-label={`${workspace.name} actions`}
+                              onClick={(event) => event.stopPropagation()}
+                            />
+                          }
                         >
                           <IconDots className="h-3.5 w-3.5" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="min-w-36">
                           {workspace.status === "suspended" ? (
-                            <DropdownMenuItem onClick={() => void updateAdminWorkspace(workspace.id, { status: "active" }, "Workspace activated.")}>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                void updateAdminWorkspace(
+                                  workspace.id,
+                                  { status: "active" },
+                                  "Workspace activated."
+                                )
+                              }
+                            >
                               Activate
                             </DropdownMenuItem>
                           ) : (
-                            <DropdownMenuItem onClick={() => void updateAdminWorkspace(workspace.id, { status: "suspended" }, "Workspace suspended.")}>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                void updateAdminWorkspace(
+                                  workspace.id,
+                                  { status: "suspended" },
+                                  "Workspace suspended."
+                                )
+                              }
+                            >
                               Suspend
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={() => setSelectedWorkspace(workspace)}>
+                          <DropdownMenuItem
+                            onClick={() => setSelectedWorkspace(workspace)}
+                          >
                             View profile
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -6563,14 +7424,18 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
           </table>
         </section>
       )}
-      <Dialog open={Boolean(pendingRemoveUser) && !ownerRemoveWarningOpen} onOpenChange={(open) => {
-        if (!open) closeRemoveDialogs()
-      }}>
+      <Dialog
+        open={Boolean(pendingRemoveUser) && !ownerRemoveWarningOpen}
+        onOpenChange={(open) => {
+          if (!open) closeRemoveDialogs()
+        }}
+      >
         <DialogContent className="max-w-sm" showCloseButton={!isRemovingUser}>
           <DialogHeader>
             <DialogTitle>Remove user?</DialogTitle>
             <DialogDescription>
-              This will remove {pendingRemoveUser?.name ?? "this user"} from Atmet and revoke their access.
+              This will remove {pendingRemoveUser?.name ?? "this user"} from
+              Atmet and revoke their access.
             </DialogDescription>
           </DialogHeader>
           {removeUserError ? (
@@ -6601,22 +7466,31 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
                 void removeUser(false)
               }}
             >
-              {isRemovingUser ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {isRemovingUser ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : null}
               Remove user
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={ownerRemoveWarningOpen} onOpenChange={(open) => {
-        if (!open) closeRemoveDialogs()
-      }}>
+      <Dialog
+        open={ownerRemoveWarningOpen}
+        onOpenChange={(open) => {
+          if (!open) closeRemoveDialogs()
+        }}
+      >
         <DialogContent className="max-w-sm" showCloseButton={!isRemovingUser}>
           <DialogHeader>
             <DialogTitle>Delete owned workspace?</DialogTitle>
             <DialogDescription>
-              {pendingRemoveUser?.name ?? "This user"} owns workspace data. Removing this user will also delete the owned workspace
-              {(pendingRemoveUser?.ownedWorkspaces.length ?? 0) === 1 ? "" : "s"} below.
+              {pendingRemoveUser?.name ?? "This user"} owns workspace data.
+              Removing this user will also delete the owned workspace
+              {(pendingRemoveUser?.ownedWorkspaces.length ?? 0) === 1
+                ? ""
+                : "s"}{" "}
+              below.
             </DialogDescription>
           </DialogHeader>
           {pendingRemoveUser?.ownedWorkspaces.length ? (
@@ -6648,7 +7522,9 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
               disabled={isRemovingUser}
               onClick={() => void removeUser(true)}
             >
-              {isRemovingUser ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {isRemovingUser ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : null}
               Delete workspace and user
             </Button>
           </DialogFooter>
@@ -6661,15 +7537,47 @@ function UsersWorkspacesConsoleContent({ workspaceNames = [] }: { workspaceNames
 function RolesPermissionsConsoleContent() {
   const roles = platformRoles
   const permissions = [
-    ["aiChatAccess", "AI chat access", "Use workspace AI chat and model routing."],
-    ["workflowCreation", "Workflow creation", "Create workflow drafts and internal automations."],
-    ["workflowPublishing", "Workflow publishing", "Publish workflow versions for team use."],
-    ["skillCreation", "Skill creation", "Create reusable skills and prompt tools."],
-    ["fileUpload", "File upload", "Upload workspace documents and business data."],
-    ["appConnections", "App connections", "Connect and authorize external applications."],
-    ["adminConsoleAccess", "Admin console access", "Open and manage admin console pages."],
+    [
+      "aiChatAccess",
+      "AI chat access",
+      "Use workspace AI chat and model routing.",
+    ],
+    [
+      "workflowCreation",
+      "Workflow creation",
+      "Create workflow drafts and internal automations.",
+    ],
+    [
+      "workflowPublishing",
+      "Workflow publishing",
+      "Publish workflow versions for team use.",
+    ],
+    [
+      "skillCreation",
+      "Skill creation",
+      "Create reusable skills and prompt tools.",
+    ],
+    [
+      "fileUpload",
+      "File upload",
+      "Upload workspace documents and business data.",
+    ],
+    [
+      "appConnections",
+      "App connections",
+      "Connect and authorize external applications.",
+    ],
+    [
+      "adminConsoleAccess",
+      "Admin console access",
+      "Open and manage admin console pages.",
+    ],
     ["apiKeyAccess", "API key access", "Create and revoke workspace API keys."],
-    ["billingAccess", "Billing access", "View plan, invoices, and payment method."],
+    [
+      "billingAccess",
+      "Billing access",
+      "View plan, invoices, and payment method.",
+    ],
   ] as const
   type PermissionKey = (typeof permissions)[number][0]
   const adminDefaults = Object.fromEntries(
@@ -6705,10 +7613,23 @@ function RolesPermissionsConsoleContent() {
   React.useEffect(() => {
     fetch("/api/admin/settings/role_permissions")
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { setting?: { value?: Record<"Owner" | "Member", Record<PermissionKey, boolean>> } } } | null) => {
-        const value = payload?.data?.setting?.value
-        if (value?.Owner && value?.Member) setRolePermissions(value)
-      })
+      .then(
+        (
+          payload: {
+            data?: {
+              setting?: {
+                value?: Record<
+                  "Owner" | "Member",
+                  Record<PermissionKey, boolean>
+                >
+              }
+            }
+          } | null
+        ) => {
+          const value = payload?.data?.setting?.value
+          if (value?.Owner && value?.Member) setRolePermissions(value)
+        }
+      )
       .catch(() => undefined)
   }, [])
 
@@ -6722,7 +7643,9 @@ function RolesPermissionsConsoleContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ value: rolePermissions }),
       })
-      const payload = (await response.json()) as { error?: { message?: string } }
+      const payload = (await response.json()) as {
+        error?: { message?: string }
+      }
       if (!response.ok) {
         setRolesError(payload.error?.message ?? "Unable to save permissions.")
         return
@@ -6757,7 +7680,12 @@ function RolesPermissionsConsoleContent() {
               </button>
             ))}
           </div>
-          <Button type="button" variant="outline" size="sm" className="mt-3 w-full">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3 w-full"
+          >
             <IconPlus className="h-3.5 w-3.5" />
             Create custom role
           </Button>
@@ -6765,23 +7693,38 @@ function RolesPermissionsConsoleContent() {
 
         <section className="overflow-hidden rounded-xl border border-border bg-background">
           <div className="border-b border-border px-3 py-2.5">
-            <p className="text-sm font-medium text-foreground">{selectedRole} permissions</p>
+            <p className="text-sm font-medium text-foreground">
+              {selectedRole} permissions
+            </p>
             {selectedRole === "Super Admin" || selectedRole === "Admin" ? (
-              <p className="text-[13px] text-muted-foreground">{selectedRole} permissions are locked.</p>
+              <p className="text-[13px] text-muted-foreground">
+                {selectedRole} permissions are locked.
+              </p>
             ) : null}
           </div>
           <div className="divide-y divide-border">
             {permissions.map(([key, name, description]) => (
-              <div key={key} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div
+                key={key}
+                className="flex items-center justify-between gap-3 px-3 py-2.5"
+              >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{name}</p>
-                  <p className="text-[13px] text-muted-foreground">{description}</p>
+                  <p className="text-[13px] text-muted-foreground">
+                    {description}
+                  </p>
                 </div>
                 <AdminToggle
                   checked={selectedPermissions[key]}
-                  disabled={selectedRole === "Super Admin" || selectedRole === "Admin"}
+                  disabled={
+                    selectedRole === "Super Admin" || selectedRole === "Admin"
+                  }
                   onChange={(checked) => {
-                    if (selectedRole === "Super Admin" || selectedRole === "Admin") return
+                    if (
+                      selectedRole === "Super Admin" ||
+                      selectedRole === "Admin"
+                    )
+                      return
                     setRolePermissions((previous) => ({
                       ...previous,
                       [selectedRole]: {
@@ -6827,19 +7770,32 @@ function AccessPoliciesConsoleContent() {
   React.useEffect(() => {
     fetch("/api/admin/settings/access_policies")
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { data?: { setting?: { value?: Record<string, unknown> } } } | null) => {
-        const value = payload?.data?.setting?.value
-        if (!value) return
-        if (Array.isArray(value.blockedDomains)) {
-          setDomains(value.blockedDomains.filter((item): item is string => typeof item === "string"))
-        } else if (!Array.isArray(value.allowedDomains)) {
-          setDomains([])
+      .then(
+        (
+          payload: {
+            data?: { setting?: { value?: Record<string, unknown> } }
+          } | null
+        ) => {
+          const value = payload?.data?.setting?.value
+          if (!value) return
+          if (Array.isArray(value.blockedDomains)) {
+            setDomains(
+              value.blockedDomains.filter(
+                (item): item is string => typeof item === "string"
+              )
+            )
+          } else if (!Array.isArray(value.allowedDomains)) {
+            setDomains([])
+          }
+          if (typeof value.mfaMode === "string") setMfaMode(value.mfaMode)
+          if (typeof value.sessionTimeout === "string")
+            setSessionTimeout(value.sessionTimeout)
+          if (typeof value.ipEnabled === "boolean")
+            setIpEnabled(value.ipEnabled)
+          if (typeof value.ipAllowlist === "string")
+            setIpAllowlist(value.ipAllowlist)
         }
-        if (typeof value.mfaMode === "string") setMfaMode(value.mfaMode)
-        if (typeof value.sessionTimeout === "string") setSessionTimeout(value.sessionTimeout)
-        if (typeof value.ipEnabled === "boolean") setIpEnabled(value.ipEnabled)
-        if (typeof value.ipAllowlist === "string") setIpAllowlist(value.ipAllowlist)
-      })
+      )
       .catch(() => undefined)
   }, [])
 
@@ -6861,9 +7817,13 @@ function AccessPoliciesConsoleContent() {
           },
         }),
       })
-      const payload = (await response.json()) as { error?: { message?: string } }
+      const payload = (await response.json()) as {
+        error?: { message?: string }
+      }
       if (!response.ok) {
-        setPolicyError(payload.error?.message ?? "Unable to save access policies.")
+        setPolicyError(
+          payload.error?.message ?? "Unable to save access policies."
+        )
         return
       }
       setPolicyNotice("Access policies saved.")
@@ -6877,7 +7837,9 @@ function AccessPoliciesConsoleContent() {
   return (
     <AdminPage section="Access policies">
       <section className="rounded-xl border border-border bg-background p-3">
-        <p className="text-sm font-medium text-foreground">Blocked email domains</p>
+        <p className="text-sm font-medium text-foreground">
+          Blocked email domains
+        </p>
         <p className="mt-1 text-[13px] text-muted-foreground">
           All domains are allowed except the domains listed here.
         </p>
@@ -6887,7 +7849,11 @@ function AccessPoliciesConsoleContent() {
               {domain}
               <button
                 type="button"
-                onClick={() => setDomains((previous) => previous.filter((item) => item !== domain))}
+                onClick={() =>
+                  setDomains((previous) =>
+                    previous.filter((item) => item !== domain)
+                  )
+                }
                 aria-label={`Remove ${domain}`}
               >
                 <IconX className="h-3 w-3" />
@@ -6906,9 +7872,14 @@ function AccessPoliciesConsoleContent() {
             type="button"
             size="sm"
             onClick={() => {
-              const nextDomain = domainInput.trim().toLowerCase().replace(/^@/, "")
+              const nextDomain = domainInput
+                .trim()
+                .toLowerCase()
+                .replace(/^@/, "")
               if (!nextDomain) return
-              setDomains((previous) => Array.from(new Set([...previous, nextDomain])))
+              setDomains((previous) =>
+                Array.from(new Set([...previous, nextDomain]))
+              )
               setDomainInput("")
             }}
           >
@@ -6919,7 +7890,9 @@ function AccessPoliciesConsoleContent() {
 
       <section className="grid gap-3 rounded-xl border border-border bg-background p-3 sm:grid-cols-2">
         <div>
-          <p className="mb-1 text-sm font-medium text-foreground">MFA enforcement</p>
+          <p className="mb-1 text-sm font-medium text-foreground">
+            MFA enforcement
+          </p>
           <div className="inline-flex rounded-lg bg-muted p-0.5">
             {["Off", "Optional", "Required"].map((mode) => (
               <Button
@@ -6946,7 +7919,9 @@ function AccessPoliciesConsoleContent() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-foreground">IP allowlist</p>
-            <p className="text-[13px] text-muted-foreground">Restrict access to trusted CIDR ranges.</p>
+            <p className="text-[13px] text-muted-foreground">
+              Restrict access to trusted CIDR ranges.
+            </p>
           </div>
           <AdminToggle checked={ipEnabled} onChange={setIpEnabled} />
         </div>
@@ -6989,29 +7964,51 @@ function WorkspaceSettingsConsoleContent() {
       <section className="grid gap-3 rounded-xl border border-border bg-background p-3 sm:grid-cols-2">
         <label className="space-y-1 text-[13px] text-muted-foreground">
           Workspace name
-          <Input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} className="h-8" />
+          <Input
+            value={workspaceName}
+            onChange={(event) => setWorkspaceName(event.target.value)}
+            className="h-8"
+          />
         </label>
         <label className="space-y-1 text-[13px] text-muted-foreground">
           Workspace URL/slug
           <div className="flex h-8 items-center rounded-lg border border-input bg-transparent">
-            <span className="px-2 text-sm text-muted-foreground">atmet.ai/</span>
+            <span className="px-2 text-sm text-muted-foreground">
+              atmet.ai/
+            </span>
             <input
               value={slug}
               onChange={(event) => setSlug(event.target.value)}
               className="min-w-0 flex-1 bg-transparent px-1 text-sm text-foreground outline-none"
             />
           </div>
-          <span className="block text-[12px] text-muted-foreground">https://atmet.ai/{slug || "workspace"}</span>
+          <span className="block text-[12px] text-muted-foreground">
+            https://atmet.ai/{slug || "workspace"}
+          </span>
         </label>
-        <AdminSelect label="Timezone" value={timezone} options={["Asia/Amman", "UTC", "Europe/London", "America/New_York"]} onChange={setTimezone} />
-        <AdminSelect label="Default language" value={language} options={["English", "Arabic", "French", "Spanish"]} onChange={setLanguage} />
+        <AdminSelect
+          label="Timezone"
+          value={timezone}
+          options={["Asia/Amman", "UTC", "Europe/London", "America/New_York"]}
+          onChange={setTimezone}
+        />
+        <AdminSelect
+          label="Default language"
+          value={language}
+          options={["English", "Arabic", "French", "Spanish"]}
+          onChange={setLanguage}
+        />
       </section>
 
       <section className="rounded-xl border border-border bg-background p-3">
         <p className="text-sm font-medium text-foreground">Logo</p>
         <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="flex size-16 items-center justify-center rounded-lg bg-muted text-sm font-medium text-foreground">AT</div>
-          <Button type="button" variant="outline" size="sm">Upload new logo</Button>
+          <div className="flex size-16 items-center justify-center rounded-lg bg-muted text-sm font-medium text-foreground">
+            AT
+          </div>
+          <Button type="button" variant="outline" size="sm">
+            Upload new logo
+          </Button>
           <div className="flex min-h-16 flex-1 items-center justify-center rounded-lg border border-dashed border-border px-3 text-[13px] text-muted-foreground">
             Drag and drop a square logo
           </div>
@@ -7022,9 +8019,15 @@ function WorkspaceSettingsConsoleContent() {
         <p className="text-sm font-medium text-destructive">Danger zone</p>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-lg text-[13px] text-muted-foreground">
-            Permanently delete this workspace and all its data. This cannot be undone.
+            Permanently delete this workspace and all its data. This cannot be
+            undone.
           </p>
-          <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+          >
             Delete workspace
           </Button>
         </div>
@@ -7039,10 +8042,28 @@ function WorkspaceSettingsConsoleContent() {
               Type {workspaceName} to confirm permanent deletion.
             </DialogDescription>
           </DialogHeader>
-          <Input value={deleteText} onChange={(event) => setDeleteText(event.target.value)} className="h-8" />
+          <Input
+            value={deleteText}
+            onChange={(event) => setDeleteText(event.target.value)}
+            className="h-8"
+          />
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button type="button" variant="destructive" size="sm" disabled={deleteText !== workspaceName}>Delete workspace</Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={deleteText !== workspaceName}
+            >
+              Delete workspace
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -7059,43 +8080,75 @@ function DataControlsConsoleContent() {
   return (
     <AdminPage section={"Data controls" as AdminConsoleSection}>
       <section className="grid gap-3 rounded-xl border border-border bg-background p-3 sm:grid-cols-2">
-        <AdminSelect label="Conversation history retention" value={retention} options={["30 days", "90 days", "1 year", "Forever"]} onChange={setRetention} />
+        <AdminSelect
+          label="Conversation history retention"
+          value={retention}
+          options={["30 days", "90 days", "1 year", "Forever"]}
+          onChange={setRetention}
+        />
         <div className="space-y-2">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-foreground">File auto-deletion</p>
-              <p className="text-[13px] text-muted-foreground">Remove files after a set number of days.</p>
+              <p className="text-sm font-medium text-foreground">
+                File auto-deletion
+              </p>
+              <p className="text-[13px] text-muted-foreground">
+                Remove files after a set number of days.
+              </p>
             </div>
             <AdminToggle checked={autoDelete} onChange={setAutoDelete} />
           </div>
-          {autoDelete ? <Input type="number" defaultValue="180" className="h-8" /> : null}
+          {autoDelete ? (
+            <Input type="number" defaultValue="180" className="h-8" />
+          ) : null}
         </div>
       </section>
 
       <section className="flex items-start justify-between gap-3 rounded-xl border border-border bg-background p-3">
         <div>
-          <p className="text-sm font-medium text-foreground">Do not use workspace data to train AI models</p>
-          <p className="text-[13px] text-muted-foreground">Opt this workspace out of model training usage.</p>
+          <p className="text-sm font-medium text-foreground">
+            Do not use workspace data to train AI models
+          </p>
+          <p className="text-[13px] text-muted-foreground">
+            Opt this workspace out of model training usage.
+          </p>
         </div>
         <AdminToggle checked={trainingOptOut} onChange={setTrainingOptOut} />
       </section>
 
       <section className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-foreground">Export workspace data</p>
-          <p className="text-[13px] text-muted-foreground">Download a full archive of all workspace files, conversations, and workflow data.</p>
+          <p className="text-sm font-medium text-foreground">
+            Export workspace data
+          </p>
+          <p className="text-[13px] text-muted-foreground">
+            Download a full archive of all workspace files, conversations, and
+            workflow data.
+          </p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => setExportConfirmOpen(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setExportConfirmOpen(true)}
+        >
           Export all data
         </Button>
       </section>
 
       <section className="rounded-xl border border-border bg-background p-3">
-        <p className="text-sm font-medium text-foreground">GDPR right to erasure</p>
-        <p className="text-[13px] text-muted-foreground">Submit a request to remove data associated with a user email after verification.</p>
+        <p className="text-sm font-medium text-foreground">
+          GDPR right to erasure
+        </p>
+        <p className="text-[13px] text-muted-foreground">
+          Submit a request to remove data associated with a user email after
+          verification.
+        </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <Input placeholder="person@company.com" className="h-8" />
-          <Button type="button" size="sm">Submit erasure request</Button>
+          <Button type="button" size="sm">
+            Submit erasure request
+          </Button>
         </div>
       </section>
       <AdminSaveBar />
@@ -7104,15 +8157,26 @@ function DataControlsConsoleContent() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Export workspace data?</DialogTitle>
-            <DialogDescription>This prepares a downloadable archive for the current workspace.</DialogDescription>
+            <DialogDescription>
+              This prepares a downloadable archive for the current workspace.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => setExportConfirmOpen(false)}>Cancel</Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setExportConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
             <Button
               type="button"
               size="sm"
               onClick={() => {
-                const blob = new Blob(["Atmet workspace export"], { type: "text/plain" })
+                const blob = new Blob(["Atmet workspace export"], {
+                  type: "text/plain",
+                })
                 const url = URL.createObjectURL(blob)
                 const link = document.createElement("a")
                 link.href = url
@@ -7137,22 +8201,39 @@ function NotificationsConfigConsoleContent() {
   const [digest, setDigest] = React.useState("Daily")
   const [slackEnabled, setSlackEnabled] = React.useState(false)
   const [emailInput, setEmailInput] = React.useState("")
-  const [emails, setEmails] = React.useState(["ops@atmet.ai", "security@atmet.ai"])
+  const [emails, setEmails] = React.useState([
+    "ops@atmet.ai",
+    "security@atmet.ai",
+  ])
 
   return (
     <AdminPage section={"Notifications config" as AdminConsoleSection}>
       <section className="space-y-3 rounded-xl border border-border bg-background p-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-foreground">Workflow error alerts</p>
-            <p className="text-[13px] text-muted-foreground">Notify admins when workflows fail repeatedly.</p>
+            <p className="text-sm font-medium text-foreground">
+              Workflow error alerts
+            </p>
+            <p className="text-[13px] text-muted-foreground">
+              Notify admins when workflows fail repeatedly.
+            </p>
           </div>
           <AdminToggle checked={workflowAlerts} onChange={setWorkflowAlerts} />
         </div>
         {workflowAlerts ? (
           <div className="grid gap-2 sm:grid-cols-2">
-            <Input type="number" defaultValue="5" className="h-8" aria-label="Alert after errors" />
-            <Input type="number" defaultValue="30" className="h-8" aria-label="Within minutes" />
+            <Input
+              type="number"
+              defaultValue="5"
+              className="h-8"
+              aria-label="Alert after errors"
+            />
+            <Input
+              type="number"
+              defaultValue="30"
+              className="h-8"
+              aria-label="Within minutes"
+            />
           </div>
         ) : null}
       </section>
@@ -7161,18 +8242,33 @@ function NotificationsConfigConsoleContent() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-foreground">Usage alerts</p>
-            <p className="text-[13px] text-muted-foreground">Alert when workspace usage approaches monthly limits.</p>
+            <p className="text-[13px] text-muted-foreground">
+              Alert when workspace usage approaches monthly limits.
+            </p>
           </div>
           <AdminToggle checked={usageAlerts} onChange={setUsageAlerts} />
         </div>
-        {usageAlerts ? <Input type="number" defaultValue="80" className="h-8" aria-label="Monthly limit percentage" /> : null}
+        {usageAlerts ? (
+          <Input
+            type="number"
+            defaultValue="80"
+            className="h-8"
+            aria-label="Monthly limit percentage"
+          />
+        ) : null}
       </section>
 
       <section className="rounded-xl border border-border bg-background p-3">
         <p className="text-sm font-medium text-foreground">Digest emails</p>
         <div className="mt-2 inline-flex rounded-lg bg-muted p-0.5">
           {["Off", "Daily", "Weekly"].map((option) => (
-            <Button key={option} type="button" size="xs" variant={digest === option ? "default" : "ghost"} onClick={() => setDigest(option)}>
+            <Button
+              key={option}
+              type="button"
+              size="xs"
+              variant={digest === option ? "default" : "ghost"}
+              onClick={() => setDigest(option)}
+            >
               {option}
             </Button>
           ))}
@@ -7185,14 +8281,27 @@ function NotificationsConfigConsoleContent() {
           {emails.map((email) => (
             <Badge key={email} variant="blue" className="gap-1">
               {email}
-              <button type="button" onClick={() => setEmails((previous) => previous.filter((item) => item !== email))} aria-label={`Remove ${email}`}>
+              <button
+                type="button"
+                onClick={() =>
+                  setEmails((previous) =>
+                    previous.filter((item) => item !== email)
+                  )
+                }
+                aria-label={`Remove ${email}`}
+              >
                 <IconX className="h-3 w-3" />
               </button>
             </Badge>
           ))}
         </div>
         <div className="mt-3 flex gap-2">
-          <Input value={emailInput} onChange={(event) => setEmailInput(event.target.value)} placeholder="alerts@company.com" className="h-8" />
+          <Input
+            value={emailInput}
+            onChange={(event) => setEmailInput(event.target.value)}
+            placeholder="alerts@company.com"
+            className="h-8"
+          />
           <Button
             type="button"
             size="sm"
@@ -7212,11 +8321,18 @@ function NotificationsConfigConsoleContent() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-foreground">Slack webhook</p>
-            <p className="text-[13px] text-muted-foreground">Send workspace alerts into a Slack channel.</p>
+            <p className="text-[13px] text-muted-foreground">
+              Send workspace alerts into a Slack channel.
+            </p>
           </div>
           <AdminToggle checked={slackEnabled} onChange={setSlackEnabled} />
         </div>
-        {slackEnabled ? <Input placeholder="https://hooks.slack.com/services/..." className="h-8" /> : null}
+        {slackEnabled ? (
+          <Input
+            placeholder="https://hooks.slack.com/services/..."
+            className="h-8"
+          />
+        ) : null}
       </section>
       <AdminSaveBar />
     </AdminPage>
@@ -7230,47 +8346,108 @@ function IntegrationsManagementConsoleContent() {
   return (
     <AdminPage
       section={"Integrations management" as AdminConsoleSection}
-      actions={<Button type="button" size="sm"><IconPlus className="h-3.5 w-3.5" />Add integration</Button>}
+      actions={
+        <Button type="button" size="sm">
+          <IconPlus className="h-3.5 w-3.5" />
+          Add integration
+        </Button>
+      }
     >
       {integrationRows.length === 0 ? (
-        <AdminEmptyState icon={IconPlug} title="No integrations connected" description="No workspace apps are connected yet." action={<Button type="button" size="sm">Add your first integration</Button>} />
+        <AdminEmptyState
+          icon={IconPlug}
+          title="No integrations connected"
+          description="No workspace apps are connected yet."
+          action={
+            <Button type="button" size="sm">
+              Add your first integration
+            </Button>
+          }
+        />
       ) : (
         <section className="overflow-hidden rounded-xl border border-border bg-background">
           <table className="w-full table-fixed border-collapse text-[0.8rem]">
             <thead>
               <tr className="border-b border-border text-muted-foreground">
-                <th className="w-[23%] px-2.5 py-1.5 text-left font-medium">App</th>
-                <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">Connected by</th>
-                <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">Status</th>
-                <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">Scope</th>
-                <th className="w-[13%] px-2.5 py-1.5 text-left font-medium">Last used</th>
-                <th className="w-[9%] px-2.5 py-1.5 text-right font-medium">Actions</th>
+                <th className="w-[23%] px-2.5 py-1.5 text-left font-medium">
+                  App
+                </th>
+                <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">
+                  Connected by
+                </th>
+                <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">
+                  Status
+                </th>
+                <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">
+                  Scope
+                </th>
+                <th className="w-[13%] px-2.5 py-1.5 text-left font-medium">
+                  Last used
+                </th>
+                <th className="w-[9%] px-2.5 py-1.5 text-right font-medium">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {integrationRows.map((row) => (
-                <tr key={row.app} className={cn("border-b border-border/70 last:border-b-0", row.status === "Error" && "bg-destructive/10")}>
+                <tr
+                  key={row.app}
+                  className={cn(
+                    "border-b border-border/70 last:border-b-0",
+                    row.status === "Error" && "bg-destructive/10"
+                  )}
+                >
                   <td className="px-2.5 py-2">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex size-6 items-center justify-center rounded-md bg-muted text-[10px] font-medium text-foreground">{row.app.slice(0, 1)}</span>
-                      <span className="font-medium text-foreground">{row.app}</span>
-                      {row.forced ? <Badge variant="blue">Force-enabled</Badge> : null}
+                      <span className="inline-flex size-6 items-center justify-center rounded-md bg-muted text-[10px] font-medium text-foreground">
+                        {row.app.slice(0, 1)}
+                      </span>
+                      <span className="font-medium text-foreground">
+                        {row.app}
+                      </span>
+                      {row.forced ? (
+                        <Badge variant="blue">Force-enabled</Badge>
+                      ) : null}
                     </div>
                   </td>
-                  <td className="truncate px-2.5 py-2 text-muted-foreground">{row.connectedBy}</td>
-                  <td className="px-2.5 py-2"><Badge variant={adminBadgeVariants[row.tone]}>{row.status}</Badge></td>
-                  <td className="truncate px-2.5 py-2 text-muted-foreground">{row.scope}</td>
-                  <td className="px-2.5 py-2 text-muted-foreground">{row.lastUsed}</td>
+                  <td className="truncate px-2.5 py-2 text-muted-foreground">
+                    {row.connectedBy}
+                  </td>
+                  <td className="px-2.5 py-2">
+                    <Badge variant={adminBadgeVariants[row.tone]}>
+                      {row.status}
+                    </Badge>
+                  </td>
+                  <td className="truncate px-2.5 py-2 text-muted-foreground">
+                    {row.scope}
+                  </td>
+                  <td className="px-2.5 py-2 text-muted-foreground">
+                    {row.lastUsed}
+                  </td>
                   <td className="px-2.5 py-2 text-right">
                     <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-xs" aria-label={`${row.app} actions`} />}>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={`${row.app} actions`}
+                          />
+                        }
+                      >
                         <IconDots className="h-3.5 w-3.5" />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-48">
                         <DropdownMenuItem>Revoke access</DropdownMenuItem>
-                        <DropdownMenuItem>Force-enable for all members</DropdownMenuItem>
+                        <DropdownMenuItem>
+                          Force-enable for all members
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive">Disconnect</DropdownMenuItem>
+                        <DropdownMenuItem variant="destructive">
+                          Disconnect
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -7302,9 +8479,13 @@ function BillingPlanConsoleContent() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-foreground">Team plan</p>
-            <p className="text-[13px] text-muted-foreground">Monthly billing · renews Apr 01, 2026 · 8 seats · $60 per seat</p>
+            <p className="text-[13px] text-muted-foreground">
+              Monthly billing · renews Apr 01, 2026 · 8 seats · $60 per seat
+            </p>
           </div>
-          <Button type="button" size="sm">Upgrade or downgrade</Button>
+          <Button type="button" size="sm">
+            Upgrade or downgrade
+          </Button>
         </div>
       </section>
 
@@ -7316,10 +8497,15 @@ function BillingPlanConsoleContent() {
             <div key={label} className="space-y-1">
               <div className="flex justify-between text-[13px]">
                 <span className="text-foreground">{label}</span>
-                <span className="text-muted-foreground">{used.toLocaleString()} of {limit.toLocaleString()} used</span>
+                <span className="text-muted-foreground">
+                  {used.toLocaleString()} of {limit.toLocaleString()} used
+                </span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
             </div>
           )
@@ -7329,9 +8515,13 @@ function BillingPlanConsoleContent() {
       <section className="flex flex-col gap-2 rounded-xl border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <IconCreditCard className="h-5 w-5 text-muted-foreground" />
-          <p className="text-sm text-foreground">Visa ending in 4242 · expires 08/28</p>
+          <p className="text-sm text-foreground">
+            Visa ending in 4242 · expires 08/28
+          </p>
         </div>
-        <Button type="button" variant="outline" size="sm">Change payment method</Button>
+        <Button type="button" variant="outline" size="sm">
+          Change payment method
+        </Button>
       </section>
 
       <section className="overflow-hidden rounded-xl border border-border bg-background">
@@ -7346,11 +8536,23 @@ function BillingPlanConsoleContent() {
           </thead>
           <tbody>
             {invoices.map(([date, amount, status]) => (
-              <tr key={date} className="border-b border-border/70 last:border-b-0">
+              <tr
+                key={date}
+                className="border-b border-border/70 last:border-b-0"
+              >
                 <td className="px-2.5 py-2 text-foreground">{date}</td>
                 <td className="px-2.5 py-2 text-muted-foreground">{amount}</td>
-                <td className="px-2.5 py-2"><Badge variant={status === "Paid" ? "green" : "amber"}>{status}</Badge></td>
-                <td className="px-2.5 py-2 text-right"><Button type="button" variant="ghost" size="xs"><IconFileText className="h-3.5 w-3.5" />PDF</Button></td>
+                <td className="px-2.5 py-2">
+                  <Badge variant={status === "Paid" ? "green" : "amber"}>
+                    {status}
+                  </Badge>
+                </td>
+                <td className="px-2.5 py-2 text-right">
+                  <Button type="button" variant="ghost" size="xs">
+                    <IconFileText className="h-3.5 w-3.5" />
+                    PDF
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -7358,8 +8560,17 @@ function BillingPlanConsoleContent() {
       </section>
 
       <section className="rounded-xl border border-destructive/40 bg-destructive/10 p-3">
-        <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive">Cancel plan</Button>
-        <p className="mt-1 text-[13px] text-muted-foreground">Stop renewal for the current paid subscription.</p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+        >
+          Cancel plan
+        </Button>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          Stop renewal for the current paid subscription.
+        </p>
       </section>
     </AdminPage>
   )
@@ -7371,39 +8582,119 @@ function ApiKeysConsoleContent() {
   const [keyName, setKeyName] = React.useState("")
   const [revokedKeys, setRevokedKeys] = React.useState<string[]>(["key_003"])
   const keys = [
-    { id: "key_001", name: "Workflow runner", prefix: "ak_live_", scopes: "Chat, workflows", createdBy: "Amir Haddad", lastUsed: "Today", status: "Active" },
-    { id: "key_002", name: "Finance export", prefix: "ak_fin_", scopes: "Files, billing", createdBy: "Lina Saad", lastUsed: "Yesterday", status: "Active" },
-    { id: "key_003", name: "Legacy import", prefix: "ak_old_", scopes: "Files", createdBy: "Fadi Mourad", lastUsed: "Mar 01, 2026", status: "Revoked" },
+    {
+      id: "key_001",
+      name: "Workflow runner",
+      prefix: "ak_live_",
+      scopes: "Chat, workflows",
+      createdBy: "Amir Haddad",
+      lastUsed: "Today",
+      status: "Active",
+    },
+    {
+      id: "key_002",
+      name: "Finance export",
+      prefix: "ak_fin_",
+      scopes: "Files, billing",
+      createdBy: "Lina Saad",
+      lastUsed: "Yesterday",
+      status: "Active",
+    },
+    {
+      id: "key_003",
+      name: "Legacy import",
+      prefix: "ak_old_",
+      scopes: "Files",
+      createdBy: "Fadi Mourad",
+      lastUsed: "Mar 01, 2026",
+      status: "Revoked",
+    },
   ] as const
 
   return (
-    <AdminPage section={"API keys" as AdminConsoleSection} actions={<Button type="button" size="sm" onClick={() => setCreateOpen(true)}><IconKey className="h-3.5 w-3.5" />Create API key</Button>}>
+    <AdminPage
+      section={"API keys" as AdminConsoleSection}
+      actions={
+        <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
+          <IconKey className="h-3.5 w-3.5" />
+          Create API key
+        </Button>
+      }
+    >
       <section className="overflow-hidden rounded-xl border border-border bg-background">
         <table className="w-full table-fixed border-collapse text-[0.8rem]">
           <thead>
             <tr className="border-b border-border text-muted-foreground">
-              <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">Name</th>
-              <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">Key prefix</th>
-              <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">Scopes</th>
-              <th className="w-[17%] px-2.5 py-1.5 text-left font-medium">Created by</th>
-              <th className="w-[12%] px-2.5 py-1.5 text-left font-medium">Last used</th>
-              <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">Status</th>
-              <th className="w-[5%] px-2.5 py-1.5 text-right font-medium">Actions</th>
+              <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">
+                Name
+              </th>
+              <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">
+                Key prefix
+              </th>
+              <th className="w-[22%] px-2.5 py-1.5 text-left font-medium">
+                Scopes
+              </th>
+              <th className="w-[17%] px-2.5 py-1.5 text-left font-medium">
+                Created by
+              </th>
+              <th className="w-[12%] px-2.5 py-1.5 text-left font-medium">
+                Last used
+              </th>
+              <th className="w-[10%] px-2.5 py-1.5 text-left font-medium">
+                Status
+              </th>
+              <th className="w-[5%] px-2.5 py-1.5 text-right font-medium">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {keys.map((key) => {
-              const revoked = revokedKeys.includes(key.id) || key.status === "Revoked"
+              const revoked =
+                revokedKeys.includes(key.id) || key.status === "Revoked"
               return (
-                <tr key={key.id} className="border-b border-border/70 last:border-b-0">
-                  <td className={cn("px-2.5 py-2 font-medium text-foreground", revoked && "text-muted-foreground line-through")}>{key.name}</td>
-                  <td className="px-2.5 py-2 font-mono text-muted-foreground">{key.prefix}••</td>
-                  <td className="truncate px-2.5 py-2 text-muted-foreground">{key.scopes}</td>
-                  <td className="px-2.5 py-2 text-muted-foreground">{key.createdBy}</td>
-                  <td className="px-2.5 py-2 text-muted-foreground">{key.lastUsed}</td>
-                  <td className="px-2.5 py-2"><Badge variant={revoked ? "neutral" : "green"}>{revoked ? "Revoked" : "Active"}</Badge></td>
+                <tr
+                  key={key.id}
+                  className="border-b border-border/70 last:border-b-0"
+                >
+                  <td
+                    className={cn(
+                      "px-2.5 py-2 font-medium text-foreground",
+                      revoked && "text-muted-foreground line-through"
+                    )}
+                  >
+                    {key.name}
+                  </td>
+                  <td className="px-2.5 py-2 font-mono text-muted-foreground">
+                    {key.prefix}••
+                  </td>
+                  <td className="truncate px-2.5 py-2 text-muted-foreground">
+                    {key.scopes}
+                  </td>
+                  <td className="px-2.5 py-2 text-muted-foreground">
+                    {key.createdBy}
+                  </td>
+                  <td className="px-2.5 py-2 text-muted-foreground">
+                    {key.lastUsed}
+                  </td>
+                  <td className="px-2.5 py-2">
+                    <Badge variant={revoked ? "neutral" : "green"}>
+                      {revoked ? "Revoked" : "Active"}
+                    </Badge>
+                  </td>
                   <td className="px-2.5 py-2 text-right">
-                    {!revoked ? <Button type="button" variant="ghost" size="xs" onClick={() => setRevokedKeys((previous) => [...previous, key.id])}>Revoke</Button> : null}
+                    {!revoked ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() =>
+                          setRevokedKeys((previous) => [...previous, key.id])
+                        }
+                      >
+                        Revoke
+                      </Button>
+                    ) : null}
                   </td>
                 </tr>
               )
@@ -7416,14 +8707,25 @@ function ApiKeysConsoleContent() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Create API key</DialogTitle>
-            <DialogDescription>Choose scopes and expiration for a new workspace key.</DialogDescription>
+            <DialogDescription>
+              Choose scopes and expiration for a new workspace key.
+            </DialogDescription>
           </DialogHeader>
           {createdKey ? (
             <div className="rounded-lg border border-border bg-muted p-3">
-              <p className="text-[13px] text-muted-foreground">This key will not be shown again.</p>
+              <p className="text-[13px] text-muted-foreground">
+                This key will not be shown again.
+              </p>
               <div className="mt-2 flex items-center gap-2">
-                <code className="min-w-0 flex-1 truncate rounded-md bg-background px-2 py-1.5 text-xs text-foreground">{createdKey}</code>
-                <Button type="button" size="sm" variant="outline" onClick={() => navigator.clipboard?.writeText(createdKey)}>
+                <code className="min-w-0 flex-1 truncate rounded-md bg-background px-2 py-1.5 text-xs text-foreground">
+                  {createdKey}
+                </code>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigator.clipboard?.writeText(createdKey)}
+                >
                   <IconCopy className="h-3.5 w-3.5" />
                   Copy
                 </Button>
@@ -7433,23 +8735,65 @@ function ApiKeysConsoleContent() {
             <div className="space-y-3">
               <label className="space-y-1 text-[13px] text-muted-foreground">
                 Name
-                <Input value={keyName} onChange={(event) => setKeyName(event.target.value)} className="h-8" />
+                <Input
+                  value={keyName}
+                  onChange={(event) => setKeyName(event.target.value)}
+                  className="h-8"
+                />
               </label>
               <div className="grid gap-2 sm:grid-cols-2">
-                {["Chat", "Workflows", "Files", "Skills", "Members", "Billing"].map((scope) => (
-                  <label key={scope} className="flex items-center gap-2 text-sm text-foreground">
-                    <input type="checkbox" defaultChecked={scope !== "Billing"} className="accent-primary" />
+                {[
+                  "Chat",
+                  "Workflows",
+                  "Files",
+                  "Skills",
+                  "Members",
+                  "Billing",
+                ].map((scope) => (
+                  <label
+                    key={scope}
+                    className="flex items-center gap-2 text-sm text-foreground"
+                  >
+                    <input
+                      type="checkbox"
+                      defaultChecked={scope !== "Billing"}
+                      className="accent-primary"
+                    />
                     {scope}
                   </label>
                 ))}
               </div>
-              <AdminSelect label="Expiry" value="Never" options={["Never", "30 days", "90 days", "1 year"]} onChange={() => undefined} />
+              <AdminSelect
+                label="Expiry"
+                value="Never"
+                options={["Never", "30 days", "90 days", "1 year"]}
+                onChange={() => undefined}
+              />
             </div>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => { setCreateOpen(false); setCreatedKey(""); setKeyName("") }}>Close</Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCreateOpen(false)
+                setCreatedKey("")
+                setKeyName("")
+              }}
+            >
+              Close
+            </Button>
             {!createdKey ? (
-              <Button type="button" size="sm" onClick={() => setCreatedKey(`ak_live_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`)}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() =>
+                  setCreatedKey(
+                    `ak_live_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+                  )
+                }
+              >
                 Create key
               </Button>
             ) : null}
@@ -7468,48 +8812,121 @@ function AuditLogsConsoleContent() {
   )
 
   return (
-    <AdminPage section={"Audit logs" as AdminConsoleSection} actions={<Button type="button" variant="outline" size="sm"><IconDownload className="h-3.5 w-3.5" />Export CSV</Button>}>
+    <AdminPage
+      section={"Audit logs" as AdminConsoleSection}
+      actions={
+        <Button type="button" variant="outline" size="sm">
+          <IconDownload className="h-3.5 w-3.5" />
+          Export CSV
+        </Button>
+      }
+    >
       <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
         <label className="relative">
-          <IconCalendar className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <IconCalendar className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input type="date" className="h-8 pl-8" />
         </label>
         <Input type="date" className="h-8" />
-        <AdminSelect value="All event types" options={["All event types", "Login", "Workflow run", "Error", "Settings changed"]} onChange={() => undefined} />
-        <Input value={actorQuery} onChange={(event) => setActorQuery(event.target.value)} placeholder="Search actor" className="h-8" />
+        <AdminSelect
+          value="All event types"
+          options={[
+            "All event types",
+            "Login",
+            "Workflow run",
+            "Error",
+            "Settings changed",
+          ]}
+          onChange={() => undefined}
+        />
+        <Input
+          value={actorQuery}
+          onChange={(event) => setActorQuery(event.target.value)}
+          placeholder="Search actor"
+          className="h-8"
+        />
       </div>
       {filteredRows.length === 0 ? (
-        <AdminEmptyState icon={IconListDetails} title="No audit logs found" description="No events match the current filters." action={<Button type="button" size="sm" variant="outline" onClick={() => setActorQuery("")}>Reset filters</Button>} />
+        <AdminEmptyState
+          icon={IconListDetails}
+          title="No audit logs found"
+          description="No events match the current filters."
+          action={
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setActorQuery("")}
+            >
+              Reset filters
+            </Button>
+          }
+        />
       ) : (
         <section className="overflow-hidden rounded-xl border border-border bg-background">
           <table className="w-full table-fixed border-collapse text-[0.8rem]">
             <thead>
               <tr className="border-b border-border text-muted-foreground">
-                <th className="w-[17%] px-2.5 py-1.5 text-left font-medium">Timestamp</th>
-                <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">Actor</th>
-                <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">Event type</th>
-                <th className="w-[19%] px-2.5 py-1.5 text-left font-medium">Target</th>
-                <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">IP address</th>
-                <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">Details</th>
+                <th className="w-[17%] px-2.5 py-1.5 text-left font-medium">
+                  Timestamp
+                </th>
+                <th className="w-[18%] px-2.5 py-1.5 text-left font-medium">
+                  Actor
+                </th>
+                <th className="w-[16%] px-2.5 py-1.5 text-left font-medium">
+                  Event type
+                </th>
+                <th className="w-[19%] px-2.5 py-1.5 text-left font-medium">
+                  Target
+                </th>
+                <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">
+                  IP address
+                </th>
+                <th className="w-[15%] px-2.5 py-1.5 text-left font-medium">
+                  Details
+                </th>
               </tr>
             </thead>
             <tbody>
               {filteredRows.map((row) => (
                 <React.Fragment key={row.id}>
-                  <tr className="cursor-pointer border-b border-border/70" onClick={() => setExpandedRow((previous) => previous === row.id ? null : row.id)}>
-                    <td className="px-2.5 py-2 text-muted-foreground">{row.timestamp}</td>
-                    <td className="px-2.5 py-2">
-                      <div className="flex items-center gap-2"><AdminAvatar initials={row.initials} name={row.actor} /><span className="text-foreground">{row.actor}</span></div>
+                  <tr
+                    className="cursor-pointer border-b border-border/70"
+                    onClick={() =>
+                      setExpandedRow((previous) =>
+                        previous === row.id ? null : row.id
+                      )
+                    }
+                  >
+                    <td className="px-2.5 py-2 text-muted-foreground">
+                      {row.timestamp}
                     </td>
-                    <td className="px-2.5 py-2"><Badge variant={adminBadgeVariants[row.tone]}>{row.eventType}</Badge></td>
-                    <td className="px-2.5 py-2 text-muted-foreground">{row.target}</td>
-                    <td className="px-2.5 py-2 text-muted-foreground">{row.ip}</td>
-                    <td className="px-2.5 py-2 text-muted-foreground">View payload</td>
+                    <td className="px-2.5 py-2">
+                      <div className="flex items-center gap-2">
+                        <AdminAvatar initials={row.initials} name={row.actor} />
+                        <span className="text-foreground">{row.actor}</span>
+                      </div>
+                    </td>
+                    <td className="px-2.5 py-2">
+                      <Badge variant={adminBadgeVariants[row.tone]}>
+                        {row.eventType}
+                      </Badge>
+                    </td>
+                    <td className="px-2.5 py-2 text-muted-foreground">
+                      {row.target}
+                    </td>
+                    <td className="px-2.5 py-2 text-muted-foreground">
+                      {row.ip}
+                    </td>
+                    <td className="px-2.5 py-2 text-muted-foreground">
+                      View payload
+                    </td>
                   </tr>
                   {expandedRow === row.id ? (
                     <tr className="border-b border-border/70">
                       <td colSpan={6} className="px-2.5 py-2">
-                        <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs text-foreground">{JSON.stringify(row.details, null, 2)}</pre>
+                        <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs text-foreground">
+                          {JSON.stringify(row.details, null, 2)}
+                        </pre>
                       </td>
                     </tr>
                   ) : null}
@@ -7518,9 +8935,15 @@ function AuditLogsConsoleContent() {
             </tbody>
           </table>
           <div className="flex items-center justify-between border-t border-border px-3 py-2">
-            <Button type="button" variant="outline" size="xs">Previous</Button>
-            <span className="text-[13px] text-muted-foreground">Page 1 of 1</span>
-            <Button type="button" variant="outline" size="xs">Next</Button>
+            <Button type="button" variant="outline" size="xs">
+              Previous
+            </Button>
+            <span className="text-[13px] text-muted-foreground">
+              Page 1 of 1
+            </span>
+            <Button type="button" variant="outline" size="xs">
+              Next
+            </Button>
           </div>
         </section>
       )}
@@ -7529,14 +8952,18 @@ function AuditLogsConsoleContent() {
 }
 
 function UsageLimitsConsoleContent() {
-  const [sortKey, setSortKey] = React.useState<"name" | "workspace" | "tokens" | "runs" | "files" | "lastActive">("tokens")
+  const [sortKey, setSortKey] = React.useState<
+    "name" | "workspace" | "tokens" | "runs" | "files" | "lastActive"
+  >("tokens")
   const [query, setQuery] = React.useState("")
   const [workspaceFilter, setWorkspaceFilter] = React.useState("All workspaces")
   const [roleFilter, setRoleFilter] = React.useState("All roles")
   const [isLoading, setIsLoading] = React.useState(true)
   const [notice, setNotice] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [selectedUser, setSelectedUser] = React.useState<AdminUserRow | null>(null)
+  const [selectedUser, setSelectedUser] = React.useState<AdminUserRow | null>(
+    null
+  )
   const [globalLimits, setGlobalLimits] = React.useState({
     monthlyTokenCap: 50000,
     maxFileSizeMb: 250,
@@ -7551,96 +8978,115 @@ function UsageLimitsConsoleContent() {
     chats: 0,
     apiKeys: 0,
   })
-  const [usageRows, setUsageRows] = React.useState<Array<AdminUserRow & {
-    tokens: number
-    runs: number
-    files: number
-    storageBytes: number
-    chats: number
-  }>>([])
-  const [adjustedWorkspaces, setAdjustedWorkspaces] = React.useState<Array<{
-    id: string
-    name: string
-    monthly_token_cap: number | null
-    seat_limit: number | null
-    effectiveLimits: typeof globalLimits
-    usage: { tokens: number; files: number; storageBytes: number }
-  }>>([])
+  const [usageRows, setUsageRows] = React.useState<
+    Array<
+      AdminUserRow & {
+        tokens: number
+        runs: number
+        files: number
+        storageBytes: number
+        chats: number
+      }
+    >
+  >([])
+  const [adjustedWorkspaces, setAdjustedWorkspaces] = React.useState<
+    Array<{
+      id: string
+      name: string
+      monthly_token_cap: number | null
+      seat_limit: number | null
+      effectiveLimits: typeof globalLimits
+      usage: { tokens: number; files: number; storageBytes: number }
+    }>
+  >([])
 
   const loadUsageLimits = React.useCallback(() => {
     setIsLoading(true)
     fetch("/api/admin/usage-limits")
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: {
-        data?: {
-          globalLimits?: typeof globalLimits
-          summary?: typeof summary
-          users?: Array<{
-            id: string
-            public_user_id?: string | null
-            email: string | null
-            full_name: string | null
-            avatar_url: string | null
-            status: "active" | "inactive" | "suspended"
-            platform_role: "user" | "admin" | "super_admin"
-            updated_at: string
-            workspace: { id: string; name: string } | null
-            role: string
-            usage: { tokens: number; runs: number; files: number; storageBytes: number; chats: number }
-          }>
-          adjustedWorkspaces?: Array<{
-            id: string
-            name: string
-            monthly_token_cap: number | null
-            seat_limit: number | null
-            effectiveLimits: typeof globalLimits
-            usage: { tokens: number; files: number; storageBytes: number }
-          }>
-        }
-      } | null) => {
-        if (payload?.data?.globalLimits) setGlobalLimits(payload.data.globalLimits)
-        if (payload?.data?.summary) setSummary(payload.data.summary)
-        setAdjustedWorkspaces(payload?.data?.adjustedWorkspaces ?? [])
-        setUsageRows(
-          (payload?.data?.users ?? []).map((user) => {
-            const name = user.full_name || user.email || "Unknown user"
-            const role: PlatformRole =
-              user.platform_role === "super_admin"
-                ? "Super Admin"
-                : user.platform_role === "admin"
-                  ? "Admin"
-                  : user.role === "owner"
-                    ? "Owner"
-                    : "Member"
-            const status =
-              user.status === "suspended"
-                ? "Suspended"
-                : user.status === "inactive"
-                  ? "Not active"
-                  : "Active"
-            return {
-              id: user.id,
-              publicUserId: user.public_user_id ?? "",
-              name,
-              initials: deriveInitialsFromName(name),
-              avatarUrl: user.avatar_url ?? null,
-              email: user.email ?? "",
-              workspace: user.workspace?.name ?? "No workspace",
-              role,
-              status,
-              lastActive: user.updated_at ? new Date(user.updated_at).toLocaleString() : "Never",
-              lastSignInAt: null,
-              platformRole: user.platform_role,
-              ownedWorkspaces: [],
-              tokens: user.usage.tokens,
-              runs: user.usage.runs,
-              files: user.usage.files,
-              storageBytes: user.usage.storageBytes,
-              chats: user.usage.chats,
+      .then(
+        (
+          payload: {
+            data?: {
+              globalLimits?: typeof globalLimits
+              summary?: typeof summary
+              users?: Array<{
+                id: string
+                public_user_id?: string | null
+                email: string | null
+                full_name: string | null
+                avatar_url: string | null
+                status: "active" | "inactive" | "suspended"
+                platform_role: "user" | "admin" | "super_admin"
+                updated_at: string
+                workspace: { id: string; name: string } | null
+                role: string
+                usage: {
+                  tokens: number
+                  runs: number
+                  files: number
+                  storageBytes: number
+                  chats: number
+                }
+              }>
+              adjustedWorkspaces?: Array<{
+                id: string
+                name: string
+                monthly_token_cap: number | null
+                seat_limit: number | null
+                effectiveLimits: typeof globalLimits
+                usage: { tokens: number; files: number; storageBytes: number }
+              }>
             }
-          })
-        )
-      })
+          } | null
+        ) => {
+          if (payload?.data?.globalLimits)
+            setGlobalLimits(payload.data.globalLimits)
+          if (payload?.data?.summary) setSummary(payload.data.summary)
+          setAdjustedWorkspaces(payload?.data?.adjustedWorkspaces ?? [])
+          setUsageRows(
+            (payload?.data?.users ?? []).map((user) => {
+              const name = user.full_name || user.email || "Unknown user"
+              const role: PlatformRole =
+                user.platform_role === "super_admin"
+                  ? "Super Admin"
+                  : user.platform_role === "admin"
+                    ? "Admin"
+                    : user.role === "owner"
+                      ? "Owner"
+                      : "Member"
+              const status =
+                user.status === "suspended"
+                  ? "Suspended"
+                  : user.status === "inactive"
+                    ? "Not active"
+                    : "Active"
+              return {
+                id: user.id,
+                publicUserId: user.public_user_id ?? "",
+                name,
+                initials: deriveInitialsFromName(name),
+                avatarUrl: user.avatar_url ?? null,
+                email: user.email ?? "",
+                workspace: user.workspace?.name ?? "No workspace",
+                role,
+                status,
+                lastActive: user.updated_at
+                  ? new Date(user.updated_at).toLocaleString()
+                  : "Never",
+                lastSignInAt: null,
+                platformRole: user.platform_role,
+                ownedWorkspaces: [],
+                tokens: user.usage.tokens,
+                runs: user.usage.runs,
+                files: user.usage.files,
+                storageBytes: user.usage.storageBytes,
+                chats: user.usage.chats,
+              }
+            })
+          )
+        }
+      )
       .catch(() => {
         setError("Unable to load usage and limits.")
       })
@@ -7654,7 +9100,12 @@ function UsageLimitsConsoleContent() {
   const updateSelectedUser = React.useCallback(
     async (
       userId: string,
-      updates: { full_name?: string; status?: "active" | "inactive" | "suspended"; platform_role?: "user" | "admin" | "super_admin" },
+      updates: {
+        full_name?: string
+        avatar_url?: string | null
+        status?: "active" | "inactive" | "suspended"
+        platform_role?: "user" | "admin" | "super_admin"
+      },
       successMessage: string
     ) => {
       setNotice(null)
@@ -7665,7 +9116,9 @@ function UsageLimitsConsoleContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updates),
         })
-        const payload = (await response.json()) as { error?: { message?: string } }
+        const payload = (await response.json()) as {
+          error?: { message?: string }
+        }
         if (!response.ok) {
           setError(payload.error?.message ?? "Unable to update this user.")
           return
@@ -7689,7 +9142,9 @@ function UsageLimitsConsoleContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ globalLimits }),
       })
-      const payload = (await response.json()) as { error?: { message?: string } }
+      const payload = (await response.json()) as {
+        error?: { message?: string }
+      }
       if (!response.ok) {
         setError(payload.error?.message ?? "Unable to save usage limits.")
         return
@@ -7717,17 +9172,47 @@ function UsageLimitsConsoleContent() {
     if (sortKey === "name" || sortKey === "workspace") {
       return a[sortKey].localeCompare(b[sortKey])
     }
-    if (sortKey === "lastActive") return a.lastActive.localeCompare(b.lastActive)
+    if (sortKey === "lastActive")
+      return a.lastActive.localeCompare(b.lastActive)
     return b[sortKey] - a[sortKey]
   })
   const chartData = [
-    "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D13", "D14",
-  ].map((label, index) => ({ label, value: Math.round((summary.tokens / 14) * (0.7 + (index % 5) * 0.08)) }))
+    "D1",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "D6",
+    "D7",
+    "D8",
+    "D9",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+  ].map((label, index) => ({
+    label,
+    value: Math.round((summary.tokens / 14) * (0.7 + (index % 5) * 0.08)),
+  }))
 
-  const workspaceNames = Array.from(new Set(usageRows.map((row) => row.workspace).filter(Boolean)))
+  const workspaceNames = Array.from(
+    new Set(usageRows.map((row) => row.workspace).filter(Boolean))
+  )
   const exportCsv = () => {
     const rows = [
-      ["Name", "Email", "Workspace", "Role", "Tokens", "Workflow runs", "Files", "Storage bytes", "Chats", "Last active"],
+      [
+        "Name",
+        "Email",
+        "Workspace",
+        "Role",
+        "Tokens",
+        "Workflow runs",
+        "Files",
+        "Storage bytes",
+        "Chats",
+        "Last active",
+      ],
       ...sortedUsageRows.map((row) => [
         row.name,
         row.email,
@@ -7741,7 +9226,11 @@ function UsageLimitsConsoleContent() {
         row.lastActive,
       ]),
     ]
-    const csv = rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n")
+    const csv = rows
+      .map((row) =>
+        row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")
+      )
+      .join("\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
@@ -7762,30 +9251,47 @@ function UsageLimitsConsoleContent() {
   }
 
   return (
-    <AdminPage section="Usage & limits" actions={<Button type="button" variant="outline" size="sm" onClick={exportCsv}><IconDownload className="h-3.5 w-3.5" />Export usage CSV</Button>}>
+    <AdminPage
+      section="Usage & limits"
+      actions={
+        <Button type="button" variant="outline" size="sm" onClick={exportCsv}>
+          <IconDownload className="h-3.5 w-3.5" />
+          Export usage CSV
+        </Button>
+      }
+    >
       {error ? (
-        <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</div>
+        <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {error}
+        </div>
       ) : null}
       {notice ? (
-        <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">{notice}</div>
+        <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+          {notice}
+        </div>
       ) : null}
       <section className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["Tokens this month", summary.tokens.toLocaleString()],
           ["Workflow runs", summary.runs.toLocaleString()],
-          ["Storage used", `${(summary.storageBytes / 1024 / 1024 / 1024).toFixed(1)} GB`],
+          [
+            "Storage used",
+            `${(summary.storageBytes / 1024 / 1024 / 1024).toFixed(1)} GB`,
+          ],
           ["API keys", summary.apiKeys.toLocaleString()],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg bg-muted px-3 py-3">
             <p className="text-[13px] text-muted-foreground">{label}</p>
-            <p className="mt-1 text-2xl font-medium tabular-nums text-foreground">{value}</p>
+            <p className="mt-1 text-2xl font-medium text-foreground tabular-nums">
+              {value}
+            </p>
           </div>
         ))}
       </section>
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative min-w-0 flex-1">
-          <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <IconSearch className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -7819,8 +9325,15 @@ function UsageLimitsConsoleContent() {
                 ["files", "Files uploaded", "w-[10%] text-center"],
                 ["lastActive", "Last active", "w-[26%] text-left"],
               ].map(([key, label, className]) => (
-                <th key={key} className={cn("px-2.5 py-1.5 font-medium", className)}>
-                  <button type="button" onClick={() => setSortKey(key as typeof sortKey)} className="inline-flex items-center gap-1 hover:text-foreground">
+                <th
+                  key={key}
+                  className={cn("px-2.5 py-1.5 font-medium", className)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSortKey(key as typeof sortKey)}
+                    className="inline-flex items-center gap-1 hover:text-foreground"
+                  >
                     {label}
                     <IconChevronDown className="h-3 w-3" />
                   </button>
@@ -7854,17 +9367,32 @@ function UsageLimitsConsoleContent() {
                     </button>
                   </div>
                 </td>
-                <td className="truncate px-2.5 py-2 text-foreground">{row.workspace}</td>
-                <td className="px-2.5 py-2 text-muted-foreground">{row.tokens.toLocaleString()}</td>
-                <td className="px-2.5 py-2 text-center text-muted-foreground">{row.runs}</td>
-                <td className="px-2.5 py-2 text-center text-muted-foreground">{row.files}</td>
-                <td className="px-2.5 py-2 text-muted-foreground">{row.lastActive}</td>
+                <td className="truncate px-2.5 py-2 text-foreground">
+                  {row.workspace}
+                </td>
+                <td className="px-2.5 py-2 text-muted-foreground">
+                  {row.tokens.toLocaleString()}
+                </td>
+                <td className="px-2.5 py-2 text-center text-muted-foreground">
+                  {row.runs}
+                </td>
+                <td className="px-2.5 py-2 text-center text-muted-foreground">
+                  {row.files}
+                </td>
+                <td className="px-2.5 py-2 text-muted-foreground">
+                  {row.lastActive}
+                </td>
               </tr>
             ))}
             {sortedUsageRows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-[13px] text-muted-foreground">
-                  {isLoading ? "Loading usage records." : "No usage records match the current filters."}
+                <td
+                  colSpan={6}
+                  className="px-3 py-8 text-center text-[13px] text-muted-foreground"
+                >
+                  {isLoading
+                    ? "Loading usage records."
+                    : "No usage records match the current filters."}
                 </td>
               </tr>
             ) : null}
@@ -7881,9 +9409,16 @@ function UsageLimitsConsoleContent() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-foreground">Global limits</p>
-            <p className="mt-1 text-[13px] text-muted-foreground">Defaults used by every workspace unless that workspace has an override.</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Defaults used by every workspace unless that workspace has an
+              override.
+            </p>
           </div>
-          <Button type="button" size="sm" onClick={() => void saveGlobalLimits()}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void saveGlobalLimits()}
+          >
             Save limits
           </Button>
         </div>
@@ -7893,8 +9428,14 @@ function UsageLimitsConsoleContent() {
             <Input
               type="number"
               value={globalLimits.monthlyTokenCap}
-              onChange={(event) => setGlobalLimits((previous) => ({ ...previous, monthlyTokenCap: Number(event.target.value) || previous.monthlyTokenCap }))}
-              className="h-8 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              onChange={(event) =>
+                setGlobalLimits((previous) => ({
+                  ...previous,
+                  monthlyTokenCap:
+                    Number(event.target.value) || previous.monthlyTokenCap,
+                }))
+              }
+              className="h-8 [appearance:textfield] text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </label>
           <label className="space-y-1 rounded-lg bg-background/60 p-2 text-[12px] text-muted-foreground">
@@ -7902,8 +9443,14 @@ function UsageLimitsConsoleContent() {
             <Input
               type="number"
               value={globalLimits.maxFileSizeMb}
-              onChange={(event) => setGlobalLimits((previous) => ({ ...previous, maxFileSizeMb: Number(event.target.value) || previous.maxFileSizeMb }))}
-              className="h-8 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              onChange={(event) =>
+                setGlobalLimits((previous) => ({
+                  ...previous,
+                  maxFileSizeMb:
+                    Number(event.target.value) || previous.maxFileSizeMb,
+                }))
+              }
+              className="h-8 [appearance:textfield] text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </label>
           <label className="space-y-1 rounded-lg bg-background/60 p-2 text-[12px] text-muted-foreground">
@@ -7911,8 +9458,14 @@ function UsageLimitsConsoleContent() {
             <Input
               type="number"
               value={globalLimits.maxFilesPerWorkspace}
-              onChange={(event) => setGlobalLimits((previous) => ({ ...previous, maxFilesPerWorkspace: Number(event.target.value) || previous.maxFilesPerWorkspace }))}
-              className="h-8 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              onChange={(event) =>
+                setGlobalLimits((previous) => ({
+                  ...previous,
+                  maxFilesPerWorkspace:
+                    Number(event.target.value) || previous.maxFilesPerWorkspace,
+                }))
+              }
+              className="h-8 [appearance:textfield] text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </label>
           <label className="space-y-1 rounded-lg bg-background/60 p-2 text-[12px] text-muted-foreground">
@@ -7920,38 +9473,69 @@ function UsageLimitsConsoleContent() {
             <Input
               type="number"
               value={globalLimits.seatLimit}
-              onChange={(event) => setGlobalLimits((previous) => ({ ...previous, seatLimit: Number(event.target.value) || previous.seatLimit }))}
-              className="h-8 text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              onChange={(event) =>
+                setGlobalLimits((previous) => ({
+                  ...previous,
+                  seatLimit: Number(event.target.value) || previous.seatLimit,
+                }))
+              }
+              className="h-8 [appearance:textfield] text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </label>
         </div>
       </section>
 
       <section className="rounded-xl bg-muted/15 p-3">
-        <p className="text-sm font-medium text-foreground">Adjusted workspace limits</p>
-        <p className="mt-1 text-[13px] text-muted-foreground">Workspaces listed here are not following one or more general limits.</p>
+        <p className="text-sm font-medium text-foreground">
+          Adjusted workspace limits
+        </p>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          Workspaces listed here are not following one or more general limits.
+        </p>
         <div className="mt-3 overflow-hidden rounded-lg bg-background/60">
           <table className="w-full table-fixed border-collapse text-[0.8rem]">
             <thead>
               <tr className="border-b border-border text-muted-foreground">
-                <th className="px-2.5 py-1.5 text-left font-medium">Workspace</th>
-                <th className="px-2.5 py-1.5 text-left font-medium">Token cap</th>
-                <th className="px-2.5 py-1.5 text-left font-medium">Seat limit</th>
-                <th className="px-2.5 py-1.5 text-left font-medium">Files limit</th>
+                <th className="px-2.5 py-1.5 text-left font-medium">
+                  Workspace
+                </th>
+                <th className="px-2.5 py-1.5 text-left font-medium">
+                  Token cap
+                </th>
+                <th className="px-2.5 py-1.5 text-left font-medium">
+                  Seat limit
+                </th>
+                <th className="px-2.5 py-1.5 text-left font-medium">
+                  Files limit
+                </th>
               </tr>
             </thead>
             <tbody>
               {adjustedWorkspaces.map((workspace) => (
-                <tr key={workspace.id} className="border-b border-border/70 last:border-b-0">
-                  <td className="px-2.5 py-2 font-medium text-foreground">{workspace.name}</td>
-                  <td className="px-2.5 py-2 text-muted-foreground">{workspace.effectiveLimits.monthlyTokenCap.toLocaleString()}</td>
-                  <td className="px-2.5 py-2 text-muted-foreground">{workspace.effectiveLimits.seatLimit.toLocaleString()}</td>
-                  <td className="px-2.5 py-2 text-muted-foreground">{workspace.effectiveLimits.maxFilesPerWorkspace.toLocaleString()}</td>
+                <tr
+                  key={workspace.id}
+                  className="border-b border-border/70 last:border-b-0"
+                >
+                  <td className="px-2.5 py-2 font-medium text-foreground">
+                    {workspace.name}
+                  </td>
+                  <td className="px-2.5 py-2 text-muted-foreground">
+                    {workspace.effectiveLimits.monthlyTokenCap.toLocaleString()}
+                  </td>
+                  <td className="px-2.5 py-2 text-muted-foreground">
+                    {workspace.effectiveLimits.seatLimit.toLocaleString()}
+                  </td>
+                  <td className="px-2.5 py-2 text-muted-foreground">
+                    {workspace.effectiveLimits.maxFilesPerWorkspace.toLocaleString()}
+                  </td>
                 </tr>
               ))}
               {adjustedWorkspaces.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-muted-foreground">
+                  <td
+                    colSpan={4}
+                    className="px-3 py-6 text-center text-[13px] text-muted-foreground"
+                  >
                     No workspace-specific adjustments.
                   </td>
                 </tr>
@@ -8011,7 +9595,9 @@ function RequestsConsoleContent() {
     setIsLoading(true)
     try {
       const res = await fetch("/api/admin/waitlist")
-      const payload = (await res.json()) as { data?: { requests: WaitlistRequest[] } }
+      const payload = (await res.json()) as {
+        data?: { requests: WaitlistRequest[] }
+      }
       setRequests(payload.data?.requests ?? [])
     } catch {
       /* silent */
@@ -8020,7 +9606,9 @@ function RequestsConsoleContent() {
     }
   }, [])
 
-  React.useEffect(() => { void loadRequests() }, [loadRequests])
+  React.useEffect(() => {
+    void loadRequests()
+  }, [loadRequests])
 
   const handleAction = React.useCallback(
     async (id: string, action: "approve" | "reject" | "resend") => {
@@ -8053,22 +9641,32 @@ function RequestsConsoleContent() {
                         : action === "reject"
                           ? "rejected"
                           : r.status,
-                    user_status: action === "approve" ? "inactive" : r.user_status,
-                    onboarding_completed: action === "approve" ? false : r.onboarding_completed,
+                    user_status:
+                      action === "approve" ? "inactive" : r.user_status,
+                    onboarding_completed:
+                      action === "approve" ? false : r.onboarding_completed,
                   }
                 : r
             )
           )
           if (action === "approve" || action === "resend") {
             if (payload.data?.approvalEmailSent) {
-              setActionNotice(action === "approve" ? "Approved and approval email sent." : "Approval email sent again.")
+              setActionNotice(
+                action === "approve"
+                  ? "Approved and approval email sent."
+                  : "Approval email sent again."
+              )
             } else if (payload.data?.approvalEmailWarning) {
-              setActionNotice(`${action === "approve" ? "Approved" : "Resend requested"}, but email was not sent: ${payload.data.approvalEmailWarning}`)
+              setActionNotice(
+                `${action === "approve" ? "Approved" : "Resend requested"}, but email was not sent: ${payload.data.approvalEmailWarning}`
+              )
             }
           }
           return
         }
-        setActionError(payload.error?.message ?? "Unable to update this request.")
+        setActionError(
+          payload.error?.message ?? "Unable to update this request."
+        )
       } catch {
         setActionError("Unable to update this request. Please try again.")
       } finally {
@@ -8082,8 +9680,7 @@ function RequestsConsoleContent() {
     const q = query.trim().toLowerCase()
     return requests.filter((r) => {
       const matchesStatus =
-        statusFilter === "All" ||
-        r.status === statusFilter.toLowerCase()
+        statusFilter === "All" || r.status === statusFilter.toLowerCase()
       const matchesQuery =
         !q ||
         r.name.toLowerCase().includes(q) ||
@@ -8148,7 +9745,9 @@ function RequestsConsoleContent() {
       .map((row) => row.map(csvCell).join(","))
       .join("\n")
 
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" })
+    )
     const anchor = document.createElement("a")
     anchor.href = url
     anchor.download = `atmet-requests-${new Date().toISOString().slice(0, 10)}.csv`
@@ -8183,8 +9782,8 @@ function RequestsConsoleContent() {
       <>
         <section className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-40">
-              <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative min-w-40 flex-1">
+              <IconSearch className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -8234,35 +9833,63 @@ function RequestsConsoleContent() {
                   <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
                     <th className="px-3 py-2.5 text-left font-medium">Name</th>
                     <th className="px-3 py-2.5 text-left font-medium">Email</th>
-                    <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">Profile</th>
-                    <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">Size</th>
-                    <th className="hidden px-3 py-2.5 text-left font-medium md:table-cell">Country</th>
-                    <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">Phone</th>
-                    <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">Description</th>
-                    <th className="px-3 py-2.5 text-left font-medium">Status</th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium sm:table-cell">
+                      Profile
+                    </th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium lg:table-cell">
+                      Size
+                    </th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium md:table-cell">
+                      Country
+                    </th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">
+                      Phone
+                    </th>
+                    <th className="hidden px-3 py-2.5 text-left font-medium xl:table-cell">
+                      Description
+                    </th>
+                    <th className="px-3 py-2.5 text-left font-medium">
+                      Status
+                    </th>
                     <th className="px-3 py-2.5 text-left font-medium">Date</th>
-                    <th className="px-3 py-2.5 text-right font-medium">Actions</th>
+                    <th className="px-3 py-2.5 text-right font-medium">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.map((req) => {
                     const statusTone: Record<string, string> = {
-                      pending: "text-amber-700 dark:text-amber-300 bg-amber-500/10",
-                      approved: "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10",
+                      pending:
+                        "text-amber-700 dark:text-amber-300 bg-amber-500/10",
+                      approved:
+                        "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10",
                       rejected: "text-red-700 dark:text-red-300 bg-red-500/10",
                     }
                     const country = getWaitlistCountry(req.country)
                     const phoneCountry = getPhoneCountry(req.phone_country)
-                    const phone = buildInternationalPhone(req.phone_country, req.phone_number)
-                    const whatsappUrl = buildWhatsappUrl(req.phone_country, req.phone_number)
+                    const phone = buildInternationalPhone(
+                      req.phone_country,
+                      req.phone_number
+                    )
+                    const whatsappUrl = buildWhatsappUrl(
+                      req.phone_country,
+                      req.phone_number
+                    )
                     return (
                       <tr key={req.id} className="hover:bg-muted/20">
                         <td className="px-3 py-2.5 font-medium">{req.name}</td>
-                        <td className="px-3 py-2.5 text-muted-foreground">{req.email}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">
+                          {req.email}
+                        </td>
                         <td className="hidden px-3 py-2.5 text-muted-foreground sm:table-cell">
                           <div className="max-w-52 space-y-0.5">
-                            <p className="truncate text-foreground">{req.company || req.profile_type || "—"}</p>
-                            <p className="truncate text-xs">{req.role || req.referral || "—"}</p>
+                            <p className="truncate text-foreground">
+                              {req.company || req.profile_type || "—"}
+                            </p>
+                            <p className="truncate text-xs">
+                              {req.role || req.referral || "—"}
+                            </p>
                           </div>
                         </td>
                         <td className="hidden px-3 py-2.5 text-muted-foreground lg:table-cell">
@@ -8275,7 +9902,7 @@ function RequestsConsoleContent() {
                               <span>{country.label}</span>
                             </span>
                           ) : (
-                            req.country ?? "—"
+                            (req.country ?? "—")
                           )}
                         </td>
                         <td className="hidden px-3 py-2.5 text-muted-foreground xl:table-cell">
@@ -8294,16 +9921,22 @@ function RequestsConsoleContent() {
                           )}
                         </td>
                         <td className="hidden max-w-56 px-3 py-2.5 text-muted-foreground xl:table-cell">
-                          <span className="line-clamp-2">{req.notes || req.referral || "—"}</span>
+                          <span className="line-clamp-2">
+                            {req.notes || req.referral || "—"}
+                          </span>
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex flex-wrap gap-1">
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusTone[req.status] ?? ""}`}>
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusTone[req.status] ?? ""}`}
+                            >
                               {req.status}
                             </span>
                             {req.status === "approved" && req.user_status ? (
-                              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold capitalize text-muted-foreground">
-                                {req.user_status === "inactive" ? "Not active" : req.user_status}
+                              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground capitalize">
+                                {req.user_status === "inactive"
+                                  ? "Not active"
+                                  : req.user_status}
                               </span>
                             ) : null}
                           </div>
@@ -8319,7 +9952,9 @@ function RequestsConsoleContent() {
                                 size="xs"
                                 variant="outline"
                                 disabled={actionLoading !== null}
-                                onClick={() => void handleAction(req.id, "approve")}
+                                onClick={() =>
+                                  void handleAction(req.id, "approve")
+                                }
                                 className="h-6 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300"
                               >
                                 {actionLoading === req.id + "approve" ? (
@@ -8333,7 +9968,9 @@ function RequestsConsoleContent() {
                                 size="xs"
                                 variant="outline"
                                 disabled={actionLoading !== null}
-                                onClick={() => void handleAction(req.id, "reject")}
+                                onClick={() =>
+                                  void handleAction(req.id, "reject")
+                                }
                                 className="h-6 border-red-500/40 text-red-700 hover:bg-red-500/10 dark:text-red-300"
                               >
                                 {actionLoading === req.id + "reject" ? (
@@ -8349,7 +9986,9 @@ function RequestsConsoleContent() {
                               size="xs"
                               variant="outline"
                               disabled={actionLoading !== null}
-                              onClick={() => void handleAction(req.id, "resend")}
+                              onClick={() =>
+                                void handleAction(req.id, "resend")
+                              }
                               className="h-6 gap-1.5"
                             >
                               {actionLoading === req.id + "resend" ? (
@@ -8360,7 +9999,9 @@ function RequestsConsoleContent() {
                               Resend
                             </Button>
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -8376,7 +10017,10 @@ function RequestsConsoleContent() {
   )
 }
 
-function renderAdminConsoleContent(section: AdminConsoleSection, workspaceNames: string[] = []) {
+function renderAdminConsoleContent(
+  section: AdminConsoleSection,
+  workspaceNames: string[] = []
+) {
   switch (section) {
     case "Admin overview":
       return <AdminOverviewConsoleContent workspaceNames={workspaceNames} />
@@ -8393,6 +10037,103 @@ function renderAdminConsoleContent(section: AdminConsoleSection, workspaceNames:
     case "Usage & limits":
       return <UsageLimitsConsoleContent />
   }
+}
+
+export function AdminConsolePageContent() {
+  const searchParams = useSearchParams()
+  const { workspaces } = useWorkspace()
+  const requestedSection = searchParams.get("section")
+  const initialSection =
+    requestedSection &&
+    adminConsoleGroups.some((group) =>
+      (group.sections as readonly string[]).includes(requestedSection)
+    )
+      ? (requestedSection as AdminConsoleSection)
+      : "Admin overview"
+  const [activeAdminConsoleSection, setActiveAdminConsoleSection] =
+    React.useState<AdminConsoleSection>(initialSection)
+
+  React.useEffect(() => {
+    if (
+      requestedSection &&
+      adminConsoleGroups.some((group) =>
+        (group.sections as readonly string[]).includes(requestedSection)
+      )
+    ) {
+      setActiveAdminConsoleSection(requestedSection as AdminConsoleSection)
+    }
+  }, [requestedSection])
+
+  const workspaceNames = React.useMemo(
+    () => workspaces.map((workspace) => workspace.name),
+    [workspaces]
+  )
+
+  const renderAdminConsoleSectionButton = (section: AdminConsoleSection) => {
+    const SectionIcon = adminConsoleSectionIcons[section]
+    return (
+      <button
+        key={section}
+        type="button"
+        onClick={() => setActiveAdminConsoleSection(section)}
+        className={cn(
+          "flex h-8 w-full items-center rounded-md px-2 text-left text-sm transition-colors",
+          activeAdminConsoleSection === section
+            ? "bg-muted text-foreground"
+            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+        )}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <SectionIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+          <span className="truncate">{section}</span>
+        </span>
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 flex-col bg-background text-foreground dark:bg-sidebar">
+      <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="space-y-5">
+          <header className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Admin console
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Manage platform access, workspaces, requests, policies, and usage.
+            </p>
+          </header>
+
+          <div className="flex items-start gap-14">
+            <aside className="w-52 shrink-0">
+              <nav
+                aria-label="Admin console sections"
+                className="sticky top-14 space-y-4"
+              >
+                {adminConsoleGroups.map((group) => (
+                  <div key={group.label} className="space-y-1">
+                    <p className="px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                      {group.label}
+                    </p>
+                    {group.sections.map((section) =>
+                      renderAdminConsoleSectionButton(section)
+                    )}
+                  </div>
+                ))}
+              </nav>
+            </aside>
+
+            <main className="min-w-0 flex-1" data-settings-scope="true">
+              {renderAdminConsoleContent(
+                activeAdminConsoleSection,
+                workspaceNames
+              )}
+            </main>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
 }
 
 function parseStoredAppearanceSettings(
@@ -8434,6 +10175,282 @@ function parseStoredAppearanceSettings(
   }
 }
 
+export function SettingsPageContent() {
+  const searchParams = useSearchParams()
+  const { theme, setTheme } = useTheme()
+  const {
+    workspaces,
+    activeWorkspaceId: ctxActiveId,
+    apiFetch,
+    refreshWorkspaces,
+  } = useWorkspace()
+  const requestedSection = searchParams.get("section")
+  const initialSection =
+    requestedSection &&
+    (baseSettingsSections as readonly string[]).includes(requestedSection)
+      ? (requestedSection as SettingsSection)
+      : "Account"
+  const [activeSettingsSection, setActiveSettingsSection] =
+    React.useState<SettingsSection>(initialSection)
+  const [hasGeneralUnsavedChanges, setHasGeneralUnsavedChanges] =
+    React.useState(false)
+  const [membersQuickActionToken] = React.useState(0)
+  const [membersQuickInviteToken] = React.useState(0)
+  const [liveUser, setLiveUser] = React.useState<{
+    email: string | null
+    platform_role?: string | null
+    id?: string | null
+  } | null>(null)
+
+  React.useEffect(() => {
+    fetch("/api/users/me", { cache: "no-store", credentials: "same-origin" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (
+          payload: {
+            data?: {
+              user?: {
+                id?: string | null
+                email: string | null
+                platform_role?: string | null
+              }
+            }
+          } | null
+        ) => {
+          if (payload?.data?.user) setLiveUser(payload.data.user)
+        }
+      )
+      .catch(() => undefined)
+  }, [])
+
+  React.useEffect(() => {
+    if (
+      requestedSection &&
+      (baseSettingsSections as readonly string[]).includes(requestedSection)
+    ) {
+      setActiveSettingsSection(requestedSection as SettingsSection)
+    }
+  }, [requestedSection])
+
+  const isPlatformAdmin =
+    liveUser?.platform_role === "super_admin" ||
+    liveUser?.platform_role === "admin"
+  const workspaceRecords = React.useMemo<WorkspaceProfile[]>(() => {
+    if (isPlatformAdmin && workspaces.length === 0) {
+      return [
+        {
+          id: PLATFORM_ADMIN_WORKSPACE_ID,
+          name: "Atmet",
+          avatarUrl: "/Logos/Favicon Atmet.png",
+          initials: "A",
+          bgClass: "bg-cyan-500/15",
+          textClass: "text-cyan-700 dark:text-cyan-300",
+          primaryEmail: liveUser?.email ?? "",
+          description: "Platform administration workspace.",
+          country: "",
+        },
+      ]
+    }
+
+    return workspaces.map((ws) => ({
+      id: ws.id,
+      name: ws.name,
+      avatarUrl: ws.avatar_url ?? null,
+      initials: deriveInitialsFromName(ws.name),
+      bgClass: "bg-sky-500/20",
+      textClass: "text-sky-700 dark:text-sky-300",
+      primaryEmail: ws.owner?.email ?? "",
+      description: "",
+      country:
+        countries.find((country) => country.value === ws.owner?.phone_country)
+          ?.label ??
+        ws.country ??
+        "",
+    }))
+  }, [isPlatformAdmin, liveUser?.email, workspaces])
+  const selectedWorkspaceId =
+    isPlatformAdmin && workspaces.length === 0
+      ? PLATFORM_ADMIN_WORKSPACE_ID
+      : (ctxActiveId ?? workspaceRecords[0]?.id ?? "")
+  const selectedWorkspace = React.useMemo(() => {
+    const fallbackWorkspace = workspaceRecords[0] ?? null
+    if (!fallbackWorkspace) return null
+    return (
+      workspaceRecords.find(
+        (workspace) => workspace.id === selectedWorkspaceId
+      ) ?? fallbackWorkspace
+    )
+  }, [selectedWorkspaceId, workspaceRecords])
+  const userPreferenceKey = liveUser?.id ?? liveUser?.email ?? null
+
+  const handleWorkspaceSave = React.useCallback(
+    async (nextWorkspace: WorkspaceProfile) => {
+      const response = await apiFetch(`/api/workspaces/${nextWorkspace.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nextWorkspace.name,
+          avatar_url: nextWorkspace.avatarUrl,
+        }),
+      }).catch(() => null)
+      if (response?.ok) {
+        await refreshWorkspaces()
+      }
+    },
+    [apiFetch, refreshWorkspaces]
+  )
+
+  const renderSettingsSectionButton = (section: SettingsSection) => {
+    const SectionIcon = settingsSectionIcons[section]
+    return (
+      <button
+        key={section}
+        type="button"
+        disabled={section === "Refer and earn"}
+        onClick={() => {
+          if (section === "Contact Support") {
+            window.location.href = "mailto:support@atmet.ai"
+            return
+          }
+          if (section === "Help Docs") {
+            window.open(HELP_DOCS_EXTERNAL_URL, "_blank", "noopener,noreferrer")
+            return
+          }
+          setActiveSettingsSection(section)
+        }}
+        className={cn(
+          "flex h-8 w-full items-center rounded-md px-2 text-left text-sm transition-colors",
+          section === "Refer and earn" && "cursor-not-allowed opacity-50",
+          activeSettingsSection === section
+            ? "bg-muted text-foreground"
+            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+        )}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <SectionIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+          <span className="truncate">{section}</span>
+        </span>
+        {section === "Refer and earn" ? (
+          <Badge
+            variant="red"
+            size="sm"
+            className="pointer-events-none shrink-0"
+          >
+            Later
+          </Badge>
+        ) : null}
+      </button>
+    )
+  }
+
+  const activeContent =
+    activeSettingsSection === "Account" ? (
+      <AccountSettingsContent />
+    ) : activeSettingsSection === "Notifications" ? (
+      <NotificationSettingsContent />
+    ) : activeSettingsSection === "General" ? (
+      <GeneralSettingsContent
+        currentTheme={theme}
+        setTheme={setTheme}
+        userPreferenceKey={userPreferenceKey}
+        onUnsavedChangesChange={setHasGeneralUnsavedChanges}
+      />
+    ) : activeSettingsSection === "Workspace" ? (
+      selectedWorkspace ? (
+        <WorkspaceSettingsContent
+          workspace={selectedWorkspace}
+          onSaveWorkspace={handleWorkspaceSave}
+          onGoToMembers={() => setActiveSettingsSection("Members")}
+        />
+      ) : null
+    ) : activeSettingsSection === "Members" ? (
+      <MembersSettingsContent
+        quickActionToken={membersQuickActionToken}
+        quickInviteToken={membersQuickInviteToken}
+      />
+    ) : activeSettingsSection === "Integrations" ? (
+      <IntegrationsSettingsContent />
+    ) : activeSettingsSection === "Usage and limits" ? (
+      <UsageLimitsSettingsContent />
+    ) : activeSettingsSection === "Data controls" ? (
+      <DataControlsSettingsContent />
+    ) : activeSettingsSection === "Refer and earn" ? (
+      <ReferAndEarnSettingsContent />
+    ) : activeSettingsSection === "Billing" ? (
+      <BillingSettingsContent
+        onGoToMembers={() => setActiveSettingsSection("Members")}
+        onGoToUsageLimits={() => setActiveSettingsSection("Usage and limits")}
+      />
+    ) : (
+      <>
+        <p className="text-sm text-muted-foreground">
+          Manage {activeSettingsSection.toLowerCase()} settings for your account
+          and workspace.
+        </p>
+        <div className="mt-4 divide-y divide-border border-y border-border">
+          {settingsContent[activeSettingsSection].map((item) => (
+            <div key={item} className="flex items-center justify-between py-3">
+              <span className="text-sm text-foreground">{item}</span>
+              <Button size="xs" variant="ghost" className="px-1">
+                Edit
+              </Button>
+            </div>
+          ))}
+        </div>
+      </>
+    )
+
+  return (
+    <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 flex-col bg-background text-foreground dark:bg-sidebar">
+      <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="space-y-5">
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                Settings
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Manage account, workspace, billing, and platform preferences.
+              </p>
+            </div>
+            {hasGeneralUnsavedChanges ? (
+              <Badge variant="amber" size="sm" className="w-fit shrink-0">
+                Unsaved changes
+              </Badge>
+            ) : null}
+          </header>
+
+          <div className="flex items-start gap-14">
+            <aside className="w-44 shrink-0">
+              <nav
+                aria-label="Settings sections"
+                className="sticky top-14 space-y-1"
+              >
+                {baseSettingsSections.map((section) =>
+                  renderSettingsSectionButton(section)
+                )}
+              </nav>
+            </aside>
+
+            <main className="min-w-0 flex-1">
+              <div className="mb-4 flex flex-col gap-1">
+                <h2 className="text-base font-semibold text-foreground">
+                  {activeSettingsSection}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {settingsContent[activeSettingsSection]?.[0] ??
+                    "Configure this section."}
+                </p>
+              </div>
+              <div data-settings-scope="true">{activeContent}</div>
+            </main>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -8459,9 +10476,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const refreshLiveUser = React.useCallback(() => {
     fetch("/api/users/me", { cache: "no-store", credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((res: { data?: { user: { id: string; full_name: string | null; email: string | null; avatar_url: string | null; platform_role: string } } }) => {
-        if (res.data?.user) setLiveUser(res.data.user)
-      })
+      .then(
+        (res: {
+          data?: {
+            user: {
+              id: string
+              full_name: string | null
+              email: string | null
+              avatar_url: string | null
+              platform_role: string
+            }
+          }
+        }) => {
+          if (res.data?.user) setLiveUser(res.data.user)
+        }
+      )
       .catch(() => {})
   }, [])
 
@@ -8496,13 +10525,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }, [liveUser])
 
   const liveUserName = liveUser?.full_name ?? ""
-  const liveUserInitials = liveUserName
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((t) => t[0]?.toUpperCase() ?? "")
-    .join("") || "U"
+  const liveUserInitials =
+    liveUserName
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((t) => t[0]?.toUpperCase() ?? "")
+      .join("") || "U"
   const userPreferenceKey = liveUser?.id ?? liveUser?.email ?? null
 
   const saveThemePreference = React.useCallback(
@@ -8547,9 +10577,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       soundsEnabled: true,
     }
     const rawSettings =
-      window.localStorage.getItem(appearanceSettingsStorageKey(userPreferenceKey)) ??
-      window.localStorage.getItem(ATMET_APPEARANCE_SETTINGS_STORAGE_KEY)
-    const settings = parseStoredAppearanceSettings(rawSettings, fallbackSettings)
+      window.localStorage.getItem(
+        appearanceSettingsStorageKey(userPreferenceKey)
+      ) ?? window.localStorage.getItem(ATMET_APPEARANCE_SETTINGS_STORAGE_KEY)
+    const settings = parseStoredAppearanceSettings(
+      rawSettings,
+      fallbackSettings
+    )
 
     setTheme(settings.theme)
     applyGlobalFontScale(settings.fontScale)
@@ -8566,7 +10600,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   }, [router])
 
-  const isPlatformAdmin = liveUser?.platform_role === "super_admin" || liveUser?.platform_role === "admin"
+  const isPlatformAdmin =
+    liveUser?.platform_role === "super_admin" ||
+    liveUser?.platform_role === "admin"
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [adminConsoleOpen, setAdminConsoleOpen] = React.useState(false)
   const [isSettingsCloseConfirmOpen, setIsSettingsCloseConfirmOpen] =
@@ -8579,62 +10615,43 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     React.useState<AdminConsoleSection>("Admin overview")
   const [profileReturnAdminSection, setProfileReturnAdminSection] =
     React.useState<AdminConsoleSection | null>(null)
-  const workspaceRecords = React.useMemo<WorkspaceProfile[]>(
-    () => {
-      if (isPlatformAdmin && workspaces.length === 0) {
-        return [
-          {
-            id: PLATFORM_ADMIN_WORKSPACE_ID,
-            name: "Atmet",
-            avatarUrl: "/Logos/Favicon Atmet.png",
-            initials: "A",
-            bgClass: "bg-cyan-500/15",
-            textClass: "text-cyan-700 dark:text-cyan-300",
-            primaryEmail: liveUser?.email ?? "",
-            description: "Platform administration workspace.",
-            country: "",
-          },
-        ]
-      }
+  const workspaceRecords = React.useMemo<WorkspaceProfile[]>(() => {
+    if (isPlatformAdmin && workspaces.length === 0) {
+      return [
+        {
+          id: PLATFORM_ADMIN_WORKSPACE_ID,
+          name: "Atmet",
+          avatarUrl: "/Logos/Favicon Atmet.png",
+          initials: "A",
+          bgClass: "bg-cyan-500/15",
+          textClass: "text-cyan-700 dark:text-cyan-300",
+          primaryEmail: liveUser?.email ?? "",
+          description: "Platform administration workspace.",
+          country: "",
+        },
+      ]
+    }
 
-      return workspaces.map((ws) => ({
-        id: ws.id,
-        name: ws.name,
-        avatarUrl: ws.avatar_url ?? null,
-        initials: deriveInitialsFromName(ws.name),
-        bgClass: "bg-sky-500/20",
-        textClass: "text-sky-700 dark:text-sky-300",
-        primaryEmail: ws.owner?.email ?? "",
-        description: "",
-        country:
-          countries.find((country) => country.value === ws.owner?.phone_country)
-            ?.label ??
-          ws.country ??
-          "",
-      }))
-    },
-    [isPlatformAdmin, liveUser?.email, workspaces]
-  )
+    return workspaces.map((ws) => ({
+      id: ws.id,
+      name: ws.name,
+      avatarUrl: ws.avatar_url ?? null,
+      initials: deriveInitialsFromName(ws.name),
+      bgClass: "bg-sky-500/20",
+      textClass: "text-sky-700 dark:text-sky-300",
+      primaryEmail: ws.owner?.email ?? "",
+      description: "",
+      country:
+        countries.find((country) => country.value === ws.owner?.phone_country)
+          ?.label ??
+        ws.country ??
+        "",
+    }))
+  }, [isPlatformAdmin, liveUser?.email, workspaces])
   const selectedWorkspaceId =
     isPlatformAdmin && workspaces.length === 0
       ? PLATFORM_ADMIN_WORKSPACE_ID
-      : ctxActiveId ?? workspaceRecords[0]?.id ?? ""
-  const setSelectedWorkspaceId = React.useCallback(
-    (workspaceId: string) => {
-      if (workspaceId === PLATFORM_ADMIN_WORKSPACE_ID) return
-      if (workspaceId === selectedWorkspaceId) return
-      setActiveWorkspace(workspaceId)
-      setStoredChats([])
-      setEditingChatId(null)
-      setEditingChatTitle("")
-      setMembersQuickSearchQuery("")
-      setMembersQuickSelectedId(null)
-      if (pathname.startsWith("/ai-core") && searchParams.get("chat")) {
-        router.push("/ai-core")
-      }
-    },
-    [pathname, router, searchParams, selectedWorkspaceId, setActiveWorkspace]
-  )
+      : (ctxActiveId ?? workspaceRecords[0]?.id ?? "")
   const [membersQuickSearchQuery, setMembersQuickSearchQuery] =
     React.useState("")
   const [membersQuickSelectedId, setMembersQuickSelectedId] = React.useState<
@@ -8646,11 +10663,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     React.useState(0)
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = React.useState(false)
   const [newWorkspaceName, setNewWorkspaceName] = React.useState("")
-  const [newWorkspaceAvatarUrl, setNewWorkspaceAvatarUrl] = React.useState<string | null>(null)
+  const [newWorkspaceAvatarUrl, setNewWorkspaceAvatarUrl] = React.useState<
+    string | null
+  >(null)
   const [newWorkspaceCountry, setNewWorkspaceCountry] = React.useState("")
   const [createWorkspaceError, setCreateWorkspaceError] = React.useState("")
   const [isCreatingWorkspace, setIsCreatingWorkspace] = React.useState(false)
-  const [isUploadingWorkspaceImage, setIsUploadingWorkspaceImage] = React.useState(false)
+  const [isUploadingWorkspaceImage, setIsUploadingWorkspaceImage] =
+    React.useState(false)
   const createWorkspaceImageInputRef = React.useRef<HTMLInputElement>(null)
   const [storedChats, setStoredChats] = React.useState<StoredChatItem[]>([])
   const [isChatsExpanded, setIsChatsExpanded] = React.useState(true)
@@ -8658,18 +10678,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [editingChatTitle, setEditingChatTitle] = React.useState("")
   const discardNextRenameSubmitRef = React.useRef(false)
   const activeChatId = searchParams.get("chat")
-  const selectedWorkspace = React.useMemo(
-    () => {
-      const fallbackWorkspace = workspaceRecords[0] ?? null
-      if (!fallbackWorkspace) return null
-      return (
-        workspaceRecords.find(
-          (workspace) => workspace.id === selectedWorkspaceId
-        ) ?? fallbackWorkspace
-      )
-    },
-    [selectedWorkspaceId, workspaceRecords]
-  )
+  const selectedWorkspace = React.useMemo(() => {
+    const fallbackWorkspace = workspaceRecords[0] ?? null
+    if (!fallbackWorkspace) return null
+    return (
+      workspaceRecords.find(
+        (workspace) => workspace.id === selectedWorkspaceId
+      ) ?? fallbackWorkspace
+    )
+  }, [selectedWorkspaceId, workspaceRecords])
 
   const handleSettingsOpenChange = React.useCallback(
     (nextOpen: boolean) => {
@@ -8705,9 +10722,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     [sortedChats]
   )
 
-  const persistStoredChats = React.useCallback((nextChats: StoredChatItem[]) => {
-    setStoredChats(nextChats)
-  }, [])
+  const persistStoredChats = React.useCallback(
+    (nextChats: StoredChatItem[]) => {
+      setStoredChats(nextChats)
+    },
+    []
+  )
 
   const toggleChatPin = React.useCallback(
     (chatId: string) => {
@@ -8767,7 +10787,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       discardNextRenameSubmitRef.current = false
       cancelRenamingChat()
     },
-    [apiFetch, cancelRenamingChat, editingChatTitle, persistStoredChats, storedChats]
+    [
+      apiFetch,
+      cancelRenamingChat,
+      editingChatTitle,
+      persistStoredChats,
+      storedChats,
+    ]
   )
 
   const deleteChat = React.useCallback(
@@ -8821,6 +10847,76 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     setIsUploadingWorkspaceImage(false)
   }, [])
 
+  React.useEffect(() => {
+    const openCreateWorkspace = () => {
+      resetCreateWorkspaceForm()
+      setCreateWorkspaceOpen(true)
+    }
+    const openWorkspaceMembers = () => {
+      setActiveSettingsSection("Members")
+      setSettingsOpen(true)
+    }
+    const openWorkspaceProfile = () => {
+      setActiveSettingsSection("Workspace")
+      setSettingsOpen(true)
+    }
+    const openAccountProfile = () => {
+      setActiveSettingsSection("Account")
+      setSettingsOpen(true)
+    }
+    const openSettings = () => {
+      setActiveSettingsSection("Account")
+      setSettingsOpen(true)
+    }
+    const openAdminConsole = () => {
+      if (!isPlatformAdmin) return
+      router.push("/admin-console")
+    }
+
+    window.addEventListener(
+      ATMET_OPEN_CREATE_WORKSPACE_EVENT,
+      openCreateWorkspace
+    )
+    window.addEventListener(
+      ATMET_OPEN_WORKSPACE_MEMBERS_EVENT,
+      openWorkspaceMembers
+    )
+    window.addEventListener(
+      ATMET_OPEN_WORKSPACE_PROFILE_EVENT,
+      openWorkspaceProfile
+    )
+    window.addEventListener(
+      ATMET_OPEN_ACCOUNT_PROFILE_EVENT,
+      openAccountProfile
+    )
+    window.addEventListener(ATMET_OPEN_SETTINGS_EVENT, openSettings)
+    window.addEventListener(ATMET_OPEN_ADMIN_CONSOLE_EVENT, openAdminConsole)
+
+    return () => {
+      window.removeEventListener(
+        ATMET_OPEN_CREATE_WORKSPACE_EVENT,
+        openCreateWorkspace
+      )
+      window.removeEventListener(
+        ATMET_OPEN_WORKSPACE_MEMBERS_EVENT,
+        openWorkspaceMembers
+      )
+      window.removeEventListener(
+        ATMET_OPEN_WORKSPACE_PROFILE_EVENT,
+        openWorkspaceProfile
+      )
+      window.removeEventListener(
+        ATMET_OPEN_ACCOUNT_PROFILE_EVENT,
+        openAccountProfile
+      )
+      window.removeEventListener(ATMET_OPEN_SETTINGS_EVENT, openSettings)
+      window.removeEventListener(
+        ATMET_OPEN_ADMIN_CONSOLE_EVENT,
+        openAdminConsole
+      )
+    }
+  }, [isPlatformAdmin, resetCreateWorkspaceForm, router])
+
   const handleCreateWorkspaceImageUpload = React.useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
@@ -8844,7 +10940,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         } | null
 
         if (!response.ok || !payload?.data?.url) {
-          setCreateWorkspaceError(payload?.error?.message ?? "Unable to upload image.")
+          setCreateWorkspaceError(
+            payload?.error?.message ?? "Unable to upload image."
+          )
           return
         }
 
@@ -8885,7 +10983,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         } | null
 
         if (!response.ok || !payload?.data?.workspace?.id) {
-          setCreateWorkspaceError(payload?.error?.message ?? "Unable to create workspace.")
+          setCreateWorkspaceError(
+            payload?.error?.message ?? "Unable to create workspace."
+          )
           return
         }
 
@@ -8935,7 +11035,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       }
       setStoredChats(
         (payload.data?.chats ?? []).map((chat) => {
-          const updatedAt = chat.updated_at ?? chat.created_at ?? new Date().toISOString()
+          const updatedAt =
+            chat.updated_at ?? chat.created_at ?? new Date().toISOString()
           return {
             id: chat.id,
             title: chat.title,
@@ -9016,11 +11117,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             return
           }
           if (section === "Help Docs") {
-            window.open(
-              HELP_DOCS_EXTERNAL_URL,
-              "_blank",
-              "noopener,noreferrer"
-            )
+            window.open(HELP_DOCS_EXTERNAL_URL, "_blank", "noopener,noreferrer")
             return
           }
           setActiveSettingsSection(section)
@@ -9076,43 +11173,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
 
   return (
-    <Sidebar variant="sidebar" collapsible="icon" {...props}>
-      <SidebarHeader className="gap-0 p-0">
-        <div className="h-10 border-b border-sidebar-border px-2 py-1 group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:border-b-0">
-          <VersionSwitcher
-            workspaces={workspaceRecords}
-            selectedWorkspaceId={
-              selectedWorkspaceId || workspaceRecords[0]?.id || ""
-            }
-            onSelectedWorkspaceIdChange={setSelectedWorkspaceId}
-            showWorkspaceActions={selectedWorkspaceId !== PLATFORM_ADMIN_WORKSPACE_ID}
-            onCreateWorkspace={() => {
-              resetCreateWorkspaceForm()
-              setCreateWorkspaceOpen(true)
-            }}
-            onAddUsersToWorkspace={() => {
-              setActiveSettingsSection("Members")
-              setSettingsOpen(true)
-            }}
-            onOpenWorkspaceProfile={() => {
-              setActiveSettingsSection("Workspace")
-              setSettingsOpen(true)
-            }}
-          />
-        </div>
-        <div className="px-2 py-2 group-data-[collapsible=icon]:hidden">
-          <SearchForm />
-        </div>
-      </SidebarHeader>
+    <Sidebar
+      variant="sidebar"
+      collapsible="offcanvas"
+      className="!border-e-0 !border-r-0"
+      {...props}
+    >
       <SidebarContent>
-        <SidebarGroup className="pt-0">
+        <SidebarGroup className="hidden pt-0">
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
-                      isActive={item.url !== "#" && pathname.startsWith(item.url)}
+                      isActive={
+                        item.url !== "#" && pathname.startsWith(item.url)
+                      }
                       className="h-7"
                       render={
                         item.url === "#" ? (
@@ -9145,7 +11222,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarGroup className="min-h-0 flex-1 pt-2 group-data-[collapsible=icon]:hidden">
+        <SidebarGroup className="min-h-0 flex-1 px-0 pt-2 group-data-[collapsible=icon]:hidden">
           <div className="mb-1 flex items-center justify-between pr-2 pl-0">
             <button
               type="button"
@@ -9180,254 +11257,252 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           >
             <div className="min-h-0 overflow-hidden">
               <SidebarGroupContent className="flex h-full min-h-0 flex-col">
-                <div
-                  className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto pr-1"
-                >
-                <SidebarMenu>
-                  {pinnedChats.map((chat, index) => (
-                    <SidebarMenuItem
-                      key={chat.id}
-                      className={cn("w-full", index > 0 && "mt-1")}
-                    >
-                      {editingChatId === chat.id ? (
-                        <SidebarMenuButton
-                          render={<div />}
-                          className="h-7 pr-2"
-                        >
-                          <input
-                            autoFocus
-                            value={editingChatTitle}
-                            onChange={(event) =>
-                              setEditingChatTitle(event.target.value)
-                            }
-                            onFocus={(event) => event.currentTarget.select()}
-                            onClick={(event) => event.stopPropagation()}
-                            onKeyDown={(event) => {
-                              event.stopPropagation()
-                              if (event.key === "Enter") {
-                                event.preventDefault()
-                                submitRenamingChat(chat.id)
-                              }
-                              if (event.key === "Escape") {
-                                event.preventDefault()
-                                discardNextRenameSubmitRef.current = true
-                                cancelRenamingChat()
-                              }
-                            }}
-                            onBlur={() => submitRenamingChat(chat.id)}
-                            className="h-6 w-full rounded-sm border border-input bg-transparent px-1.5 text-sm outline-hidden focus-visible:border-primary"
-                            aria-label="Rename chat"
-                          />
-                        </SidebarMenuButton>
-                      ) : (
-                        <>
+                <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto pr-1">
+                  <SidebarMenu>
+                    {pinnedChats.map((chat, index) => (
+                      <SidebarMenuItem
+                        key={chat.id}
+                        className={cn("w-full", index > 0 && "mt-1")}
+                      >
+                        {editingChatId === chat.id ? (
                           <SidebarMenuButton
-                            isActive={
-                              pathname.startsWith("/ai-core") &&
-                              activeChatId === chat.id
-                            }
-                            render={
-                              <Link
-                                href={chat.path ?? `/ai-core?chat=${chat.id}`}
-                              />
-                            }
-                            className="h-7 pr-10 group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground"
+                            render={<div />}
+                            className="h-7 pr-2"
                           >
-                            <span className="truncate text-sm">
-                              {chat.title}
-                            </span>
+                            <input
+                              autoFocus
+                              value={editingChatTitle}
+                              onChange={(event) =>
+                                setEditingChatTitle(event.target.value)
+                              }
+                              onFocus={(event) => event.currentTarget.select()}
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => {
+                                event.stopPropagation()
+                                if (event.key === "Enter") {
+                                  event.preventDefault()
+                                  submitRenamingChat(chat.id)
+                                }
+                                if (event.key === "Escape") {
+                                  event.preventDefault()
+                                  discardNextRenameSubmitRef.current = true
+                                  cancelRenamingChat()
+                                }
+                              }}
+                              onBlur={() => submitRenamingChat(chat.id)}
+                              className="h-6 w-full rounded-sm border border-input bg-transparent px-1.5 text-sm outline-hidden focus-visible:border-primary"
+                              aria-label="Rename chat"
+                            />
                           </SidebarMenuButton>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
+                        ) : (
+                          <>
+                            <SidebarMenuButton
+                              isActive={
+                                pathname.startsWith("/ai-core") &&
+                                activeChatId === chat.id
+                              }
                               render={
-                                <SidebarMenuAction
-                                  showOnHover
-                                  className="z-10 hover:bg-transparent aria-expanded:bg-transparent"
+                                <Link
+                                  href={chat.path ?? `/ai-core?chat=${chat.id}`}
+                                />
+                              }
+                              className="h-7 pr-10 group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground"
+                            >
+                              <span className="truncate text-sm">
+                                {chat.title}
+                              </span>
+                            </SidebarMenuButton>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <SidebarMenuAction
+                                    showOnHover
+                                    className="z-10 hover:bg-transparent aria-expanded:bg-transparent"
+                                    onClick={(event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                    }}
+                                    aria-label="Chat options"
+                                  />
+                                }
+                              >
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                side="right"
+                                className="min-w-36"
+                              >
+                                <DropdownMenuItem
                                   onClick={(event) => {
                                     event.preventDefault()
                                     event.stopPropagation()
+                                    toggleChatPin(chat.id)
                                   }}
-                                  aria-label="Chat options"
-                                />
-                              }
-                            >
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              align="end"
-                              side="right"
-                              className="min-w-36"
-                            >
-                              <DropdownMenuItem
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  toggleChatPin(chat.id)
-                                }}
-                              >
-                                <PinOff className="h-4 w-4 opacity-80" />
-                                Unpin chat
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  startRenamingChat(chat.id)
-                                }}
-                              >
-                                <PenLine className="h-4 w-4 opacity-80" />
-                                Rename
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  deleteChat(chat.id)
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </>
-                      )}
-                    </SidebarMenuItem>
-                  ))}
-                  {pinnedChats.length > 0 && unpinnedChats.length > 0 && (
-                    <li aria-hidden className="h-4" />
-                  )}
-                  {unpinnedChats.map((chat, index) => (
-                    <SidebarMenuItem
-                      key={chat.id}
-                      className={cn("w-full", index > 0 && "mt-1")}
-                    >
-                      {editingChatId === chat.id ? (
-                        <SidebarMenuButton
-                          render={<div />}
-                          className="h-7 pr-2"
-                        >
-                          <input
-                            autoFocus
-                            value={editingChatTitle}
-                            onChange={(event) =>
-                              setEditingChatTitle(event.target.value)
-                            }
-                            onFocus={(event) => event.currentTarget.select()}
-                            onClick={(event) => event.stopPropagation()}
-                            onKeyDown={(event) => {
-                              event.stopPropagation()
-                              if (event.key === "Enter") {
-                                event.preventDefault()
-                                submitRenamingChat(chat.id)
-                              }
-                              if (event.key === "Escape") {
-                                event.preventDefault()
-                                discardNextRenameSubmitRef.current = true
-                                cancelRenamingChat()
-                              }
-                            }}
-                            onBlur={() => submitRenamingChat(chat.id)}
-                            className="h-6 w-full rounded-sm border border-input bg-transparent px-1.5 text-sm outline-hidden focus-visible:border-primary"
-                            aria-label="Rename chat"
-                          />
-                        </SidebarMenuButton>
-                      ) : (
-                        <>
-                          <SidebarMenuButton
-                            isActive={
-                              pathname.startsWith("/ai-core") &&
-                              activeChatId === chat.id
-                            }
-                            render={
-                              <Link
-                                href={chat.path ?? `/ai-core?chat=${chat.id}`}
-                              />
-                            }
-                            className="h-7 pr-10 group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground"
-                          >
-                            <span className="truncate text-sm">
-                              {chat.title}
-                            </span>
-                          </SidebarMenuButton>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <SidebarMenuAction
-                                  showOnHover
-                                  className="z-10 hover:bg-transparent aria-expanded:bg-transparent"
+                                >
+                                  <PinOff className="h-4 w-4 opacity-80" />
+                                  Unpin chat
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
                                   onClick={(event) => {
                                     event.preventDefault()
                                     event.stopPropagation()
+                                    startRenamingChat(chat.id)
                                   }}
-                                  aria-label="Chat options"
+                                >
+                                  <PenLine className="h-4 w-4 opacity-80" />
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    deleteChat(chat.id)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        )}
+                      </SidebarMenuItem>
+                    ))}
+                    {pinnedChats.length > 0 && unpinnedChats.length > 0 && (
+                      <li aria-hidden className="h-4" />
+                    )}
+                    {unpinnedChats.map((chat, index) => (
+                      <SidebarMenuItem
+                        key={chat.id}
+                        className={cn("w-full", index > 0 && "mt-1")}
+                      >
+                        {editingChatId === chat.id ? (
+                          <SidebarMenuButton
+                            render={<div />}
+                            className="h-7 pr-2"
+                          >
+                            <input
+                              autoFocus
+                              value={editingChatTitle}
+                              onChange={(event) =>
+                                setEditingChatTitle(event.target.value)
+                              }
+                              onFocus={(event) => event.currentTarget.select()}
+                              onClick={(event) => event.stopPropagation()}
+                              onKeyDown={(event) => {
+                                event.stopPropagation()
+                                if (event.key === "Enter") {
+                                  event.preventDefault()
+                                  submitRenamingChat(chat.id)
+                                }
+                                if (event.key === "Escape") {
+                                  event.preventDefault()
+                                  discardNextRenameSubmitRef.current = true
+                                  cancelRenamingChat()
+                                }
+                              }}
+                              onBlur={() => submitRenamingChat(chat.id)}
+                              className="h-6 w-full rounded-sm border border-input bg-transparent px-1.5 text-sm outline-hidden focus-visible:border-primary"
+                              aria-label="Rename chat"
+                            />
+                          </SidebarMenuButton>
+                        ) : (
+                          <>
+                            <SidebarMenuButton
+                              isActive={
+                                pathname.startsWith("/ai-core") &&
+                                activeChatId === chat.id
+                              }
+                              render={
+                                <Link
+                                  href={chat.path ?? `/ai-core?chat=${chat.id}`}
                                 />
                               }
+                              className="h-7 pr-10 group-hover/menu-item:bg-sidebar-accent group-hover/menu-item:text-sidebar-accent-foreground"
                             >
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              align="end"
-                              side="right"
-                              className="min-w-36"
-                            >
-                              <DropdownMenuItem
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  toggleChatPin(chat.id)
-                                }}
+                              <span className="truncate text-sm">
+                                {chat.title}
+                              </span>
+                            </SidebarMenuButton>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <SidebarMenuAction
+                                    showOnHover
+                                    className="z-10 hover:bg-transparent aria-expanded:bg-transparent"
+                                    onClick={(event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                    }}
+                                    aria-label="Chat options"
+                                  />
+                                }
                               >
-                                <Pin className="h-4 w-4 opacity-80" />
-                                Pin chat
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  startRenamingChat(chat.id)
-                                }}
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                side="right"
+                                className="min-w-36"
                               >
-                                <PenLine className="h-4 w-4 opacity-80" />
-                                Rename
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  deleteChat(chat.id)
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </>
-                      )}
-                    </SidebarMenuItem>
-                  ))}
-                  {sortedChats.length === 0 && (
-                    <SidebarMenuItem>
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                        Chats will appear here automatically.
-                      </div>
-                    </SidebarMenuItem>
-                  )}
-                </SidebarMenu>
+                                <DropdownMenuItem
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    toggleChatPin(chat.id)
+                                  }}
+                                >
+                                  <Pin className="h-4 w-4 opacity-80" />
+                                  Pin chat
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    startRenamingChat(chat.id)
+                                  }}
+                                >
+                                  <PenLine className="h-4 w-4 opacity-80" />
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    deleteChat(chat.id)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        )}
+                      </SidebarMenuItem>
+                    ))}
+                    {sortedChats.length === 0 && (
+                      <SidebarMenuItem>
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          Chats will appear here automatically.
+                        </div>
+                      </SidebarMenuItem>
+                    )}
+                  </SidebarMenu>
                 </div>
               </SidebarGroupContent>
             </div>
           </div>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="hidden">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -9477,7 +11552,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           Admin console
                         </p>
                       </div>
-                      <nav className="no-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-4 pt-4">
+                      <nav className="no-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pt-4 pb-4">
                         {adminConsoleGroups.map((group) => (
                           <div key={group.label} className="space-y-1">
                             <p className="px-2 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
@@ -9504,7 +11579,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4"
                         data-settings-scope="true"
                       >
-                        {renderAdminConsoleContent(activeAdminConsoleSection, workspaceRecords.map(w => w.name))}
+                        {renderAdminConsoleContent(
+                          activeAdminConsoleSection,
+                          workspaceRecords.map((w) => w.name)
+                        )}
                       </div>
                     </div>
                   </div>
@@ -9536,7 +11614,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         Settings
                       </p>
                     </div>
-                    <nav className="no-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-4 pt-4">
+                    <nav className="no-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pt-4 pb-4">
                       <div className="space-y-1">
                         {baseSettingsSections.map((section) =>
                           renderSettingsSectionButton(section)
@@ -9594,10 +11672,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             profileReturnAdminSection
                               ? () => {
                                   setSettingsOpen(false)
-                                  setActiveAdminConsoleSection(
-                                    profileReturnAdminSection
+                                  router.push(
+                                    `/admin-console?section=${encodeURIComponent(profileReturnAdminSection)}`
                                   )
-                                  setAdminConsoleOpen(true)
                                   setProfileReturnAdminSection(null)
                                 }
                               : undefined
@@ -9744,10 +11821,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <IconUser className="h-4 w-4" stroke={1.5} />
                   Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="justify-between gap-3"
-                  disabled
-                >
+                <DropdownMenuItem className="justify-between gap-3" disabled>
                   <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
                     <Gift className="h-4 w-4" strokeWidth={1.6} />
                     Refer and earn
@@ -9763,7 +11837,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
-                  onClick={() => { void handleSignOut() }}
+                  onClick={() => {
+                    void handleSignOut()
+                  }}
                 >
                   <IconLogout2 className="h-4 w-4" stroke={1.5} />
                   Logout
@@ -9813,9 +11889,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <Label className="text-muted-foreground">
-                  Workspace image
-                </Label>
+                <Label className="text-muted-foreground">Workspace image</Label>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Optional image
                 </p>

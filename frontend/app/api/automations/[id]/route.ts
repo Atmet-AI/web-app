@@ -37,7 +37,15 @@ export async function GET(
         .in("chat_id", chatIds)
     : { data: [] }
 
-  return ok({ automation: data, chatUsers: chatUsers ?? [] })
+  const { data: agent } = await supabase
+    .from("agent")
+    .select(
+      "id, name, description, goal, status, instructions, blueprint_json, runtime_config_json, created_at, updated_at, tools:agent_tool(id, provider, tool_name, connection_id, permissions_json), triggers:agent_trigger(id, type, provider, event_type, status, config_json, external_trigger_id, error, last_received_at, last_run_at), memory:agent_memory(id, scope, key, value_json, updated_at), approvals:agent_approval(id, run_id, status, action_json, requested_at, resolved_at), runs:agent_run(id, status, input_json, output_json, queued_at, started_at, finished_at, error, created_at)"
+    )
+    .eq("legacy_automation_id", id)
+    .maybeSingle()
+
+  return ok({ automation: data, agent: agent ?? null, chatUsers: chatUsers ?? [] })
 }
 
 export async function PATCH(

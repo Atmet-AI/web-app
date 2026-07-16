@@ -14,18 +14,20 @@ import {
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import {
-  CheckCircle2,
   Clock3,
   FolderOpen,
   Loader2,
   MoreHorizontal,
+  PauseCircle,
+  Plus,
   Search,
   Trash2,
 } from "lucide-react"
 
-type ProjectStatus = "Active" | "In review" | "Completed"
+type ProjectStatus = "Active" | "In review" | "Paused"
 type WorkflowProject = {
   id: string
+  detailId: string
   title: string
   description: string
   tags: string[]
@@ -52,10 +54,10 @@ const statusMeta: Record<
     icon: Clock3,
     className: "text-amber-600",
   },
-  Completed: {
-    label: "Done",
-    icon: CheckCircle2,
-    className: "text-emerald-600",
+  Paused: {
+    label: "Paused",
+    icon: PauseCircle,
+    className: "text-muted-foreground",
   },
 }
 
@@ -75,35 +77,37 @@ export default function WorkflowPage() {
     }
 
     setIsLoading(true)
-    apiFetch("/api/automations")
+    apiFetch("/api/agents")
       .then((response) => (response.ok ? response.json() : null))
       .then(
         (payload: {
           data?: {
-            automations?: Array<{
+            agents?: Array<{
               id: string
+              legacy_automation_id: string | null
               name: string
               description: string | null
-              status: "active" | "inactive" | "draft"
+              status: "active" | "paused" | "archived" | "draft"
               created_by: string
               updated_at: string
             }>
           }
         } | null) => {
           setProjects(
-            (payload?.data?.automations ?? []).map((automation) => ({
-              id: automation.id,
-              title: automation.name,
-              description: automation.description ?? "",
-              tags: [automation.status],
-              createdBy: automation.created_by,
-              updatedAt: automation.updated_at,
+            (payload?.data?.agents ?? []).map((agent) => ({
+              id: agent.id,
+              detailId: agent.legacy_automation_id ?? agent.id,
+              title: agent.name,
+              description: agent.description ?? "",
+              tags: [agent.status],
+              createdBy: agent.created_by,
+              updatedAt: agent.updated_at,
               status:
-                automation.status === "active"
+                agent.status === "active"
                   ? "Active"
-                  : automation.status === "draft"
+                  : agent.status === "draft"
                     ? "In review"
-                    : "Completed",
+                    : "Paused",
             }))
           )
         }
@@ -131,13 +135,24 @@ export default function WorkflowPage() {
     <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 flex-col bg-background">
       <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div className="space-y-5">
-          <header className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Agents
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Browse and manage agents available for your workspace.
-            </p>
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                Agents
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Browse and manage agents available for your workspace.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => router.push("/ai-core")}
+              className="h-8 w-fit gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create agent
+            </Button>
           </header>
 
           {isLoading ? (
@@ -156,7 +171,7 @@ export default function WorkflowPage() {
                   <Input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search workflows"
+                    placeholder="Search agents"
                     className="surface-filter-field h-7 rounded-lg border-transparent pl-7 text-xs"
                   />
                 </div>
@@ -171,7 +186,7 @@ export default function WorkflowPage() {
                   >
                     All
                   </Button>
-                  {(["Active", "In review", "Completed"] as ProjectStatus[]).map((status) => (
+                  {(["Active", "In review", "Paused"] as ProjectStatus[]).map((status) => (
                     <Button
                       key={status}
                       type="button"
@@ -188,7 +203,7 @@ export default function WorkflowPage() {
 
               {filteredProjects.length === 0 ? (
                 <div className="flex h-44 w-full items-center justify-center rounded-xl border border-dashed border-border">
-                  <p className="text-sm text-muted-foreground">No tasks match this filter yet.</p>
+                  <p className="text-sm text-muted-foreground">No agents match this filter yet.</p>
                 </div>
               ) : (
                 <section className="w-full space-y-4">
@@ -203,11 +218,11 @@ export default function WorkflowPage() {
                           key={project.id}
                           role="button"
                           tabIndex={0}
-                          onClick={() => router.push(`/workflow/${project.id}`)}
+                          onClick={() => router.push(`/workflow/${project.detailId}`)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault()
-                              router.push(`/workflow/${project.id}`)
+                              router.push(`/workflow/${project.detailId}`)
                             }
                           }}
                           className={cn(
@@ -224,7 +239,7 @@ export default function WorkflowPage() {
                                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                                   <span className="inline-flex items-center gap-1">
                                     <FolderOpen className="h-3 w-3" />
-                                    Automation
+                                    Agent
                                   </span>
                                   <span>·</span>
                                   <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
@@ -257,7 +272,7 @@ export default function WorkflowPage() {
                                     size="icon-xs"
                                     variant="ghost"
                                     className="border-0 bg-transparent text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground aria-expanded:bg-transparent"
-                                    aria-label={`Task actions for ${project.title}`}
+                                    aria-label={`Agent actions for ${project.title}`}
                                     onClick={(event) => {
                                       event.stopPropagation()
                                     }}
@@ -276,17 +291,17 @@ export default function WorkflowPage() {
                                 <DropdownMenuItem
                                   onClick={(event) => {
                                     event.stopPropagation()
-                                    router.push(`/workflow/${project.id}`)
+                                    router.push(`/workflow/${project.detailId}`)
                                   }}
                                 >
                                   <FolderOpen className="h-3.5 w-3.5" />
-                                  Open task
+                                  Open agent
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   variant="destructive"
                                   onClick={(event) => {
                                     event.stopPropagation()
-                                    void apiFetch(`/api/automations/${project.id}`, {
+                                    void apiFetch(`/api/agents/${project.id}`, {
                                       method: "DELETE",
                                     })
                                     setProjects((previous) =>
@@ -295,7 +310,7 @@ export default function WorkflowPage() {
                                   }}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
-                                  Delete task
+                                  Delete agent
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -306,7 +321,7 @@ export default function WorkflowPage() {
                   </div>
 
                   <p className="text-center text-xs text-muted-foreground">
-                    You&apos;ve reached the end • {filteredProjects.length} tasks total
+                    You&apos;ve reached the end • {filteredProjects.length} agents total
                   </p>
                 </section>
               )}

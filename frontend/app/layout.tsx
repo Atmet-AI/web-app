@@ -6,6 +6,7 @@ import { headers } from "next/headers"
 import "./globals.css"
 import { AppSidebar } from "@/components/app-sidebar"
 import { CuelumeProvider } from "@/components/cuelume-provider"
+import { PlatformAppShell } from "@/components/platform-app-shell"
 import { PlatformNavbar } from "@/components/platform-navbar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -35,7 +36,8 @@ export const metadata: Metadata = {
     default: "Atmet",
     template: "%s | Atmet",
   },
-  description: "Atmet helps teams build AI coworker agents that understand workflows, connect apps, and run business work safely.",
+  description:
+    "Atmet helps teams build AI coworker agents that understand workflows, connect apps, and run business work safely.",
   alternates: {
     canonical: "/",
   },
@@ -59,7 +61,8 @@ export const metadata: Metadata = {
     url: "https://atmetai.com",
     siteName: "Atmet",
     title: "Atmet",
-    description: "Build AI coworker agents that understand workflows, connect apps, and run business work safely with Atmet.",
+    description:
+      "Build AI coworker agents that understand workflows, connect apps, and run business work safely with Atmet.",
     images: [
       {
         url: "/Atmet%20Preview%20Link.png",
@@ -73,7 +76,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Atmet",
-    description: "Build AI coworker agents that understand workflows, connect apps, and run business work safely with Atmet.",
+    description:
+      "Build AI coworker agents that understand workflows, connect apps, and run business work safely with Atmet.",
     images: ["/Atmet%20Preview%20Link.png"],
   },
 }
@@ -97,7 +101,13 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, fontSans.variable, fontArabic.variable, "font-sans")}
+      className={cn(
+        "antialiased",
+        fontMono.variable,
+        fontSans.variable,
+        fontArabic.variable,
+        "font-sans"
+      )}
     >
       <body>
         <ThemeProvider>
@@ -107,19 +117,28 @@ export default async function RootLayout({
             <>
               <CuelumeProvider />
               <WorkspaceProvider>
-              <TooltipProvider>
-                <SidebarProvider>
-                  <Suspense fallback={null}>
-                    <AppSidebar />
-                  </Suspense>
-                  <SidebarInset className="h-screen overflow-y-auto">
-                    <Suspense fallback={<div className="h-10 border-b border-border" />}>
-                      <PlatformNavbar />
-                    </Suspense>
-                    {children}
-                  </SidebarInset>
-                </SidebarProvider>
-              </TooltipProvider>
+                <TooltipProvider>
+                  <PlatformAppShell>
+                    <SidebarProvider
+                      defaultOpen={false}
+                      className="h-full min-h-0"
+                    >
+                      <Suspense fallback={null}>
+                        <AppSidebar />
+                      </Suspense>
+                      <SidebarInset className="h-full overflow-y-auto rounded-xl border border-border/80 bg-background bg-clip-padding shadow-[0_24px_90px_rgba(0,0,0,0.14)] peer-data-[state=expanded]:-ml-px peer-data-[state=expanded]:rounded-l-none peer-data-[state=expanded]:!border-l-0 peer-data-[state=expanded]:shadow-[18px_24px_90px_rgba(0,0,0,0.12)] dark:bg-sidebar dark:shadow-[0_24px_90px_rgba(0,0,0,0.46)] dark:peer-data-[state=expanded]:shadow-[18px_24px_90px_rgba(0,0,0,0.38)]">
+                        <Suspense
+                          fallback={
+                            <div className="h-10 border-b border-border" />
+                          }
+                        >
+                          <PlatformNavbar />
+                        </Suspense>
+                        {children}
+                      </SidebarInset>
+                    </SidebarProvider>
+                  </PlatformAppShell>
+                </TooltipProvider>
               </WorkspaceProvider>
             </>
           )}

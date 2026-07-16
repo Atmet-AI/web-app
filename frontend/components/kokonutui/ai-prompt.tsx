@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 /**
  * @author: @kokonutui
@@ -30,15 +30,15 @@ import {
   Upload,
   UserPlus,
   X,
-} from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { GradientSpin } from "gradient-spin";
-import { play } from "cuelume";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/registry/spell-ui/badge";
+} from "lucide-react"
+import { AnimatePresence, motion } from "motion/react"
+import { GradientSpin } from "gradient-spin"
+import { play } from "cuelume"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
+import Image from "next/image"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/registry/spell-ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -46,33 +46,37 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Kbd } from "@/components/ui/kbd";
-import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
-import { cn } from "@/lib/utils";
-import { useWorkspace } from "@/lib/workspace-context";
+} from "@/components/ui/dropdown-menu"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Kbd } from "@/components/ui/kbd"
+import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea"
+import { cn } from "@/lib/utils"
+import { useWorkspace } from "@/lib/workspace-context"
 import {
   parseAppApprovalRequest,
   type AppApprovalRequest,
-} from "@/lib/integrations/app-approval";
+} from "@/lib/integrations/app-approval"
 import {
   cleanEmailAddress,
   parseAppMiniUiRequest,
   type AppMiniUiRequest,
-} from "@/lib/integrations/app-mini-ui";
-import { AtmetGenerativeUi } from "@/components/generative-ui/AtmetGenerativeUi";
-import { appMiniUiToAtmetUi } from "@/lib/generative-ui/app-mini-ui-adapter";
-import { parseAtmetUiPayload } from "@/lib/generative-ui/schema";
+} from "@/lib/integrations/app-mini-ui"
+import { AtmetGenerativeUi } from "@/components/generative-ui/AtmetGenerativeUi"
+import { appMiniUiToAtmetUi } from "@/lib/generative-ui/app-mini-ui-adapter"
+import { parseAtmetUiPayload } from "@/lib/generative-ui/schema"
 import {
   Artifact,
   ArtifactAction,
@@ -81,7 +85,7 @@ import {
   ArtifactDescription,
   ArtifactHeader,
   ArtifactTitle,
-} from "@/components/ai/artifact";
+} from "@/components/ai/artifact"
 import {
   DocumentCsvIllustration,
   DocumentJsonIllustration,
@@ -89,7 +93,7 @@ import {
   DocumentTxtIllustration,
   DocumentXlsxIllustration,
   DocumentZipIllustration,
-} from "@/components/file-type-illustrations";
+} from "@/components/file-type-illustrations"
 
 const OPENAI_SVG = (
   <div>
@@ -121,15 +125,15 @@ const OPENAI_SVG = (
       />
     </svg>
   </div>
-);
+)
 
 const ATMET_THINKING_GRADIENT = [
   { position: 0, color: "#0A84FF" },
   { position: 0.35, color: "#28B8FF" },
   { position: 0.68, color: "#66E3FF" },
   { position: 1, color: "#2F6BFF" },
-];
-const CREATE_SKILL_COMMAND = "create skill";
+]
+const CREATE_SKILL_COMMAND = "create skill"
 
 type AttachmentKind =
   | "image"
@@ -138,76 +142,76 @@ type AttachmentKind =
   | "document"
   | "archive"
   | "text"
-  | "other";
+  | "other"
 
 type MessageAttachment = {
-  id: string;
-  fileId?: string;
-  name: string;
-  kind: AttachmentKind;
-  previewUrl?: string;
-};
+  id: string
+  fileId?: string
+  name: string
+  kind: AttachmentKind
+  previewUrl?: string
+}
 
 type AttachmentDraft = {
-  id: string;
-  name: string;
-  kind: AttachmentKind;
-  previewUrl?: string;
-  file?: File;
-};
+  id: string
+  name: string
+  kind: AttachmentKind
+  previewUrl?: string
+  file?: File
+}
 
 type ChatMessage = {
-  id: number;
-  serverId?: string;
-  role: "user" | "assistant";
-  content: string;
-  attachments?: MessageAttachment[];
-};
+  id: number
+  serverId?: string
+  role: "user" | "assistant"
+  content: string
+  attachments?: MessageAttachment[]
+}
 
 type ApiMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
+  id: string
+  role: "user" | "assistant"
+  content: string
   metadata?: {
-    attachments?: MessageAttachment[];
-    uiBlocks?: unknown[];
-  } | null;
-};
+    attachments?: MessageAttachment[]
+    uiBlocks?: unknown[]
+  } | null
+}
 
 type UploadedFilePayload = {
-  id: string;
-  name: string;
-  mime_type: string;
-  size_bytes: number;
-};
+  id: string
+  name: string
+  mime_type: string
+  size_bytes: number
+}
 
 type CommandMenuState = {
-  type: "skill" | "app";
-  query: string;
-  start: number;
-  end: number;
-};
+  type: "skill" | "app"
+  query: string
+  start: number
+  end: number
+}
 
 type AssistantContentSegment =
   | { type: "text"; value: string }
-  | { type: "code"; language: string; value: string };
+  | { type: "code"; language: string; value: string }
 
-const AI_CORE_CHATS_UPDATED_EVENT = "ai-core-chats-updated";
+const AI_CORE_CHATS_UPDATED_EVENT = "ai-core-chats-updated"
 
 type AIPromptProps = {
-  chatId?: string | null;
-  persistChatListEntry?: boolean;
-  hideGreeting?: boolean;
-  dockComposerToBottom?: boolean;
-  glassComposer?: boolean;
-  fixedCommandBadge?: string;
-  onConversationStart?: () => void;
-  onAutomationConversationStart?: () => void;
-  onConversationActivityChange?: (isActive: boolean) => void;
-  onAddUserToChat?: () => void;
-  userFullName?: string;
-  enableCreateAgent?: boolean;
-};
+  chatId?: string | null
+  persistChatListEntry?: boolean
+  hideGreeting?: boolean
+  dockComposerToBottom?: boolean
+  glassComposer?: boolean
+  fixedCommandBadge?: string
+  onConversationStart?: () => void
+  onAutomationConversationStart?: () => void
+  onConversationActivityChange?: (isActive: boolean) => void
+  onAddUserToChat?: () => void
+  userFullName?: string
+  enableCreateAgent?: boolean
+}
 
 const AI_MODELS = [
   "Atmet",
@@ -216,36 +220,37 @@ const AI_MODELS = [
   "Claude 4.5 Sonnet",
   "GPT-5-1 Mini",
   "GPT-5-1",
-] as const;
+] as const
 
 const DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS =
-  "You are a customer support agent replying on Telegram. Reply in the same language as the customer unless the instructions say otherwise. Be concise, friendly, and practical. Ask one focused question when information is missing. Do not explain how to create, deploy, or connect a Telegram bot unless the customer asks about that. If the request needs a human, say the team will follow up.";
-const TELEGRAM_AVATAR_MAX_BYTES = 750 * 1024;
+  "You are a customer support agent replying on Telegram. Reply in the same language as the customer unless the instructions say otherwise. Be concise, friendly, and practical. Ask one focused question when information is missing. Do not explain how to create, deploy, or connect a Telegram bot unless the customer asks about that. If the request needs a human, say the team will follow up."
+const TELEGRAM_AVATAR_MAX_BYTES = 750 * 1024
 
 function readImageAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     if (!file.type.startsWith("image/")) {
-      reject(new Error("Choose an image file for the bot avatar."));
-      return;
+      reject(new Error("Choose an image file for the bot avatar."))
+      return
     }
 
     if (file.size > TELEGRAM_AVATAR_MAX_BYTES) {
-      reject(new Error("Choose an avatar smaller than 750 KB."));
-      return;
+      reject(new Error("Choose an avatar smaller than 750 KB."))
+      return
     }
 
-    const reader = new FileReader();
+    const reader = new FileReader()
     reader.onload = () => {
-      const result = reader.result;
+      const result = reader.result
       if (typeof result !== "string") {
-        reject(new Error("Unable to read this avatar image."));
-        return;
+        reject(new Error("Unable to read this avatar image."))
+        return
       }
-      resolve(result);
-    };
-    reader.onerror = () => reject(new Error("Unable to read this avatar image."));
-    reader.readAsDataURL(file);
-  });
+      resolve(result)
+    }
+    reader.onerror = () =>
+      reject(new Error("Unable to read this avatar image."))
+    reader.readAsDataURL(file)
+  })
 }
 
 function normalizePlanText(value: string) {
@@ -253,34 +258,42 @@ function normalizePlanText(value: string) {
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/[#>*_`-]/g, " ")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
 }
 
 function looksLikeSetupGuide(value: string) {
-  return /botfather|newbot|deploy|server|cloud function|webhook|bot token|write the bot code|telegram bot library/i.test(value);
+  return /botfather|newbot|deploy|server|cloud function|webhook|bot token|write the bot code|telegram bot library/i.test(
+    value
+  )
 }
 
-function draftTelegramAgentInstructions(plan: string, transcript: ChatMessage[]) {
-  const normalizedPlan = normalizePlanText(plan);
+function draftTelegramAgentInstructions(
+  plan: string,
+  transcript: ChatMessage[]
+) {
+  const normalizedPlan = normalizePlanText(plan)
   const latestUserAsk = [...transcript]
     .reverse()
-    .find((message) => message.role === "user" && message.content.trim().length > 0)
-    ?.content.trim();
+    .find(
+      (message) => message.role === "user" && message.content.trim().length > 0
+    )
+    ?.content.trim()
 
   const businessGoal = latestUserAsk
     ? `The user asked Atmet to build this Telegram agent: "${latestUserAsk.slice(0, 420)}".`
-    : "The user asked Atmet to build a Telegram customer agent.";
+    : "The user asked Atmet to build a Telegram customer agent."
 
   if (!normalizedPlan || looksLikeSetupGuide(normalizedPlan)) {
-    return `${DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS}\n\n${businessGoal}`;
+    return `${DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS}\n\n${businessGoal}`
   }
 
   const planContext =
-    normalizedPlan.length > 700 ? `${normalizedPlan.slice(0, 697)}...` : normalizedPlan;
+    normalizedPlan.length > 700
+      ? `${normalizedPlan.slice(0, 697)}...`
+      : normalizedPlan
 
-  return `${DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS}\n\n${businessGoal}\n\nUse this plan as behavior context, not as setup instructions: ${planContext}`;
+  return `${DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS}\n\n${businessGoal}\n\nUse this plan as behavior context, not as setup instructions: ${planContext}`
 }
-
 
 export default function AI_Prompt({
   chatId = null,
@@ -296,193 +309,250 @@ export default function AI_Prompt({
   userFullName = "there",
   enableCreateAgent = true,
 }: AIPromptProps) {
-  const router = useRouter();
-  const [value, setValue] = useState("");
-  const [composerScrollTop, setComposerScrollTop] = useState(0);
-  const [activeTab] = useState<"automation" | "chat">("automation");
-  const [connectedApps, setConnectedApps] = useState<string[]>([]);
-  const [selectedSkill, setSelectedSkill] = useState("No skill");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isResponding, setIsResponding] = useState(false);
-  const [resolvedChatId, setResolvedChatId] = useState<string | null>(chatId ?? null);
-  const [creatingAgentMessageId, setCreatingAgentMessageId] = useState<number | null>(null);
-  const [createAgentError, setCreateAgentError] = useState<string | null>(null);
-  const [agentSetupMessageId, setAgentSetupMessageId] = useState<number | null>(null);
-  const [telegramAgentName, setTelegramAgentName] = useState("Telegram support agent");
-  const [telegramAgentInstructions, setTelegramAgentInstructions] = useState(DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS);
-  const [telegramAgentMode, setTelegramAgentMode] = useState<"atmet" | "agent_api">("atmet");
-  const [telegramAgentApiUrl, setTelegramAgentApiUrl] = useState("");
-  const [isCreatingTelegramAgent, setIsCreatingTelegramAgent] = useState(false);
-  const [telegramAgentError, setTelegramAgentError] = useState<string | null>(null);
-  const [telegramAgentSuccess, setTelegramAgentSuccess] = useState<string | null>(null);
-  const [telegramBotSetupMode, setTelegramBotSetupMode] = useState<"existing" | "new">("new");
-  const [newTelegramBotToken, setNewTelegramBotToken] = useState("");
-  const [newTelegramBotName, setNewTelegramBotName] = useState("");
-  const [newTelegramBotAvatarUrl, setNewTelegramBotAvatarUrl] = useState<string | null>(null);
-  const [newTelegramBotAvatarName, setNewTelegramBotAvatarName] = useState("");
-  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const router = useRouter()
+  const [value, setValue] = useState("")
+  const [composerScrollTop, setComposerScrollTop] = useState(0)
+  const [activeTab] = useState<"automation" | "chat">("automation")
+  const [connectedApps, setConnectedApps] = useState<string[]>([])
+  const [selectedSkill, setSelectedSkill] = useState("No skill")
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [isResponding, setIsResponding] = useState(false)
+  const [resolvedChatId, setResolvedChatId] = useState<string | null>(
+    chatId ?? null
+  )
+  const [creatingAgentMessageId, setCreatingAgentMessageId] = useState<
+    number | null
+  >(null)
+  const [createAgentError, setCreateAgentError] = useState<string | null>(null)
+  const [agentSetupMessageId, setAgentSetupMessageId] = useState<number | null>(
+    null
+  )
+  const [telegramAgentName, setTelegramAgentName] = useState(
+    "Telegram support agent"
+  )
+  const [telegramAgentInstructions, setTelegramAgentInstructions] = useState(
+    DEFAULT_TELEGRAM_AGENT_INSTRUCTIONS
+  )
+  const [telegramAgentMode, setTelegramAgentMode] = useState<
+    "atmet" | "agent_api"
+  >("atmet")
+  const [telegramAgentApiUrl, setTelegramAgentApiUrl] = useState("")
+  const [isCreatingTelegramAgent, setIsCreatingTelegramAgent] = useState(false)
+  const [telegramAgentError, setTelegramAgentError] = useState<string | null>(
+    null
+  )
+  const [telegramAgentSuccess, setTelegramAgentSuccess] = useState<
+    string | null
+  >(null)
+  const [telegramBotSetupMode, setTelegramBotSetupMode] = useState<
+    "existing" | "new"
+  >("new")
+  const [newTelegramBotToken, setNewTelegramBotToken] = useState("")
+  const [newTelegramBotName, setNewTelegramBotName] = useState("")
+  const [newTelegramBotAvatarUrl, setNewTelegramBotAvatarUrl] = useState<
+    string | null
+  >(null)
+  const [newTelegramBotAvatarName, setNewTelegramBotAvatarName] = useState("")
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [pendingEditConfirmation, setPendingEditConfirmation] = useState<{
-    messageId: number;
-    laterCount: number;
-  } | null>(null);
-  const [attachedFiles, setAttachedFiles] = useState<AttachmentDraft[]>([]);
+    messageId: number
+    laterCount: number
+  } | null>(null)
+  const [attachedFiles, setAttachedFiles] = useState<AttachmentDraft[]>([])
   const [assistantFeedback, setAssistantFeedback] = useState<
     Record<number, "like" | "dislike">
-  >({});
-  const [appMiniUiValues, setAppMiniUiValues] = useState<Record<number, Record<string, string>>>({});
-  const [resolvedAppRequests, setResolvedAppRequests] = useState<Record<string, boolean>>({});
-  const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
+  >({})
+  const [appMiniUiValues, setAppMiniUiValues] = useState<
+    Record<number, Record<string, string>>
+  >({})
+  const [resolvedAppRequests, setResolvedAppRequests] = useState<
+    Record<string, boolean>
+  >({})
+  const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({})
   const [codeRunOutput, setCodeRunOutput] = useState<
     Record<string, { status: "success" | "error" | "info"; output: string }>
-  >({});
-  const copyTimersRef = useRef<Record<string, number>>({});
-  const [heroLine1, setHeroLine1] = useState("");
-  const [heroTypingLine, setHeroTypingLine] = useState<0 | 1>(0);
-  const [commandMenu, setCommandMenu] = useState<CommandMenuState | null>(null);
-  const [highlightedCommandIndex, setHighlightedCommandIndex] = useState(0);
-  const instanceId = useId().replace(/:/g, "");
-  const fileInputId = `ai-upload-input-${instanceId}`;
-  const textareaId = `ai-input-${instanceId}`;
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const telegramAvatarInputRef = useRef<HTMLInputElement>(null);
-  const attachedFilesRef = useRef<AttachmentDraft[]>([]);
-  const messagesRef = useRef<ChatMessage[]>([]);
-  const nextMessageIdRef = useRef(Date.now());
-  const activeChatIdRef = useRef<string | null>(null);
-  const activeChatTitleRef = useRef<string | null>(null);
-  const locallyStreamingChatIdRef = useRef<string | null>(null);
-  const messagesViewportRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  >({})
+  const copyTimersRef = useRef<Record<string, number>>({})
+  const [heroLine1, setHeroLine1] = useState("")
+  const [heroTypingLine, setHeroTypingLine] = useState<0 | 1>(0)
+  const [commandMenu, setCommandMenu] = useState<CommandMenuState | null>(null)
+  const [highlightedCommandIndex, setHighlightedCommandIndex] = useState(0)
+  const instanceId = useId().replace(/:/g, "")
+  const fileInputId = `ai-upload-input-${instanceId}`
+  const textareaId = `ai-input-${instanceId}`
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const telegramAvatarInputRef = useRef<HTMLInputElement>(null)
+  const attachedFilesRef = useRef<AttachmentDraft[]>([])
+  const messagesRef = useRef<ChatMessage[]>([])
+  const nextMessageIdRef = useRef(Date.now())
+  const activeChatIdRef = useRef<string | null>(null)
+  const activeChatTitleRef = useRef<string | null>(null)
+  const locallyStreamingChatIdRef = useRef<string | null>(null)
+  const messagesViewportRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight: 72,
     maxHeight: 300,
-  });
-  const [selectedModel, setSelectedModel] = useState("Atmet");
+  })
+  const [selectedModel, setSelectedModel] = useState("Atmet")
   const fixedSkillName = useMemo(() => {
-    if (!fixedCommandBadge) return null;
-    const normalized = fixedCommandBadge.trim().replace(/^\//, "").trim();
-    return normalized.length > 0 ? normalized : null;
-  }, [fixedCommandBadge]);
+    if (!fixedCommandBadge) return null
+    const normalized = fixedCommandBadge.trim().replace(/^\//, "").trim()
+    return normalized.length > 0 ? normalized : null
+  }, [fixedCommandBadge])
   const lockedComposerPrefix = useMemo(
     () => (fixedSkillName ? `/${fixedSkillName} ` : ""),
     [fixedSkillName]
-  );
+  )
   const firstName = useMemo(
     () => userFullName.trim().split(/\s+/)[0] || "there",
     [userFullName]
-  );
-  const { apiFetch } = useWorkspace();
+  )
+  const { apiFetch } = useWorkspace()
 
   type IntegrationConnection = {
-    id: string;
-    connection_name?: string | null;
-    connected_account?: string | null;
-    status?: string | null;
-  };
+    id: string
+    connection_name?: string | null
+    connected_account?: string | null
+    status?: string | null
+  }
   type Integration = {
-    slug: string;
-    name: string;
-    logo: string;
-    connected: boolean;
-    connection_count?: number;
-    connections?: IntegrationConnection[];
-  };
-  const [availableIntegrations, setAvailableIntegrations] = useState<Integration[]>([]);
-  const [availableSkillNames, setAvailableSkillNames] = useState<string[]>([]);
-  const [telegramConnections, setTelegramConnections] = useState<IntegrationConnection[]>([]);
-  const [selectedTelegramConnectionId, setSelectedTelegramConnectionId] = useState("");
+    slug: string
+    name: string
+    logo: string
+    connected: boolean
+    connection_count?: number
+    connections?: IntegrationConnection[]
+  }
+  const [availableIntegrations, setAvailableIntegrations] = useState<
+    Integration[]
+  >([])
+  const [availableSkillNames, setAvailableSkillNames] = useState<string[]>([])
+  const [telegramConnections, setTelegramConnections] = useState<
+    IntegrationConnection[]
+  >([])
+  const [selectedTelegramConnectionId, setSelectedTelegramConnectionId] =
+    useState("")
 
   useEffect(() => {
     apiFetch("/api/integrations")
       .then((r) => r.json())
       .then((res: { data?: { integrations?: Integration[] } }) => {
-        if (res.data?.integrations) setAvailableIntegrations(res.data.integrations);
+        if (res.data?.integrations)
+          setAvailableIntegrations(res.data.integrations)
       })
-      .catch(() => {});
+      .catch(() => {})
     apiFetch("/api/skills")
       .then((r) => r.json())
-      .then((res: { data?: { skills?: Array<{ id: string; name: string }> } }) => {
-        if (res.data?.skills) setAvailableSkillNames(res.data.skills.map((s) => s.name));
-      })
-      .catch(() => {});
-  }, [apiFetch]);
+      .then(
+        (res: { data?: { skills?: Array<{ id: string; name: string }> } }) => {
+          if (res.data?.skills)
+            setAvailableSkillNames(res.data.skills.map((s) => s.name))
+        }
+      )
+      .catch(() => {})
+  }, [apiFetch])
 
-  const appNames = useMemo(() => availableIntegrations.map((i) => i.name), [availableIntegrations]);
+  const appNames = useMemo(
+    () => availableIntegrations.map((i) => i.name),
+    [availableIntegrations]
+  )
   const integrationByName = useMemo(
     () => new Map(availableIntegrations.map((i) => [i.name.toLowerCase(), i])),
     [availableIntegrations]
-  );
+  )
   const integrationBySlug = useMemo(
     () => new Map(availableIntegrations.map((i) => [i.slug, i])),
     [availableIntegrations]
-  );
+  )
   const telegramIntegration = useMemo(
-    () => availableIntegrations.find((integration) => integration.slug === "telegram") ?? null,
+    () =>
+      availableIntegrations.find(
+        (integration) => integration.slug === "telegram"
+      ) ?? null,
     [availableIntegrations]
-  );
+  )
   useEffect(() => {
-    if (!agentSetupMessageId) return;
+    if (!agentSetupMessageId) return
 
     apiFetch("/api/integrations/telegram", { cache: "no-store" })
       .then((response) => response.json())
       .then((res: { data?: { integration?: Integration } }) => {
-        const connections = res.data?.integration?.connections ?? telegramIntegration?.connections ?? [];
-        const activeConnections = connections.filter((connection) => connection.status !== "error");
-        setTelegramConnections(activeConnections);
+        const connections =
+          res.data?.integration?.connections ??
+          telegramIntegration?.connections ??
+          []
+        const activeConnections = connections.filter(
+          (connection) => connection.status !== "error"
+        )
+        setTelegramConnections(activeConnections)
         setSelectedTelegramConnectionId((current) => {
-          if (current && activeConnections.some((connection) => connection.id === current)) {
-            return current;
+          if (
+            current &&
+            activeConnections.some((connection) => connection.id === current)
+          ) {
+            return current
           }
-          return activeConnections[0]?.id ?? "";
-        });
+          return activeConnections[0]?.id ?? ""
+        })
         setTelegramBotSetupMode((current) =>
-          activeConnections.length > 0 && current === "existing" ? "existing" : "new"
-        );
+          activeConnections.length > 0 && current === "existing"
+            ? "existing"
+            : "new"
+        )
       })
       .catch(() => {
-        const fallbackConnections = telegramIntegration?.connections ?? [];
-        setTelegramConnections(fallbackConnections);
-        setSelectedTelegramConnectionId((current) => current || fallbackConnections[0]?.id || "");
+        const fallbackConnections = telegramIntegration?.connections ?? []
+        setTelegramConnections(fallbackConnections)
+        setSelectedTelegramConnectionId(
+          (current) => current || fallbackConnections[0]?.id || ""
+        )
         setTelegramBotSetupMode((current) =>
-          fallbackConnections.length > 0 && current === "existing" ? "existing" : "new"
-        );
-      });
-  }, [agentSetupMessageId, apiFetch, telegramIntegration]);
+          fallbackConnections.length > 0 && current === "existing"
+            ? "existing"
+            : "new"
+        )
+      })
+  }, [agentSetupMessageId, apiFetch, telegramIntegration])
   const isTelegramMentioned = useMemo(() => {
-    const telegramMentionPattern = /(^|\s)@?telegram(?=\s|$|[.,!?;:])/i;
+    const telegramMentionPattern = /(^|\s)@?telegram(?=\s|$|[.,!?;:])/i
     return (
       connectedApps.some((app) => app.toLowerCase() === "telegram") ||
       telegramMentionPattern.test(value) ||
       messages.some((message) => telegramMentionPattern.test(message.content))
-    );
-  }, [connectedApps, value, messages]);
+    )
+  }, [connectedApps, value, messages])
   const mentionableSkills = useMemo(() => {
     const baseSkills = availableSkillNames.some(
       (skill) => skill.toLowerCase() === CREATE_SKILL_COMMAND
     )
       ? availableSkillNames
-      : [CREATE_SKILL_COMMAND, ...availableSkillNames];
-    if (!fixedSkillName) return baseSkills;
-    if (baseSkills.some((skill) => skill.toLowerCase() === fixedSkillName.toLowerCase())) {
-      return baseSkills;
+      : [CREATE_SKILL_COMMAND, ...availableSkillNames]
+    if (!fixedSkillName) return baseSkills
+    if (
+      baseSkills.some(
+        (skill) => skill.toLowerCase() === fixedSkillName.toLowerCase()
+      )
+    ) {
+      return baseSkills
     }
-    return [fixedSkillName, ...baseSkills];
-  }, [fixedSkillName, availableSkillNames]);
+    return [fixedSkillName, ...baseSkills]
+  }, [fixedSkillName, availableSkillNames])
 
   const createClientMessageId = useCallback(() => {
-    nextMessageIdRef.current += 1;
-    return nextMessageIdRef.current;
-  }, []);
+    nextMessageIdRef.current += 1
+    return nextMessageIdRef.current
+  }, [])
 
   const renderAppLogo = (app: string, size: "sm" | "md" | "mention" = "sm") => {
-    const integration = integrationByName.get(app.toLowerCase());
+    const integration = integrationByName.get(app.toLowerCase())
     const baseSize =
       size === "md"
         ? "h-5 w-5"
         : size === "mention"
           ? "h-[1.18em] w-[1.18em]"
-          : "h-4 w-4";
-    const radiusClass = size === "mention" ? "rounded-[0.36em]" : "rounded-sm";
+          : "h-4 w-4"
+    const radiusClass = size === "mention" ? "rounded-[0.36em]" : "rounded-sm"
 
     if (integration?.logo) {
       return (
@@ -490,13 +560,21 @@ export default function AI_Prompt({
         <img
           src={integration.logo}
           alt={integration.name}
-          className={cn("inline-block shrink-0 object-contain", radiusClass, baseSize)}
+          className={cn(
+            "inline-block shrink-0 object-contain",
+            radiusClass,
+            baseSize
+          )}
         />
-      );
+      )
     }
 
     const textSize =
-      size === "md" ? "text-[11px]" : size === "mention" ? "text-[0.8em] leading-none" : "text-[10px]";
+      size === "md"
+        ? "text-[11px]"
+        : size === "mention"
+          ? "text-[0.8em] leading-none"
+          : "text-[10px]"
     return (
       <span
         className={cn(
@@ -508,126 +586,134 @@ export default function AI_Prompt({
       >
         {app[0]}
       </span>
-    );
-  };
+    )
+  }
 
-  const getAttachmentKind = (fileName: string, mimeType = ""): AttachmentKind => {
-    const lower = fileName.toLowerCase();
-    const ext = lower.includes(".") ? lower.split(".").pop() ?? "" : "";
+  const getAttachmentKind = (
+    fileName: string,
+    mimeType = ""
+  ): AttachmentKind => {
+    const lower = fileName.toLowerCase()
+    const ext = lower.includes(".") ? (lower.split(".").pop() ?? "") : ""
 
-    if (mimeType.startsWith("image/")) return "image";
-    if (
-      mimeType === "application/pdf" ||
-      ext === "pdf"
-    ) {
-      return "pdf";
+    if (mimeType.startsWith("image/")) return "image"
+    if (mimeType === "application/pdf" || ext === "pdf") {
+      return "pdf"
     }
     if (
       mimeType.includes("spreadsheet") ||
       mimeType.includes("excel") ||
       ["xls", "xlsx", "csv"].includes(ext)
     ) {
-      return "excel";
+      return "excel"
     }
     if (
       mimeType.includes("word") ||
       ["doc", "docx", "odt", "rtf"].includes(ext)
     ) {
-      return "document";
+      return "document"
     }
     if (
       mimeType.includes("zip") ||
       mimeType.includes("compressed") ||
       ["zip", "rar", "7z", "tar", "gz"].includes(ext)
     ) {
-      return "archive";
+      return "archive"
     }
     if (
       mimeType.startsWith("text/") ||
       ["txt", "md", "json", "xml", "yaml", "yml"].includes(ext)
     ) {
-      return "text";
+      return "text"
     }
-    return "other";
-  };
+    return "other"
+  }
 
   const getAttachmentIcon = (kind: AttachmentKind) => {
-    if (kind === "image") return <FileImage className="h-4 w-4" />;
-    if (kind === "archive") return <FileArchive className="h-4 w-4" />;
-    return <FileText className="h-4 w-4" />;
-  };
+    if (kind === "image") return <FileImage className="h-4 w-4" />
+    if (kind === "archive") return <FileArchive className="h-4 w-4" />
+    return <FileText className="h-4 w-4" />
+  }
 
   const getFileExtension = (fileName: string) => {
-    const lower = fileName.toLowerCase();
-    return lower.includes(".") ? lower.split(".").pop() ?? "" : "";
-  };
+    const lower = fileName.toLowerCase()
+    return lower.includes(".") ? (lower.split(".").pop() ?? "") : ""
+  }
 
-  const renderAttachmentIllustration = (attachment: Pick<MessageAttachment, "kind" | "name">) => {
-    const ext = getFileExtension(attachment.name);
+  const renderAttachmentIllustration = (
+    attachment: Pick<MessageAttachment, "kind" | "name">
+  ) => {
+    const ext = getFileExtension(attachment.name)
 
     if (attachment.kind === "excel") {
-      const Illustration = ext === "csv" ? DocumentCsvIllustration : DocumentXlsxIllustration;
-      return <Illustration />;
+      const Illustration =
+        ext === "csv" ? DocumentCsvIllustration : DocumentXlsxIllustration
+      return <Illustration />
     }
 
-    if (attachment.kind === "archive") return <DocumentZipIllustration />;
+    if (attachment.kind === "archive") return <DocumentZipIllustration />
 
     if (attachment.kind === "text") {
-      const Illustration = ext === "json" ? DocumentJsonIllustration : DocumentTxtIllustration;
-      return <Illustration />;
+      const Illustration =
+        ext === "json" ? DocumentJsonIllustration : DocumentTxtIllustration
+      return <Illustration />
     }
 
     if (attachment.kind === "other" && ["ppt", "pptx"].includes(ext)) {
-      return <DocumentPptxIllustration />;
+      return <DocumentPptxIllustration />
     }
 
-    return null;
-  };
+    return null
+  }
 
-  const renderAttachmentPreviewAsset = (attachment: Pick<MessageAttachment, "kind" | "name">) => {
-    const illustration = renderAttachmentIllustration(attachment);
+  const renderAttachmentPreviewAsset = (
+    attachment: Pick<MessageAttachment, "kind" | "name">
+  ) => {
+    const illustration = renderAttachmentIllustration(attachment)
 
     if (illustration) {
       return (
         <span className="relative inline-block h-10 w-10">
           <span
-            className="pointer-events-none absolute left-0 top-0 block"
+            className="pointer-events-none absolute top-0 left-0 block"
             style={{ transform: "scale(0.52)", transformOrigin: "0 0" }}
           >
             {illustration}
           </span>
         </span>
-      );
+      )
     }
 
-    return <span className="opacity-80">{getAttachmentIcon(attachment.kind)}</span>;
-  };
+    return (
+      <span className="opacity-80">{getAttachmentIcon(attachment.kind)}</span>
+    )
+  }
 
   const getAttachmentKindLabel = (kind: AttachmentKind) => {
-    if (kind === "image") return "Image";
-    if (kind === "excel") return "Spreadsheet";
-    if (kind === "pdf") return "PDF";
-    if (kind === "document") return "Document";
-    if (kind === "archive") return "Archive";
-    if (kind === "text") return "Text";
-    return "File";
-  };
+    if (kind === "image") return "Image"
+    if (kind === "excel") return "Spreadsheet"
+    if (kind === "pdf") return "PDF"
+    if (kind === "document") return "Document"
+    if (kind === "archive") return "Archive"
+    if (kind === "text") return "Text"
+    return "File"
+  }
 
   const commandItems = useMemo(() => {
-    if (!commandMenu) return [];
+    if (!commandMenu) return []
 
-    const source = commandMenu.type === "skill" ? mentionableSkills : appNames;
+    const source = commandMenu.type === "skill" ? mentionableSkills : appNames
 
-    const query = commandMenu.query.trim().toLowerCase();
+    const query = commandMenu.query.trim().toLowerCase()
     return source
       .filter((item) => item.toLowerCase().includes(query))
       .sort((a, b) => {
-        if (commandMenu.type !== "skill") return 0;
-        if (a.toLowerCase() === CREATE_SKILL_COMMAND) return -1;
-        if (b.toLowerCase() === CREATE_SKILL_COMMAND) return 1;
-        return a.localeCompare(b);
-      });
-  }, [commandMenu, mentionableSkills, appNames]);
+        if (commandMenu.type !== "skill") return 0
+        if (a.toLowerCase() === CREATE_SKILL_COMMAND) return -1
+        if (b.toLowerCase() === CREATE_SKILL_COMMAND) return 1
+        return a.localeCompare(b)
+      })
+  }, [commandMenu, mentionableSkills, appNames])
 
   const MODEL_ICONS: Record<string, React.ReactNode> = {
     Atmet: (
@@ -698,45 +784,45 @@ export default function AI_Prompt({
     ),
     "GPT-5-1 Mini": OPENAI_SVG,
     "GPT-5-1": OPENAI_SVG,
-  };
+  }
 
   useEffect(() => {
-    if (messages.length === 0 && !isResponding) return;
+    if (messages.length === 0 && !isResponding) return
 
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-    });
-  }, [messages.length, isResponding]);
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" })
+    })
+  }, [messages.length, isResponding])
 
   useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
+    messagesRef.current = messages
+  }, [messages])
 
   useEffect(() => {
-    onConversationActivityChange?.(messages.length > 0 || isResponding);
-  }, [messages.length, isResponding, onConversationActivityChange]);
+    onConversationActivityChange?.(messages.length > 0 || isResponding)
+  }, [messages.length, isResponding, onConversationActivityChange])
 
   useEffect(() => {
-    const isPreChat = messages.length === 0 && !isResponding;
-    if (!isPreChat) return;
+    const isPreChat = messages.length === 0 && !isResponding
+    if (!isPreChat) return
 
-    const hour = new Date().getHours();
+    const hour = new Date().getHours()
     const greeting =
-      hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-    const line1Target = `${greeting}, ${firstName}`;
+      hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
+    const line1Target = `${greeting}, ${firstName}`
 
-    setHeroLine1("");
-    setHeroTypingLine(1);
+    setHeroLine1("")
+    setHeroTypingLine(1)
 
-    const timeouts: Array<ReturnType<typeof setTimeout>> = [];
-    let isCancelled = false;
+    const timeouts: Array<ReturnType<typeof setTimeout>> = []
+    let isCancelled = false
 
     const schedule = (fn: () => void, delayMs: number) => {
       const id = setTimeout(() => {
-        if (!isCancelled) fn();
-      }, delayMs);
-      timeouts.push(id);
-    };
+        if (!isCancelled) fn()
+      }, delayMs)
+      timeouts.push(id)
+    }
 
     const typeLine = (
       target: string,
@@ -744,95 +830,98 @@ export default function AI_Prompt({
       onComplete: () => void,
       baseDelayMs = 36
     ) => {
-      let index = 0;
+      let index = 0
 
       const step = () => {
-        index += 1;
-        setLine(target.slice(0, index));
+        index += 1
+        setLine(target.slice(0, index))
 
         if (index < target.length) {
-          schedule(step, baseDelayMs + (index % 3) * 8);
-          return;
+          schedule(step, baseDelayMs + (index % 3) * 8)
+          return
         }
 
-        onComplete();
-      };
+        onComplete()
+      }
 
-      schedule(step, 280);
-    };
+      schedule(step, 280)
+    }
 
     typeLine(line1Target, setHeroLine1, () => {
-      setHeroTypingLine(0);
-    });
+      setHeroTypingLine(0)
+    })
 
     return () => {
-      isCancelled = true;
-      timeouts.forEach((timeoutId) => clearTimeout(timeoutId));
-    };
-  }, [messages.length, isResponding, firstName]);
+      isCancelled = true
+      timeouts.forEach((timeoutId) => clearTimeout(timeoutId))
+    }
+  }, [messages.length, isResponding, firstName])
 
   useEffect(() => {
-    attachedFilesRef.current = attachedFiles;
-  }, [attachedFiles]);
+    attachedFilesRef.current = attachedFiles
+  }, [attachedFiles])
 
   useEffect(() => {
-    if (!lockedComposerPrefix) return;
+    if (!lockedComposerPrefix) return
 
     setValue((prev) => {
-      if (prev.startsWith(lockedComposerPrefix)) return prev;
+      if (prev.startsWith(lockedComposerPrefix)) return prev
       const withoutPrefix = prev.replace(
         new RegExp(
           `^\\s*\\/${fixedSkillName?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") ?? ""}\\s*`,
           "i"
         ),
         ""
-      );
-      return `${lockedComposerPrefix}${withoutPrefix.replace(/^\s+/, "")}`;
-    });
-  }, [fixedSkillName, lockedComposerPrefix]);
+      )
+      return `${lockedComposerPrefix}${withoutPrefix.replace(/^\s+/, "")}`
+    })
+  }, [fixedSkillName, lockedComposerPrefix])
 
   useEffect(() => {
-    const nextChatId = chatId ?? null;
+    const nextChatId = chatId ?? null
     const isSameInFlightChat =
-      nextChatId !== null && activeChatIdRef.current === nextChatId;
+      nextChatId !== null && activeChatIdRef.current === nextChatId
 
-    activeChatIdRef.current = nextChatId;
-    setResolvedChatId(nextChatId);
+    activeChatIdRef.current = nextChatId
+    setResolvedChatId(nextChatId)
     if (!isSameInFlightChat) {
-      locallyStreamingChatIdRef.current = null;
+      locallyStreamingChatIdRef.current = null
     }
-    setAgentSetupMessageId(null);
-    setTelegramAgentError(null);
-    setTelegramAgentSuccess(null);
+    setAgentSetupMessageId(null)
+    setTelegramAgentError(null)
+    setTelegramAgentSuccess(null)
 
     if (!nextChatId) {
-      activeChatTitleRef.current = null;
-      return;
+      activeChatTitleRef.current = null
+      return
     }
 
-    activeChatTitleRef.current = null;
-  }, [chatId]);
+    activeChatTitleRef.current = null
+  }, [chatId])
 
   useEffect(() => {
-    const effectiveChatId = chatId ?? resolvedChatId;
+    const effectiveChatId = chatId ?? resolvedChatId
 
     if (!effectiveChatId) {
-      setMessages([]);
-      return;
+      setMessages([])
+      return
     }
 
     if (locallyStreamingChatIdRef.current === effectiveChatId) {
-      return;
+      return
     }
 
-    let isCancelled = false;
+    let isCancelled = false
     void apiFetch(`/api/chats/${effectiveChatId}/messages`)
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: { data?: { messages?: ApiMessage[] } } | null) => {
-        if (isCancelled) return;
+        if (isCancelled) return
         setMessages(
           (payload?.data?.messages ?? [])
-            .filter((message) => message.role === "user" || message.role === "assistant")
+            .filter(
+              (message) =>
+                message.role === "user" || message.role === "assistant"
+            )
             .map((message, index) => ({
               id: index + 1,
               serverId: message.id,
@@ -840,68 +929,64 @@ export default function AI_Prompt({
               content: message.content,
               attachments: message.metadata?.attachments ?? undefined,
             }))
-        );
+        )
       })
       .catch(() => {
-        if (!isCancelled) setMessages([]);
-      });
+        if (!isCancelled) setMessages([])
+      })
 
     return () => {
-      isCancelled = true;
-    };
-  }, [apiFetch, chatId, resolvedChatId]);
+      isCancelled = true
+    }
+  }, [apiFetch, chatId, resolvedChatId])
 
   useEffect(() => {
-    const copyTimers = copyTimersRef.current;
+    const copyTimers = copyTimersRef.current
     return () => {
       Object.values(copyTimers).forEach((timeoutId) => {
-        clearTimeout(timeoutId);
-      });
+        clearTimeout(timeoutId)
+      })
 
-      const previewUrls = new Set<string>();
+      const previewUrls = new Set<string>()
 
       attachedFilesRef.current.forEach((attachment) => {
-        if (attachment.previewUrl) previewUrls.add(attachment.previewUrl);
-      });
+        if (attachment.previewUrl) previewUrls.add(attachment.previewUrl)
+      })
 
       messagesRef.current.forEach((message) => {
         message.attachments?.forEach((attachment) => {
-          if (attachment.previewUrl) previewUrls.add(attachment.previewUrl);
-        });
-      });
+          if (attachment.previewUrl) previewUrls.add(attachment.previewUrl)
+        })
+      })
 
-      previewUrls.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, []);
+      previewUrls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [])
 
   const buildAssistantReply = (
     message: string,
     attachments: MessageAttachment[] = []
   ) => {
-    const lowerMessage = message.toLowerCase();
-    const attachmentNames = attachments.map((attachment) => attachment.name);
+    const lowerMessage = message.toLowerCase()
+    const attachmentNames = attachments.map((attachment) => attachment.name)
     const filesNote =
-      attachmentNames.length > 0
-        ? `\nFiles: ${attachmentNames.join(", ")}`
-        : "";
+      attachmentNames.length > 0 ? `\nFiles: ${attachmentNames.join(", ")}` : ""
 
     const wantsCode =
       /```|`{2,}|code block|code snippet|code script|write code|show me.*code|example code|python|javascript|typescript|bash|shell|sql/.test(
         lowerMessage
-      );
+      )
 
     if (wantsCode) {
-      let language = "python";
-      if (
-        /\b(javascript|js|node)\b/.test(lowerMessage)
-      ) {
-        language = "javascript";
+      let language = "python"
+      if (/\b(javascript|js|node)\b/.test(lowerMessage)) {
+        language = "javascript"
       } else if (/\b(typescript|ts)\b/.test(lowerMessage)) {
-        language = "typescript";
+        language = "typescript"
       } else if (/\b(bash|shell|sh)\b/.test(lowerMessage)) {
-        language = "bash";
+        language = "bash"
       } else if (/\bsql\b/.test(lowerMessage)) {
-        language = "sql";
+        language = "sql"
       }
 
       const sampleByLanguage: Record<string, string> = {
@@ -911,148 +996,154 @@ export default function AI_Prompt({
         typescript:
           'for (let i = 0; i < 3; i += 1) {\n  console.log("hello world", i);\n}',
         bash: 'for i in 1 2 3; do\n  echo "hello world $i"\ndone',
-        sql: 'SELECT id, name\nFROM users\nORDER BY id\nLIMIT 3;',
-      };
+        sql: "SELECT id, name\nFROM users\nORDER BY id\nLIMIT 3;",
+      }
 
-      const code = sampleByLanguage[language] ?? sampleByLanguage.python;
+      const code = sampleByLanguage[language] ?? sampleByLanguage.python
       const intro =
         activeTab === "automation"
           ? "Automation code draft:"
-          : "Here is a code example:";
+          : "Here is a code example:"
 
-      return `${intro}\n\n\`\`\`${language}\n${code}\n\`\`\`${filesNote}`;
+      return `${intro}\n\n\`\`\`${language}\n${code}\n\`\`\`${filesNote}`
     }
 
     if (activeTab === "automation") {
-      return `Automation plan: ${message}${filesNote}`;
+      return `Automation plan: ${message}${filesNote}`
     }
-    return `Response: ${message}${filesNote}`;
-  };
+    return `Response: ${message}${filesNote}`
+  }
 
   const extractMentionedApps = useCallback(
     (text: string) => {
-      const apps: string[] = [];
-      const appLinkRegex = /\[([^\]]+)\]\(app:\/\/([a-z0-9-]+)\)/gi;
-      let match: RegExpExecArray | null;
+      const apps: string[] = []
+      const appLinkRegex = /\[([^\]]+)\]\(app:\/\/([a-z0-9-]+)\)/gi
+      let match: RegExpExecArray | null
 
       while ((match = appLinkRegex.exec(text)) !== null) {
-        const slug = match[2] ?? "";
-        const label = match[1] ?? "";
+        const slug = match[2] ?? ""
+        const label = match[1] ?? ""
         const integration =
-          integrationBySlug.get(slug) ?? integrationByName.get(label.toLowerCase());
+          integrationBySlug.get(slug) ??
+          integrationByName.get(label.toLowerCase())
         if (integration && !apps.includes(integration.name)) {
-          apps.push(integration.name);
+          apps.push(integration.name)
         }
       }
 
       for (const app of appNames) {
-        const escaped = app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const pattern = new RegExp(`(^|\\s)@${escaped}(?=\\s|$|[.,!?;:])`, "i");
+        const escaped = app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        const pattern = new RegExp(`(^|\\s)@${escaped}(?=\\s|$|[.,!?;:])`, "i")
         if (pattern.test(text) && !apps.includes(app)) {
-          apps.push(app);
+          apps.push(app)
         }
       }
 
-      return apps;
+      return apps
     },
     [appNames, integrationByName, integrationBySlug]
-  );
+  )
 
   useEffect(() => {
-    const nextApps = extractMentionedApps(value);
+    const nextApps = extractMentionedApps(value)
     setConnectedApps((prev) => {
       if (
         prev.length === nextApps.length &&
         prev.every((app, index) => app === nextApps[index])
       ) {
-        return prev;
+        return prev
       }
-      return nextApps;
-    });
-  }, [extractMentionedApps, value]);
+      return nextApps
+    })
+  }, [extractMentionedApps, value])
 
-  const updateCommandMenuFromInput = (nextValue: string, cursorPosition: number) => {
-    const prefix = nextValue.slice(0, cursorPosition);
-    const match = prefix.match(/(?:^|\s)([/@])([^\s/@]*)$/);
+  const updateCommandMenuFromInput = (
+    nextValue: string,
+    cursorPosition: number
+  ) => {
+    const prefix = nextValue.slice(0, cursorPosition)
+    const match = prefix.match(/(?:^|\s)([/@])([^\s/@]*)$/)
 
     if (!match) {
-      setCommandMenu(null);
-      return;
+      setCommandMenu(null)
+      return
     }
 
-    const trigger = match[1];
-    const token = match[0];
-    const hasLeadingSpace = token.startsWith(" ");
-    const start = cursorPosition - token.length + (hasLeadingSpace ? 1 : 0);
+    const trigger = match[1]
+    const token = match[0]
+    const hasLeadingSpace = token.startsWith(" ")
+    const start = cursorPosition - token.length + (hasLeadingSpace ? 1 : 0)
 
     setCommandMenu({
       type: trigger === "/" ? "skill" : "app",
       query: match[2] ?? "",
       start,
       end: cursorPosition,
-    });
-    setHighlightedCommandIndex(0);
-  };
+    })
+    setHighlightedCommandIndex(0)
+  }
 
   const selectCommandItem = (item: string) => {
-    if (!commandMenu) return;
+    if (!commandMenu) return
 
-    const prefix = commandMenu.type === "skill" ? "/" : "@";
-    const replacement = `${prefix}${item} `;
+    const prefix = commandMenu.type === "skill" ? "/" : "@"
+    const replacement = `${prefix}${item} `
     const nextValue =
-      value.slice(0, commandMenu.start) + replacement + value.slice(commandMenu.end);
+      value.slice(0, commandMenu.start) +
+      replacement +
+      value.slice(commandMenu.end)
 
-    setValue(nextValue);
-    setCommandMenu(null);
-    setHighlightedCommandIndex(0);
+    setValue(nextValue)
+    setCommandMenu(null)
+    setHighlightedCommandIndex(0)
 
     if (commandMenu.type === "skill") {
-      setSelectedSkill(item);
+      setSelectedSkill(item)
     }
 
     requestAnimationFrame(() => {
-      if (!textareaRef.current) return;
-      const nextCursor = commandMenu.start + replacement.length;
-      textareaRef.current.focus();
-      textareaRef.current.setSelectionRange(nextCursor, nextCursor);
-      adjustHeight();
-    });
-  };
+      if (!textareaRef.current) return
+      const nextCursor = commandMenu.start + replacement.length
+      textareaRef.current.focus()
+      textareaRef.current.setSelectionRange(nextCursor, nextCursor)
+      adjustHeight()
+    })
+  }
 
   const applyMentionAutoSpace = (
     inputValue: string,
     cursorPosition: number
   ): { nextValue: string; nextCursor: number } => {
-    const beforeCursor = inputValue.slice(0, cursorPosition);
-    const afterCursor = inputValue.slice(cursorPosition);
+    const beforeCursor = inputValue.slice(0, cursorPosition)
+    const afterCursor = inputValue.slice(cursorPosition)
 
     if (afterCursor.startsWith(" ") || afterCursor.startsWith("\n")) {
-      return { nextValue: inputValue, nextCursor: cursorPosition };
+      return { nextValue: inputValue, nextCursor: cursorPosition }
     }
 
     const mentionTokens = [
       ...appNames.map((app) => `@${app}`),
       ...mentionableSkills.map((skill) => `/${skill}`),
-    ].sort((a, b) => b.length - a.length);
+    ].sort((a, b) => b.length - a.length)
 
-    const lowerBefore = beforeCursor.toLowerCase();
+    const lowerBefore = beforeCursor.toLowerCase()
 
     for (const token of mentionTokens) {
-      const lowerToken = token.toLowerCase();
-      if (!lowerBefore.endsWith(lowerToken)) continue;
+      const lowerToken = token.toLowerCase()
+      if (!lowerBefore.endsWith(lowerToken)) continue
 
-      const tokenStart = beforeCursor.length - token.length;
-      const charBeforeToken = tokenStart > 0 ? beforeCursor[tokenStart - 1] : "";
+      const tokenStart = beforeCursor.length - token.length
+      const charBeforeToken = tokenStart > 0 ? beforeCursor[tokenStart - 1] : ""
       if (tokenStart > 0 && !/\s/.test(charBeforeToken)) {
-        continue;
+        continue
       }
 
-      const nextValue = `${beforeCursor} ${afterCursor}`;
-      return { nextValue, nextCursor: cursorPosition + 1 };
+      const nextValue = `${beforeCursor} ${afterCursor}`
+      return { nextValue, nextCursor: cursorPosition + 1 }
     }
 
-    return { nextValue: inputValue, nextCursor: cursorPosition };
-  };
+    return { nextValue: inputValue, nextCursor: cursorPosition }
+  }
 
   const normalizeMentionSpacing = (
     inputValue: string,
@@ -1060,104 +1151,117 @@ export default function AI_Prompt({
   ): { nextValue: string; nextCursor: number } => {
     const escapedApps = appNames
       .map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .sort((a, b) => b.length - a.length);
+      .sort((a, b) => b.length - a.length)
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .sort((a, b) => b.length - a.length);
+      .sort((a, b) => b.length - a.length)
 
     if (escapedApps.length === 0 && escapedSkills.length === 0) {
-      return { nextValue: inputValue, nextCursor: cursorPosition };
+      return { nextValue: inputValue, nextCursor: cursorPosition }
     }
 
-    const mentionParts: string[] = [];
+    const mentionParts: string[] = []
     if (escapedApps.length > 0) {
-      mentionParts.push(`@(?:${escapedApps.join("|")})`);
+      mentionParts.push(`@(?:${escapedApps.join("|")})`)
     }
     if (escapedSkills.length > 0) {
-      mentionParts.push(`\\/(?:${escapedSkills.join("|")})`);
+      mentionParts.push(`\\/(?:${escapedSkills.join("|")})`)
     }
 
     if (mentionParts.length === 0) {
-      return { nextValue: inputValue, nextCursor: cursorPosition };
+      return { nextValue: inputValue, nextCursor: cursorPosition }
     }
 
-    const mentionRegex = new RegExp(`(^|\\s)(${mentionParts.join("|")})(?=\\S|$)`, "gi");
+    const mentionRegex = new RegExp(
+      `(^|\\s)(${mentionParts.join("|")})(?=\\S|$)`,
+      "gi"
+    )
 
-    let cursorDelta = 0;
+    let cursorDelta = 0
     const nextValue = inputValue.replace(
       mentionRegex,
       (fullMatch, leadingSpace = "", mentionToken = "", offset = 0) => {
-        const insertionPoint = Number(offset) + String(leadingSpace).length + String(mentionToken).length;
+        const insertionPoint =
+          Number(offset) +
+          String(leadingSpace).length +
+          String(mentionToken).length
         if (insertionPoint <= cursorPosition) {
-          cursorDelta += 1;
+          cursorDelta += 1
         }
-        return `${leadingSpace}${mentionToken} `;
+        return `${leadingSpace}${mentionToken} `
       }
-    );
+    )
 
     if (nextValue === inputValue) {
-      return { nextValue: inputValue, nextCursor: cursorPosition };
+      return { nextValue: inputValue, nextCursor: cursorPosition }
     }
 
     return {
       nextValue,
       nextCursor: cursorPosition + cursorDelta,
-    };
-  };
+    }
+  }
 
-  const getMentionRanges = (inputValue: string): Array<{ start: number; end: number }> => {
+  const getMentionRanges = (
+    inputValue: string
+  ): Array<{ start: number; end: number }> => {
     const escapedApps = appNames
       .map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .sort((a, b) => b.length - a.length);
+      .sort((a, b) => b.length - a.length)
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .sort((a, b) => b.length - a.length);
-    const parts = ["\\[[^\\]]+\\]\\(app:\\/\\/[a-z0-9-]+\\)"];
-    if (escapedApps.length > 0) parts.push(`@(?:${escapedApps.join("|")})(?=\\s|$|[.,!?;:])`);
-    if (escapedSkills.length > 0) parts.push(`\\/(?:${escapedSkills.join("|")})(?=\\s|$|[.,!?;:])`);
-    const mentionRegex = new RegExp(parts.join("|"), "gi");
+      .sort((a, b) => b.length - a.length)
+    const parts = ["\\[[^\\]]+\\]\\(app:\\/\\/[a-z0-9-]+\\)"]
+    if (escapedApps.length > 0)
+      parts.push(`@(?:${escapedApps.join("|")})(?=\\s|$|[.,!?;:])`)
+    if (escapedSkills.length > 0)
+      parts.push(`\\/(?:${escapedSkills.join("|")})(?=\\s|$|[.,!?;:])`)
+    const mentionRegex = new RegExp(parts.join("|"), "gi")
 
-    const ranges: Array<{ start: number; end: number }> = [];
-    let match: RegExpExecArray | null;
+    const ranges: Array<{ start: number; end: number }> = []
+    let match: RegExpExecArray | null
 
     while ((match = mentionRegex.exec(inputValue)) !== null) {
-      const mention = match[0] ?? "";
+      const mention = match[0] ?? ""
       ranges.push({
         start: match.index,
         end: match.index + mention.length,
-      });
+      })
     }
 
-    return ranges;
-  };
+    return ranges
+  }
 
   const removeWholeMentionAtCursor = (
     inputValue: string,
     cursorPosition: number,
     key: "Backspace" | "Delete"
   ): { nextValue: string; nextCursor: number } | null => {
-    const ranges = getMentionRanges(inputValue);
+    const ranges = getMentionRanges(inputValue)
 
     for (const range of ranges) {
-      const isBackspace = key === "Backspace";
-      const isInsideMention = cursorPosition > range.start && cursorPosition < range.end;
+      const isBackspace = key === "Backspace"
+      const isInsideMention =
+        cursorPosition > range.start && cursorPosition < range.end
       const isAtMentionEdge = isBackspace
         ? cursorPosition === range.end
-        : cursorPosition === range.start;
+        : cursorPosition === range.start
       const isBackspaceAfterMentionSpace =
         isBackspace &&
         cursorPosition === range.end + 1 &&
-        inputValue[range.end] === " ";
+        inputValue[range.end] === " "
 
-      if (!(isInsideMention || isAtMentionEdge || isBackspaceAfterMentionSpace)) {
-        continue;
+      if (
+        !(isInsideMention || isAtMentionEdge || isBackspaceAfterMentionSpace)
+      ) {
+        continue
       }
 
-      const removeStart = range.start;
-      let removeEnd = range.end;
+      const removeStart = range.start
+      let removeEnd = range.end
 
       if (isBackspaceAfterMentionSpace || inputValue[removeEnd] === " ") {
-        removeEnd += 1;
+        removeEnd += 1
       }
 
       if (
@@ -1166,34 +1270,35 @@ export default function AI_Prompt({
         removeEnd < inputValue.length &&
         inputValue[removeEnd] === " "
       ) {
-        removeEnd += 1;
+        removeEnd += 1
       }
 
       return {
-        nextValue: inputValue.slice(0, removeStart) + inputValue.slice(removeEnd),
+        nextValue:
+          inputValue.slice(0, removeStart) + inputValue.slice(removeEnd),
         nextCursor: removeStart,
-      };
+      }
     }
 
-    return null;
-  };
+    return null
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const rawValue = e.target.value;
-    const rawCursor = e.target.selectionStart ?? rawValue.length;
-    const nativeInput = e.nativeEvent as InputEvent | undefined;
-    const isDeleteAction = nativeInput?.inputType?.startsWith("delete") ?? false;
+    const rawValue = e.target.value
+    const rawCursor = e.target.selectionStart ?? rawValue.length
+    const nativeInput = e.nativeEvent as InputEvent | undefined
+    const isDeleteAction = nativeInput?.inputType?.startsWith("delete") ?? false
     const { nextValue, nextCursor } = isDeleteAction
       ? { nextValue: rawValue, nextCursor: rawCursor }
-      : applyMentionAutoSpace(rawValue, rawCursor);
+      : applyMentionAutoSpace(rawValue, rawCursor)
     const normalizedSpacing = isDeleteAction
       ? { nextValue, nextCursor }
-      : normalizeMentionSpacing(nextValue, nextCursor);
-    const spacedValue = normalizedSpacing.nextValue;
-    const spacedCursor = normalizedSpacing.nextCursor;
+      : normalizeMentionSpacing(nextValue, nextCursor)
+    const spacedValue = normalizedSpacing.nextValue
+    const spacedCursor = normalizedSpacing.nextCursor
 
-    let guardedValue = spacedValue;
-    let guardedCursor = spacedCursor;
+    let guardedValue = spacedValue
+    let guardedCursor = spacedCursor
     if (lockedComposerPrefix) {
       const withoutLockedPrefix = guardedValue.replace(
         new RegExp(
@@ -1201,88 +1306,95 @@ export default function AI_Prompt({
           "i"
         ),
         ""
-      );
-      guardedValue = `${lockedComposerPrefix}${withoutLockedPrefix.replace(/^\s+/, "")}`;
-      guardedCursor = Math.max(guardedCursor, lockedComposerPrefix.length);
+      )
+      guardedValue = `${lockedComposerPrefix}${withoutLockedPrefix.replace(/^\s+/, "")}`
+      guardedCursor = Math.max(guardedCursor, lockedComposerPrefix.length)
     }
 
-    setValue(guardedValue);
-    adjustHeight();
-    updateCommandMenuFromInput(guardedValue, guardedCursor);
+    setValue(guardedValue)
+    adjustHeight()
+    updateCommandMenuFromInput(guardedValue, guardedCursor)
 
     if (guardedValue !== rawValue || guardedCursor !== rawCursor) {
       requestAnimationFrame(() => {
-        if (!textareaRef.current) return;
-        textareaRef.current.setSelectionRange(guardedCursor, guardedCursor);
-      });
+        if (!textareaRef.current) return
+        textareaRef.current.setSelectionRange(guardedCursor, guardedCursor)
+      })
     }
-  };
+  }
 
   const handleComposerScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
-    setComposerScrollTop(e.currentTarget.scrollTop);
-  };
+    setComposerScrollTop(e.currentTarget.scrollTop)
+  }
 
-  const handleComposerSelection = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-    if (!lockedComposerPrefix) return;
-    const target = e.currentTarget;
-    const start = target.selectionStart ?? 0;
-    const end = target.selectionEnd ?? start;
-    if (start >= lockedComposerPrefix.length && end >= lockedComposerPrefix.length) {
-      return;
+  const handleComposerSelection = (
+    e: React.SyntheticEvent<HTMLTextAreaElement>
+  ) => {
+    if (!lockedComposerPrefix) return
+    const target = e.currentTarget
+    const start = target.selectionStart ?? 0
+    const end = target.selectionEnd ?? start
+    if (
+      start >= lockedComposerPrefix.length &&
+      end >= lockedComposerPrefix.length
+    ) {
+      return
     }
 
     requestAnimationFrame(() => {
-      if (!textareaRef.current) return;
+      if (!textareaRef.current) return
       textareaRef.current.setSelectionRange(
         lockedComposerPrefix.length,
         lockedComposerPrefix.length
-      );
-    });
-  };
+      )
+    })
+  }
 
   const insertAppMention = (app: string) => {
-    const mention = `@${app} `;
-    const nextValue = value.length === 0
-      ? mention
-      : `${value}${value.endsWith(" ") ? "" : " "}${mention}`;
+    const mention = `@${app} `
+    const nextValue =
+      value.length === 0
+        ? mention
+        : `${value}${value.endsWith(" ") ? "" : " "}${mention}`
 
-    setValue(nextValue);
-    setCommandMenu(null);
+    setValue(nextValue)
+    setCommandMenu(null)
 
     requestAnimationFrame(() => {
-      if (!textareaRef.current) return;
-      const nextCursor = nextValue.length;
-      textareaRef.current.focus();
-      textareaRef.current.setSelectionRange(nextCursor, nextCursor);
-      adjustHeight();
-    });
-  };
+      if (!textareaRef.current) return
+      const nextCursor = nextValue.length
+      textareaRef.current.focus()
+      textareaRef.current.setSelectionRange(nextCursor, nextCursor)
+      adjustHeight()
+    })
+  }
 
   const insertSkillMention = (skill: string) => {
-    const mention = `/${skill} `;
-    const nextValue = value.length === 0
-      ? mention
-      : `${value}${value.endsWith(" ") ? "" : " "}${mention}`;
+    const mention = `/${skill} `
+    const nextValue =
+      value.length === 0
+        ? mention
+        : `${value}${value.endsWith(" ") ? "" : " "}${mention}`
 
-    setSelectedSkill(skill);
-    setValue(nextValue);
-    setCommandMenu(null);
+    setSelectedSkill(skill)
+    setValue(nextValue)
+    setCommandMenu(null)
 
     requestAnimationFrame(() => {
-      if (!textareaRef.current) return;
-      const nextCursor = nextValue.length;
-      textareaRef.current.focus();
-      textareaRef.current.setSelectionRange(nextCursor, nextCursor);
-      adjustHeight();
-    });
-  };
+      if (!textareaRef.current) return
+      const nextCursor = nextValue.length
+      textareaRef.current.focus()
+      textareaRef.current.setSelectionRange(nextCursor, nextCursor)
+      adjustHeight()
+    })
+  }
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const files = e.target.files
+    if (!files || files.length === 0) return
 
     setAttachedFiles((prev) => {
-      const next = [...prev];
+      const next = [...prev]
       for (const file of Array.from(files)) {
         const isDuplicate = next.some(
           (existing) =>
@@ -1290,152 +1402,158 @@ export default function AI_Prompt({
             existing.file.name === file.name &&
             existing.file.size === file.size &&
             existing.file.lastModified === file.lastModified
-        );
+        )
         if (!isDuplicate) {
-          const kind = getAttachmentKind(file.name, file.type);
+          const kind = getAttachmentKind(file.name, file.type)
           next.push({
             id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
             name: file.name,
             kind,
-            previewUrl: kind === "image" ? URL.createObjectURL(file) : undefined,
+            previewUrl:
+              kind === "image" ? URL.createObjectURL(file) : undefined,
             file,
-          });
+          })
         }
       }
-      return next;
-    });
+      return next
+    })
 
-    e.target.value = "";
-  };
+    e.target.value = ""
+  }
 
   const openFilePicker = () => {
-    const input = fileInputRef.current;
-    if (!input) return;
+    const input = fileInputRef.current
+    if (!input) return
 
     try {
       if (typeof input.showPicker === "function") {
-        input.showPicker();
-        return;
+        input.showPicker()
+        return
       }
     } catch {
       // Fall back to click in browsers that block showPicker.
     }
 
-    input.click();
-  };
+    input.click()
+  }
 
   const removeAttachedFile = (attachmentId: string) => {
     setAttachedFiles((prev) =>
       prev.filter((attachment) => attachment.id !== attachmentId)
-    );
-  };
+    )
+  }
 
   const toChatTitle = (content: string) => {
-    const normalized = content.replace(/\s+/g, " ").trim();
-    if (!normalized) return "New chat";
-    return normalized.length > 56 ? `${normalized.slice(0, 56)}...` : normalized;
-  };
+    const normalized = content.replace(/\s+/g, " ").trim()
+    if (!normalized) return "New chat"
+    return normalized.length > 56 ? `${normalized.slice(0, 56)}...` : normalized
+  }
 
   const persistActiveChat = (content: string) => {
     if (
       !activeChatTitleRef.current ||
       activeChatTitleRef.current === "New chat"
     ) {
-      activeChatTitleRef.current = toChatTitle(content);
+      activeChatTitleRef.current = toChatTitle(content)
     }
-  };
+  }
 
-  const streamReply = useCallback(async (
-    chatId: string,
-    userContent: string,
-    attachments: MessageAttachment[] = [],
-    editMessageServerId?: string
-  ) => {
-    const assistantMsgId = createClientMessageId();
-    setMessages((prev) => [
-      ...prev,
-      { id: assistantMsgId, role: "assistant", content: "" },
-    ]);
+  const streamReply = useCallback(
+    async (
+      chatId: string,
+      userContent: string,
+      attachments: MessageAttachment[] = [],
+      editMessageServerId?: string
+    ) => {
+      const assistantMsgId = createClientMessageId()
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantMsgId, role: "assistant", content: "" },
+      ])
 
-    try {
-      const resp = await apiFetch(`/api/chats/${chatId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: userContent,
-          attachments,
-          editMessageId: editMessageServerId,
-        }),
-      });
+      try {
+        const resp = await apiFetch(`/api/chats/${chatId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: userContent,
+            attachments,
+            editMessageId: editMessageServerId,
+          }),
+        })
 
-      if (!resp.ok || !resp.body) {
-        const payload = (await resp.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(payload?.error?.message ?? "Failed to generate a response.");
-      }
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let completed = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          completed = true;
-          break;
+        if (!resp.ok || !resp.body) {
+          const payload = (await resp.json().catch(() => null)) as {
+            error?: { message?: string }
+          } | null
+          throw new Error(
+            payload?.error?.message ?? "Failed to generate a response."
+          )
         }
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+        let completed = false
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (raw === "[DONE]") {
-            completed = true;
-            break;
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            completed = true
+            break
           }
-          try {
-            const chunk = JSON.parse(raw) as { content?: string };
-            if (chunk.content) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId
-                    ? { ...m, content: m.content + chunk.content! }
-                    : m
-                )
-              );
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() ?? ""
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue
+            const raw = line.slice(6).trim()
+            if (raw === "[DONE]") {
+              completed = true
+              break
             }
-          } catch {
-            // ignore malformed SSE line
+            try {
+              const chunk = JSON.parse(raw) as { content?: string }
+              if (chunk.content) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId
+                      ? { ...m, content: m.content + chunk.content! }
+                      : m
+                  )
+                )
+              }
+            } catch {
+              // ignore malformed SSE line
+            }
           }
         }
-      }
 
-      if (completed) {
-        play("success");
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Something went wrong. Please try again.";
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId
-            ? { ...m, content: message }
-            : m
+        if (completed) {
+          play("success")
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Something went wrong. Please try again."
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId ? { ...m, content: message } : m
+          )
         )
-      );
-    } finally {
-      setIsResponding(false);
-    }
-  }, [apiFetch, createClientMessageId]);
+      } finally {
+        setIsResponding(false)
+      }
+    },
+    [apiFetch, createClientMessageId]
+  )
 
   const approveAppRequest = useCallback(
     async (approval: AppApprovalRequest, sourceMessageId: number) => {
-      const chatId = activeChatIdRef.current ?? resolvedChatId;
+      const chatId = activeChatIdRef.current ?? resolvedChatId
       if (!chatId) {
         setMessages((prev) =>
           prev.map((message) =>
@@ -1446,21 +1564,21 @@ export default function AI_Prompt({
                 }
               : message
           )
-        );
-        return;
+        )
+        return
       }
 
-      const approvedContent = `[${approval.appName}](app://${approval.appSlug}) ${approval.originalRequest}`;
-      const resolvedKey = `${sourceMessageId}:${approval.appName.toLowerCase()}`;
+      const approvedContent = `[${approval.appName}](app://${approval.appSlug}) ${approval.originalRequest}`
+      const resolvedKey = `${sourceMessageId}:${approval.appName.toLowerCase()}`
       setResolvedAppRequests((prev) => ({
         ...prev,
         [resolvedKey]: true,
-      }));
+      }))
       setConnectedApps((prev) =>
         prev.some((app) => app.toLowerCase() === approval.appName.toLowerCase())
           ? prev
           : [...prev, approval.appName]
-      );
+      )
       setMessages((prev) =>
         prev.map((message) =>
           message.id === sourceMessageId
@@ -1470,40 +1588,43 @@ export default function AI_Prompt({
               }
             : message
         )
-      );
+      )
       setMessages((prev) => [
         ...prev,
         { id: createClientMessageId(), role: "user", content: approvedContent },
-      ]);
-      setIsResponding(true);
-      await streamReply(chatId, approvedContent);
+      ])
+      setIsResponding(true)
+      await streamReply(chatId, approvedContent)
     },
     [createClientMessageId, resolvedChatId, streamReply]
-  );
+  )
 
-  const rejectAppRequest = useCallback((approval: AppApprovalRequest, sourceMessageId: number) => {
-    setMessages((prev) =>
-      prev.map((message) =>
-        message.id === sourceMessageId
-          ? {
-              ...message,
-              content: `Okay, I will not add ${approval.appName} to this chat.`,
-            }
-          : message
+  const rejectAppRequest = useCallback(
+    (approval: AppApprovalRequest, sourceMessageId: number) => {
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === sourceMessageId
+            ? {
+                ...message,
+                content: `Okay, I will not add ${approval.appName} to this chat.`,
+              }
+            : message
+        )
       )
-    );
-  }, []);
+    },
+    []
+  )
 
   const getAppMiniUiValues = useCallback(
     (request: AppMiniUiRequest, messageId: number) => {
-      const storedValues = appMiniUiValues[messageId] ?? {};
+      const storedValues = appMiniUiValues[messageId] ?? {}
       return request.fields.reduce<Record<string, string>>((values, field) => {
-        values[field.id] = storedValues[field.id] ?? field.value ?? "";
-        return values;
-      }, {});
+        values[field.id] = storedValues[field.id] ?? field.value ?? ""
+        return values
+      }, {})
     },
     [appMiniUiValues]
-  );
+  )
 
   const updateAppMiniUiValue = useCallback(
     (messageId: number, fieldId: string, nextValue: string) => {
@@ -1513,17 +1634,17 @@ export default function AI_Prompt({
           ...(prev[messageId] ?? {}),
           [fieldId]: nextValue,
         },
-      }));
+      }))
     },
     []
-  );
+  )
 
   const buildAppMiniUiSubmission = useCallback(
     (request: AppMiniUiRequest, values: Record<string, string>) => {
-      const integration = integrationByName.get(request.appName.toLowerCase());
+      const integration = integrationByName.get(request.appName.toLowerCase())
       const appToken = integration
         ? `[${integration.name}](app://${integration.slug})`
-        : request.appName;
+        : request.appName
 
       if (request.variant === "gmail-compose") {
         return [
@@ -1532,7 +1653,7 @@ export default function AI_Prompt({
           `Subject: ${values.subject?.trim() ?? ""}`,
           `Body:`,
           values.body?.trim() ?? "",
-        ].join("\n");
+        ].join("\n")
       }
 
       if (request.variant === "google-calendar-event") {
@@ -1545,16 +1666,16 @@ export default function AI_Prompt({
           `Time: ${values.time?.trim() ?? ""}`,
           `Duration: ${values.duration?.trim() ?? "30"} minutes`,
           `Timezone: ${values.timezone?.trim() || "Asia/Amman"}`,
-        ].join("\n");
+        ].join("\n")
       }
 
       if (request.variant === "google-sheets-create") {
-        return `${appToken} Create a new spreadsheet titled "${values.title?.trim() ?? ""}" with headers: ${values.headers?.trim() ?? ""}`;
+        return `${appToken} Create a new spreadsheet titled "${values.title?.trim() ?? ""}" with headers: ${values.headers?.trim() ?? ""}`
       }
 
       if (request.variant === "google-drive-search") {
-        const itemType = values.itemType?.trim() || "files and folders";
-        return `${appToken} Search ${itemType} for "${values.query?.trim() ?? ""}"`;
+        const itemType = values.itemType?.trim() || "files and folders"
+        return `${appToken} Search ${itemType} for "${values.query?.trim() ?? ""}"`
       }
 
       if (request.variant === "telegram-send-message") {
@@ -1563,17 +1684,17 @@ export default function AI_Prompt({
           `Chat ID: ${values.chat_id?.trim() ?? ""}`,
           "Text:",
           values.text?.trim() ?? "",
-        ].join("\n");
+        ].join("\n")
       }
 
-      return `${appToken} ${request.originalRequest}`;
+      return `${appToken} ${request.originalRequest}`
     },
     [integrationByName]
-  );
+  )
 
   const submitAppMiniUiRequest = useCallback(
     async (request: AppMiniUiRequest, sourceMessageId: number) => {
-      const chatId = activeChatIdRef.current ?? resolvedChatId;
+      const chatId = activeChatIdRef.current ?? resolvedChatId
       if (!chatId) {
         setMessages((prev) =>
           prev.map((message) =>
@@ -1584,37 +1705,37 @@ export default function AI_Prompt({
                 }
               : message
           )
-        );
-        return;
+        )
+        return
       }
 
-      const rawValues = getAppMiniUiValues(request, sourceMessageId);
+      const rawValues = getAppMiniUiValues(request, sourceMessageId)
       const values =
         request.variant === "gmail-compose"
           ? { ...rawValues, to: cleanEmailAddress(rawValues.to ?? "") }
-          : rawValues;
+          : rawValues
       const missingField = request.fields.find(
         (field) => field.required && !values[field.id]?.trim()
-      );
+      )
 
       if (missingField) {
         setAppMiniUiValues((prev) => ({
           ...prev,
           [sourceMessageId]: values,
-        }));
-        return;
+        }))
+        return
       }
 
-      const submittedContent = buildAppMiniUiSubmission(request, values);
-      const resolvedKey = `${sourceMessageId}:${request.appName.toLowerCase()}`;
+      const submittedContent = buildAppMiniUiSubmission(request, values)
+      const resolvedKey = `${sourceMessageId}:${request.appName.toLowerCase()}`
       const submittedStatus =
         request.variant === "gmail-compose"
           ? `${request.appName} approved. Sending now.`
-          : `${request.appName} details submitted. Running the request now.`;
+          : `${request.appName} details submitted. Running the request now.`
       setResolvedAppRequests((prev) => ({
         ...prev,
         [resolvedKey]: true,
-      }));
+      }))
       setMessages((prev) =>
         prev.map((message) =>
           message.id === sourceMessageId
@@ -1624,13 +1745,17 @@ export default function AI_Prompt({
               }
             : message
         )
-      );
+      )
       setMessages((prev) => [
         ...prev,
-        { id: createClientMessageId(), role: "user", content: submittedContent },
-      ]);
-      setIsResponding(true);
-      await streamReply(chatId, submittedContent);
+        {
+          id: createClientMessageId(),
+          role: "user",
+          content: submittedContent,
+        },
+      ])
+      setIsResponding(true)
+      await streamReply(chatId, submittedContent)
     },
     [
       buildAppMiniUiSubmission,
@@ -1639,15 +1764,17 @@ export default function AI_Prompt({
       resolvedChatId,
       streamReply,
     ]
-  );
+  )
 
   const isAppRequestResolved = useCallback(
     (messageId: number, appName: string) => {
       if (resolvedAppRequests[`${messageId}:${appName.toLowerCase()}`]) {
-        return true;
+        return true
       }
-      const integration = integrationByName.get(appName.toLowerCase());
-      const appToken = integration ? `[${integration.name}](app://${integration.slug})` : "";
+      const integration = integrationByName.get(appName.toLowerCase())
+      const appToken = integration
+        ? `[${integration.name}](app://${integration.slug})`
+        : ""
       return messages.some(
         (message) =>
           message.id > messageId &&
@@ -1657,34 +1784,37 @@ export default function AI_Prompt({
             (message.role === "assistant" &&
               !parseAppApprovalRequest(message.content) &&
               !parseAppMiniUiRequest(message.content)))
-      );
+      )
     },
     [integrationByName, messages, resolvedAppRequests]
-  );
+  )
 
   const uploadMessageAttachments = useCallback(
     async (attachments: AttachmentDraft[]) => {
-      const uploaded: MessageAttachment[] = [];
+      const uploaded: MessageAttachment[] = []
 
       for (const attachment of attachments) {
         if (!attachment.file) {
-          uploaded.push(attachment);
-          continue;
+          uploaded.push(attachment)
+          continue
         }
 
-        const formData = new FormData();
-        formData.append("file", attachment.file);
+        const formData = new FormData()
+        formData.append("file", attachment.file)
 
         const response = await apiFetch("/api/files", {
           method: "POST",
           body: formData,
-        });
-        const payload = (await response.json().catch(() => null)) as
-          | { data?: { file?: UploadedFilePayload }; error?: { message?: string } }
-          | null;
+        })
+        const payload = (await response.json().catch(() => null)) as {
+          data?: { file?: UploadedFilePayload }
+          error?: { message?: string }
+        } | null
 
         if (!response.ok || !payload?.data?.file) {
-          throw new Error(payload?.error?.message ?? `Failed to upload ${attachment.name}.`);
+          throw new Error(
+            payload?.error?.message ?? `Failed to upload ${attachment.name}.`
+          )
         }
 
         uploaded.push({
@@ -1693,140 +1823,158 @@ export default function AI_Prompt({
           name: payload.data.file.name,
           kind: attachment.kind,
           previewUrl: attachment.previewUrl,
-        });
+        })
       }
 
-      return uploaded;
+      return uploaded
     },
     [apiFetch]
-  );
+  )
 
-  const createAgentFromChat = useCallback(async (sourceMessageId: number) => {
-    const chatId = activeChatIdRef.current ?? resolvedChatId;
-    if (!chatId || chatId.startsWith("local-") || chatId.startsWith("workflow-node-chat-")) {
-      setCreateAgentError("Create a saved chat before creating an agent.");
-      return;
-    }
-
-    const transcript = messagesRef.current
-      .filter(
-        (message) =>
-          (message.role === "user" || message.role === "assistant") &&
-          message.content.trim().length > 0
-      )
-      .map((message) => ({
-        role: message.role,
-        content: message.content,
-      }));
-
-    if (transcript.length === 0) {
-      setCreateAgentError("This chat does not have enough content to create an agent.");
-      return;
-    }
-
-    setCreateAgentError(null);
-    setCreatingAgentMessageId(sourceMessageId);
-
-    try {
-      const response = await apiFetch(`/api/chats/${chatId}/agent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceMessageId,
-          messages: transcript,
-        }),
-      });
-      const payload = (await response.json()) as {
-        data?: { automation?: { id: string } };
-        error?: { message?: string };
-      };
-
-      const automationId = payload.data?.automation?.id;
-      if (!response.ok || !automationId) {
-        throw new Error(payload.error?.message ?? "Failed to create agent.");
+  const createAgentFromChat = useCallback(
+    async (sourceMessageId: number) => {
+      const chatId = activeChatIdRef.current ?? resolvedChatId
+      if (
+        !chatId ||
+        chatId.startsWith("local-") ||
+        chatId.startsWith("workflow-node-chat-")
+      ) {
+        setCreateAgentError("Create a saved chat before creating an agent.")
+        return
       }
 
-      router.push(`/workflow/${automationId}`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to create agent.";
-      setCreateAgentError(message);
-    } finally {
-      setCreatingAgentMessageId(null);
-    }
-  }, [apiFetch, resolvedChatId, router]);
+      const transcript = messagesRef.current
+        .filter(
+          (message) =>
+            (message.role === "user" || message.role === "assistant") &&
+            message.content.trim().length > 0
+        )
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        }))
+
+      if (transcript.length === 0) {
+        setCreateAgentError(
+          "This chat does not have enough content to create an agent."
+        )
+        return
+      }
+
+      setCreateAgentError(null)
+      setCreatingAgentMessageId(sourceMessageId)
+
+      try {
+        const response = await apiFetch(`/api/chats/${chatId}/agent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceMessageId,
+            messages: transcript,
+          }),
+        })
+        const payload = (await response.json()) as {
+          data?: { automation?: { id: string }; agent?: { id: string } }
+          error?: { message?: string }
+        }
+
+        const automationId = payload.data?.automation?.id
+        if (!response.ok || !automationId) {
+          throw new Error(payload.error?.message ?? "Failed to create agent.")
+        }
+
+        router.push(`/workflow/${automationId}`)
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to create agent."
+        setCreateAgentError(message)
+      } finally {
+        setCreatingAgentMessageId(null)
+      }
+    },
+    [apiFetch, resolvedChatId, router]
+  )
 
   const openAgentSetupFromPlan = useCallback(
     (message: ChatMessage) => {
       if (!isTelegramMentioned) {
-        void createAgentFromChat(message.id);
-        return;
+        void createAgentFromChat(message.id)
+        return
       }
 
-      setCreateAgentError(null);
-      setTelegramAgentError(null);
-      setTelegramAgentSuccess(null);
-      setAgentSetupMessageId(message.id);
+      setCreateAgentError(null)
+      setTelegramAgentError(null)
+      setTelegramAgentSuccess(null)
+      setAgentSetupMessageId(message.id)
       setTelegramAgentInstructions(
         draftTelegramAgentInstructions(message.content, messagesRef.current)
-      );
+      )
 
-      if (activeChatTitleRef.current && activeChatTitleRef.current !== "New chat") {
-        setTelegramAgentName(activeChatTitleRef.current);
+      if (
+        activeChatTitleRef.current &&
+        activeChatTitleRef.current !== "New chat"
+      ) {
+        setTelegramAgentName(activeChatTitleRef.current)
       }
 
       requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-      });
+        messagesEndRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "end",
+        })
+      })
     },
     [createAgentFromChat, isTelegramMentioned]
-  );
+  )
 
   const handleTelegramAvatarChange = useCallback(async (file: File | null) => {
-    if (!file) return;
-    setTelegramAgentError(null);
+    if (!file) return
+    setTelegramAgentError(null)
     try {
-      const dataUrl = await readImageAsDataUrl(file);
-      setNewTelegramBotAvatarUrl(dataUrl);
-      setNewTelegramBotAvatarName(file.name);
+      const dataUrl = await readImageAsDataUrl(file)
+      setNewTelegramBotAvatarUrl(dataUrl)
+      setNewTelegramBotAvatarName(file.name)
     } catch (error) {
       setTelegramAgentError(
         error instanceof Error ? error.message : "Unable to use this avatar."
-      );
+      )
     }
-  }, []);
+  }, [])
 
   const createTelegramAgentFromChat = useCallback(async () => {
-    const currentChatId = activeChatIdRef.current ?? resolvedChatId;
+    const currentChatId = activeChatIdRef.current ?? resolvedChatId
     if (
       !currentChatId ||
       currentChatId.startsWith("local-") ||
       currentChatId.startsWith("workflow-node-chat-")
     ) {
-      setTelegramAgentError("Start a saved chat before creating a Telegram agent.");
-      return;
+      setTelegramAgentError(
+        "Start a saved chat before creating a Telegram agent."
+      )
+      return
     }
 
     if (telegramBotSetupMode === "existing" && !selectedTelegramConnectionId) {
-      setTelegramAgentError("Choose the Telegram bot for this agent.");
-      return;
+      setTelegramAgentError("Choose the Telegram bot for this agent.")
+      return
     }
 
     if (telegramBotSetupMode === "new" && !newTelegramBotToken.trim()) {
-      setTelegramAgentError("Paste the BotFather token for this Telegram bot.");
-      return;
+      setTelegramAgentError("Paste the BotFather token for this Telegram bot.")
+      return
     }
 
     if (telegramAgentMode === "agent_api" && !telegramAgentApiUrl.trim()) {
-      setTelegramAgentError("Add the Agent API URL or choose Atmet model.");
-      return;
+      setTelegramAgentError("Add the Agent API URL or choose Atmet model.")
+      return
     }
 
-    setTelegramAgentError(null);
-    setTelegramAgentSuccess(null);
-    setIsCreatingTelegramAgent(true);
+    setTelegramAgentError(null)
+    setTelegramAgentSuccess(null)
+    setIsCreatingTelegramAgent(true)
 
     try {
-      let workspaceIntegrationId = selectedTelegramConnectionId;
+      let workspaceIntegrationId = selectedTelegramConnectionId
       if (telegramBotSetupMode === "new") {
         const response = await apiFetch("/api/integrations/telegram/connect", {
           method: "POST",
@@ -1839,57 +1987,69 @@ export default function AI_Prompt({
               "Telegram bot",
             avatarUrl: newTelegramBotAvatarUrl,
           }),
-        });
+        })
         const payload = (await response.json()) as {
-          data?: { connection?: { id: string } };
-          error?: { message?: string };
-        };
-
-        workspaceIntegrationId = payload.data?.connection?.id ?? "";
-        if (!response.ok || !workspaceIntegrationId) {
-          throw new Error(payload.error?.message ?? "Failed to save Telegram bot.");
+          data?: { connection?: { id: string } }
+          error?: { message?: string }
         }
 
-        setSelectedTelegramConnectionId(workspaceIntegrationId);
+        workspaceIntegrationId = payload.data?.connection?.id ?? ""
+        if (!response.ok || !workspaceIntegrationId) {
+          throw new Error(
+            payload.error?.message ?? "Failed to save Telegram bot."
+          )
+        }
+
+        setSelectedTelegramConnectionId(workspaceIntegrationId)
       }
 
-      const response = await apiFetch(`/api/chats/${currentChatId}/telegram-agent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: telegramAgentName.trim() || "Telegram support agent",
-          instructions: telegramAgentInstructions,
-          modelMode: telegramAgentMode,
-          agentApiUrl: telegramAgentMode === "agent_api" ? telegramAgentApiUrl.trim() : "",
-          autoReply: true,
-          workspaceIntegrationId,
-        }),
-      });
+      const response = await apiFetch(
+        `/api/chats/${currentChatId}/telegram-agent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: telegramAgentName.trim() || "Telegram support agent",
+            instructions: telegramAgentInstructions,
+            modelMode: telegramAgentMode,
+            agentApiUrl:
+              telegramAgentMode === "agent_api"
+                ? telegramAgentApiUrl.trim()
+                : "",
+            autoReply: true,
+            workspaceIntegrationId,
+          }),
+        }
+      )
       const payload = (await response.json()) as {
         data?: {
-          automation?: { id: string };
-          webhookConfigured?: boolean;
-          webhookUrl?: string;
-        };
-        error?: { message?: string };
-      };
+          automation?: { id: string }
+          webhookConfigured?: boolean
+          webhookUrl?: string
+        }
+        error?: { message?: string }
+      }
 
       if (!response.ok || !payload.data?.automation?.id) {
-        throw new Error(payload.error?.message ?? "Failed to create Telegram agent.");
+        throw new Error(
+          payload.error?.message ?? "Failed to create Telegram agent."
+        )
       }
 
       setTelegramAgentSuccess(
         payload.data.webhookConfigured
           ? "Telegram agent is live."
           : "Telegram agent created as draft. Press Run in the playground when you want it live."
-      );
-      router.push(`/workflow/${payload.data.automation.id}`);
+      )
+      router.push(`/workflow/${payload.data.automation.id}`)
     } catch (error) {
       setTelegramAgentError(
-        error instanceof Error ? error.message : "Failed to create Telegram agent."
-      );
+        error instanceof Error
+          ? error.message
+          : "Failed to create Telegram agent."
+      )
     } finally {
-      setIsCreatingTelegramAgent(false);
+      setIsCreatingTelegramAgent(false)
     }
   }, [
     apiFetch,
@@ -1904,198 +2064,250 @@ export default function AI_Prompt({
     telegramAgentMode,
     telegramAgentName,
     telegramBotSetupMode,
-  ]);
+  ])
 
-  const sendMessage = useCallback(async (options?: { confirmEditPrune?: boolean }) => {
-    const content = value.trim();
-    const submittedContent = content || (attachedFiles.length > 0 ? "Attached file(s)" : "");
-    const hasUserTextBeyondLockedPrefix = lockedComposerPrefix
-      ? value.slice(lockedComposerPrefix.length).trim().length > 0
-      : content.length > 0;
-    if (!hasUserTextBeyondLockedPrefix && attachedFiles.length === 0) return;
-    const attachmentsToUpload = attachedFiles;
-    const attachmentData: MessageAttachment[] = attachedFiles.map(({ id, name, kind, previewUrl }) => ({
-      id,
-      name,
-      kind,
-      previewUrl,
-    }));
+  const sendMessage = useCallback(
+    async (options?: { confirmEditPrune?: boolean }) => {
+      const content = value.trim()
+      const submittedContent =
+        content || (attachedFiles.length > 0 ? "Attached file(s)" : "")
+      const hasUserTextBeyondLockedPrefix = lockedComposerPrefix
+        ? value.slice(lockedComposerPrefix.length).trim().length > 0
+        : content.length > 0
+      if (!hasUserTextBeyondLockedPrefix && attachedFiles.length === 0) return
+      const attachmentsToUpload = attachedFiles
+      const attachmentData: MessageAttachment[] = attachedFiles.map(
+        ({ id, name, kind, previewUrl }) => ({
+          id,
+          name,
+          kind,
+          previewUrl,
+        })
+      )
 
-    onConversationStart?.();
-    if (persistChatListEntry) {
-      persistActiveChat(submittedContent);
-    }
-    if (activeTab === "automation") {
-      onAutomationConversationStart?.();
-    }
-    setCommandMenu(null);
-
-    if (editingMessageId !== null) {
-      const targetMessageId = editingMessageId;
-      const editIndex = messages.findIndex(
-        (message) => message.id === targetMessageId && message.role === "user"
-      );
-      const laterCount = editIndex >= 0 ? messages.length - editIndex - 1 : 0;
-
-      if (laterCount > 0 && !options?.confirmEditPrune) {
-        setPendingEditConfirmation({ messageId: targetMessageId, laterCount });
-        return;
+      onConversationStart?.()
+      if (persistChatListEntry) {
+        persistActiveChat(submittedContent)
       }
+      if (activeTab === "automation") {
+        onAutomationConversationStart?.()
+      }
+      setCommandMenu(null)
 
-      const targetServerId =
-        editIndex >= 0 ? messages[editIndex]?.serverId : undefined;
-
-      setMessages((prev) => {
-        const currentEditIndex = prev.findIndex(
+      if (editingMessageId !== null) {
+        const targetMessageId = editingMessageId
+        const editIndex = messages.findIndex(
           (message) => message.id === targetMessageId && message.role === "user"
-        );
+        )
+        const laterCount = editIndex >= 0 ? messages.length - editIndex - 1 : 0
 
-        if (currentEditIndex === -1) {
-          return [
-            ...prev,
-            { id: createClientMessageId(), role: "user", content: submittedContent, attachments: attachmentData },
-          ];
+        if (laterCount > 0 && !options?.confirmEditPrune) {
+          setPendingEditConfirmation({ messageId: targetMessageId, laterCount })
+          return
         }
 
-        const updated = [...prev];
-        updated[currentEditIndex] = { ...updated[currentEditIndex], content: submittedContent, attachments: attachmentData };
-        return updated.slice(0, currentEditIndex + 1);
-      });
+        const targetServerId =
+          editIndex >= 0 ? messages[editIndex]?.serverId : undefined
 
-      setPendingEditConfirmation(null);
-      setValue(lockedComposerPrefix);
-      setComposerScrollTop(0);
-      setAttachedFiles([]);
-      adjustHeight(true);
-      setEditingMessageId(null);
-      setIsResponding(true);
-      await streamReply(
-        activeChatIdRef.current ?? `local-${createClientMessageId()}`,
-        submittedContent,
-        attachmentData,
-        targetServerId
-      );
-      return;
-    }
+        setMessages((prev) => {
+          const currentEditIndex = prev.findIndex(
+            (message) =>
+              message.id === targetMessageId && message.role === "user"
+          )
 
-    const userMessageId = createClientMessageId();
-    setMessages((prev) => [
-      ...prev,
-      { id: userMessageId, role: "user", content: submittedContent, attachments: attachmentData },
-    ]);
-    setValue(lockedComposerPrefix);
-    setComposerScrollTop(0);
-    setAttachedFiles([]);
-    adjustHeight(true);
-    setIsResponding(true);
-
-    // Create chat in DB if this is the first message
-    let chatId = activeChatIdRef.current;
-    if (!chatId) {
-      try {
-        const chatTitle = toChatTitle(submittedContent);
-        const r = await apiFetch("/api/chats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: chatTitle }),
-        });
-        if (r.ok) {
-          const payload = (await r.json()) as { data?: { chat?: { id: string } } };
-          chatId = payload.data?.chat?.id ?? null;
-          if (chatId) {
-            activeChatIdRef.current = chatId;
-            locallyStreamingChatIdRef.current = chatId;
-            setResolvedChatId(chatId);
-            activeChatTitleRef.current = chatTitle;
-            if (typeof window !== "undefined" && window.location.pathname === "/ai-core") {
-              window.history.replaceState(null, "", `/ai-core?chat=${chatId}`);
-            }
-            window.dispatchEvent(new CustomEvent(AI_CORE_CHATS_UPDATED_EVENT));
+          if (currentEditIndex === -1) {
+            return [
+              ...prev,
+              {
+                id: createClientMessageId(),
+                role: "user",
+                content: submittedContent,
+                attachments: attachmentData,
+              },
+            ]
           }
-        } else {
-          const payload = (await r.json().catch(() => null)) as {
-            error?: { message?: string };
-          } | null;
-          throw new Error(payload?.error?.message ?? "Failed to create chat.");
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to create chat.";
-        setMessages((prev) => [
-          ...prev,
-          { id: createClientMessageId(), role: "assistant", content: message },
-        ]);
-        setIsResponding(false);
-        return;
-      }
-    }
 
-    if (!chatId) {
+          const updated = [...prev]
+          updated[currentEditIndex] = {
+            ...updated[currentEditIndex],
+            content: submittedContent,
+            attachments: attachmentData,
+          }
+          return updated.slice(0, currentEditIndex + 1)
+        })
+
+        setPendingEditConfirmation(null)
+        setValue(lockedComposerPrefix)
+        setComposerScrollTop(0)
+        setAttachedFiles([])
+        adjustHeight(true)
+        setEditingMessageId(null)
+        setIsResponding(true)
+        await streamReply(
+          activeChatIdRef.current ?? `local-${createClientMessageId()}`,
+          submittedContent,
+          attachmentData,
+          targetServerId
+        )
+        return
+      }
+
+      const userMessageId = createClientMessageId()
       setMessages((prev) => [
         ...prev,
-        { id: createClientMessageId(), role: "assistant", content: "Failed to create chat. Please try again." },
-      ]);
-      setIsResponding(false);
-      return;
-    }
+        {
+          id: userMessageId,
+          role: "user",
+          content: submittedContent,
+          attachments: attachmentData,
+        },
+      ])
+      setValue(lockedComposerPrefix)
+      setComposerScrollTop(0)
+      setAttachedFiles([])
+      adjustHeight(true)
+      setIsResponding(true)
 
-    let savedAttachments = attachmentData;
-    if (attachmentsToUpload.length > 0) {
-      try {
-        savedAttachments = await uploadMessageAttachments(attachmentsToUpload);
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === userMessageId
-              ? { ...message, attachments: savedAttachments }
-              : message
-          )
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to upload file.";
+      // Create chat in DB if this is the first message
+      let chatId = activeChatIdRef.current
+      if (!chatId) {
+        try {
+          const chatTitle = toChatTitle(submittedContent)
+          const r = await apiFetch("/api/chats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: chatTitle }),
+          })
+          if (r.ok) {
+            const payload = (await r.json()) as {
+              data?: { chat?: { id: string } }
+            }
+            chatId = payload.data?.chat?.id ?? null
+            if (chatId) {
+              activeChatIdRef.current = chatId
+              locallyStreamingChatIdRef.current = chatId
+              setResolvedChatId(chatId)
+              activeChatTitleRef.current = chatTitle
+              if (
+                typeof window !== "undefined" &&
+                window.location.pathname === "/ai-core"
+              ) {
+                window.history.replaceState(null, "", `/ai-core?chat=${chatId}`)
+              }
+              window.dispatchEvent(new CustomEvent(AI_CORE_CHATS_UPDATED_EVENT))
+            }
+          } else {
+            const payload = (await r.json().catch(() => null)) as {
+              error?: { message?: string }
+            } | null
+            throw new Error(payload?.error?.message ?? "Failed to create chat.")
+          }
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Failed to create chat."
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: createClientMessageId(),
+              role: "assistant",
+              content: message,
+            },
+          ])
+          setIsResponding(false)
+          return
+        }
+      }
+
+      if (!chatId) {
         setMessages((prev) => [
           ...prev,
-          { id: createClientMessageId(), role: "assistant", content: message },
-        ]);
-        setIsResponding(false);
-        return;
+          {
+            id: createClientMessageId(),
+            role: "assistant",
+            content: "Failed to create chat. Please try again.",
+          },
+        ])
+        setIsResponding(false)
+        return
       }
-    }
 
-    await streamReply(chatId, submittedContent, savedAttachments);
-  }, [
-    value, lockedComposerPrefix, attachedFiles, onConversationStart, persistChatListEntry,
-    persistActiveChat, activeTab, onAutomationConversationStart, editingMessageId,
-    adjustHeight, streamReply, apiFetch, toChatTitle, createClientMessageId, uploadMessageAttachments,
-    messages,
-  ]);
+      let savedAttachments = attachmentData
+      if (attachmentsToUpload.length > 0) {
+        try {
+          savedAttachments = await uploadMessageAttachments(attachmentsToUpload)
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === userMessageId
+                ? { ...message, attachments: savedAttachments }
+                : message
+            )
+          )
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Failed to upload file."
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: createClientMessageId(),
+              role: "assistant",
+              content: message,
+            },
+          ])
+          setIsResponding(false)
+          return
+        }
+      }
+
+      await streamReply(chatId, submittedContent, savedAttachments)
+    },
+    [
+      value,
+      lockedComposerPrefix,
+      attachedFiles,
+      onConversationStart,
+      persistChatListEntry,
+      persistActiveChat,
+      activeTab,
+      onAutomationConversationStart,
+      editingMessageId,
+      adjustHeight,
+      streamReply,
+      apiFetch,
+      toChatTitle,
+      createClientMessageId,
+      uploadMessageAttachments,
+      messages,
+    ]
+  )
 
   const copyToClipboard = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(text)
     } catch {
       // no-op
     }
-  };
+  }
 
   const copyWithFeedback = async (text: string, copyKey: string) => {
-    await copyToClipboard(text);
+    await copyToClipboard(text)
 
     setCopiedStates((prev) => ({
       ...prev,
       [copyKey]: true,
-    }));
+    }))
 
-    const existingTimer = copyTimersRef.current[copyKey];
-    if (existingTimer) clearTimeout(existingTimer);
+    const existingTimer = copyTimersRef.current[copyKey]
+    if (existingTimer) clearTimeout(existingTimer)
 
     copyTimersRef.current[copyKey] = window.setTimeout(() => {
       setCopiedStates((prev) => {
-        const next = { ...prev };
-        delete next[copyKey];
-        return next;
-      });
-      delete copyTimersRef.current[copyKey];
-    }, 2000);
-  };
+        const next = { ...prev }
+        delete next[copyKey]
+        return next
+      })
+      delete copyTimersRef.current[copyKey]
+    }, 2000)
+  }
 
   const renderCopyIcon = (copyKey: string, sizeClass = "h-3.5 w-3.5") => (
     <AnimatePresence mode="wait" initial={false}>
@@ -2123,64 +2335,71 @@ export default function AI_Prompt({
         </motion.span>
       )}
     </AnimatePresence>
-  );
+  )
 
   const outputActionButtonBase =
-    "inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors";
+    "inline-flex h-7 w-7 items-center justify-center rounded-md p-0 leading-none transition-colors"
 
   const getCodeFileExtension = (language: string) => {
-    const lower = language.trim().toLowerCase();
-    if (["js", "javascript"].includes(lower)) return "js";
-    if (["ts", "typescript"].includes(lower)) return "ts";
-    if (["py", "python"].includes(lower)) return "py";
-    if (["sh", "bash", "shell"].includes(lower)) return "sh";
-    if (["sql"].includes(lower)) return "sql";
-    return "txt";
-  };
+    const lower = language.trim().toLowerCase()
+    if (["js", "javascript"].includes(lower)) return "js"
+    if (["ts", "typescript"].includes(lower)) return "ts"
+    if (["py", "python"].includes(lower)) return "py"
+    if (["sh", "bash", "shell"].includes(lower)) return "sh"
+    if (["sql"].includes(lower)) return "sql"
+    return "txt"
+  }
 
-  const downloadCodeBlock = (language: string, code: string, messageId: number, index: number) => {
-    const ext = getCodeFileExtension(language);
-    const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `artifact-${messageId}-${index}.${ext}`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-  };
+  const downloadCodeBlock = (
+    language: string,
+    code: string,
+    messageId: number,
+    index: number
+  ) => {
+    const ext = getCodeFileExtension(language)
+    const blob = new Blob([code], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `artifact-${messageId}-${index}.${ext}`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }
 
   const runCodeBlock = (language: string, code: string, key: string) => {
-    const lower = language.trim().toLowerCase();
-    const executable = lower === "" || ["js", "javascript", "ts", "typescript"].includes(lower);
+    const lower = language.trim().toLowerCase()
+    const executable =
+      lower === "" || ["js", "javascript", "ts", "typescript"].includes(lower)
 
     if (!executable) {
       setCodeRunOutput((prev) => ({
         ...prev,
         [key]: {
           status: "info",
-          output: "Run preview currently supports JavaScript/TypeScript blocks.",
+          output:
+            "Run preview currently supports JavaScript/TypeScript blocks.",
         },
-      }));
-      return;
+      }))
+      return
     }
 
-    const logs: string[] = [];
+    const logs: string[] = []
     const sandboxConsole = {
       log: (...args: unknown[]) => {
         logs.push(
           args
             .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
             .join(" ")
-        );
+        )
       },
-    };
+    }
 
     try {
       // Demo-only local runner for simple snippets.
-      const fn = new Function("console", code);
-      fn(sandboxConsole);
+      const fn = new Function("console", code)
+      fn(sandboxConsole)
 
       setCodeRunOutput((prev) => ({
         ...prev,
@@ -2191,7 +2410,7 @@ export default function AI_Prompt({
               ? logs.join("\n")
               : "Code executed successfully (no output).",
         },
-      }));
+      }))
     } catch (error) {
       setCodeRunOutput((prev) => ({
         ...prev,
@@ -2202,124 +2421,132 @@ export default function AI_Prompt({
               ? error.message
               : "Failed to run this code block.",
         },
-      }));
+      }))
     }
-  };
+  }
 
-  const parseAssistantContent = (content: string): AssistantContentSegment[] => {
-    const segments: AssistantContentSegment[] = [];
-    const openFenceRegex = /`{2,}([a-zA-Z0-9_+-]*)\n?/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
+  const parseAssistantContent = (
+    content: string
+  ): AssistantContentSegment[] => {
+    const segments: AssistantContentSegment[] = []
+    const openFenceRegex = /`{2,}([a-zA-Z0-9_+-]*)\n?/g
+    let lastIndex = 0
+    let match: RegExpExecArray | null
 
     while ((match = openFenceRegex.exec(content)) !== null) {
-      const fullMatch = match[0] ?? "";
-      const fenceMatch = fullMatch.match(/^`{2,}/);
-      const fence = fenceMatch?.[0] ?? "```";
-      const codeStart = openFenceRegex.lastIndex;
-      const closeIndex = content.indexOf(fence, codeStart);
+      const fullMatch = match[0] ?? ""
+      const fenceMatch = fullMatch.match(/^`{2,}/)
+      const fence = fenceMatch?.[0] ?? "```"
+      const codeStart = openFenceRegex.lastIndex
+      const closeIndex = content.indexOf(fence, codeStart)
 
       if (match.index > lastIndex) {
         segments.push({
           type: "text",
           value: content.slice(lastIndex, match.index),
-        });
+        })
       }
 
-      const language = (match[1] ?? "").trim();
+      const language = (match[1] ?? "").trim()
 
       if (closeIndex === -1) {
-        const code = content.slice(codeStart).replace(/\n$/, "");
+        const code = content.slice(codeStart).replace(/\n$/, "")
         if (code.trim().length > 0) {
           segments.push({
             type: "code",
             language,
             value: code,
-          });
+          })
         }
-        lastIndex = content.length;
-        break;
+        lastIndex = content.length
+        break
       }
 
-      const code = content.slice(codeStart, closeIndex).replace(/\n$/, "");
+      const code = content.slice(codeStart, closeIndex).replace(/\n$/, "")
       segments.push({
         type: "code",
         language,
         value: code,
-      });
+      })
 
-      lastIndex = closeIndex + fence.length;
-      openFenceRegex.lastIndex = lastIndex;
+      lastIndex = closeIndex + fence.length
+      openFenceRegex.lastIndex = lastIndex
     }
 
     if (lastIndex < content.length) {
       segments.push({
         type: "text",
         value: content.slice(lastIndex),
-      });
+      })
     }
 
-    return segments.length > 0 ? segments : [{ type: "text", value: content }];
-  };
+    return segments.length > 0 ? segments : [{ type: "text", value: content }]
+  }
 
   const renderTextWithAppMentions = (
     content: string,
     keyPrefix: string,
     options?: {
-      badgeClassName?: string;
-      showLogo?: boolean;
-      plainInline?: boolean;
-      preserveComposerCaret?: boolean;
-      lockedSkillName?: string | null;
+      badgeClassName?: string
+      showLogo?: boolean
+      plainInline?: boolean
+      preserveComposerCaret?: boolean
+      lockedSkillName?: string | null
     }
   ) => {
-    const useInlineMentionStyle = options?.plainInline ?? true;
-    const preserveComposerCaret = options?.preserveComposerCaret ?? false;
+    const useInlineMentionStyle = options?.plainInline ?? true
+    const preserveComposerCaret = options?.preserveComposerCaret ?? false
     const escapedApps = appNames
       .map((app) => app.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .sort((a, b) => b.length - a.length);
+      .sort((a, b) => b.length - a.length)
     const escapedSkills = mentionableSkills
       .map((skill) => skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .sort((a, b) => b.length - a.length);
-    const mentionParts = ["\\[([^\\]]+)\\]\\(app:\\/\\/([a-z0-9-]+)\\)"];
+      .sort((a, b) => b.length - a.length)
+    const mentionParts = ["\\[([^\\]]+)\\]\\(app:\\/\\/([a-z0-9-]+)\\)"]
     if (escapedApps.length > 0) {
-      mentionParts.push(`@(${escapedApps.join("|")})(?=\\s|$|[.,!?;:])`);
+      mentionParts.push(`@(${escapedApps.join("|")})(?=\\s|$|[.,!?;:])`)
     }
     if (escapedSkills.length > 0) {
-      mentionParts.push(`\\/(${escapedSkills.join("|")})(?=\\s|$|[.,!?;:])`);
+      mentionParts.push(`\\/(${escapedSkills.join("|")})(?=\\s|$|[.,!?;:])`)
     }
-    const mentionRegex = new RegExp(mentionParts.join("|"), "gi");
-    const appByLower = new Map(appNames.map((app) => [app.toLowerCase(), app]));
+    const mentionRegex = new RegExp(mentionParts.join("|"), "gi")
+    const appByLower = new Map(appNames.map((app) => [app.toLowerCase(), app]))
     const skillByLower = new Map(
       mentionableSkills.map((skill) => [skill.toLowerCase(), skill])
-    );
-    const nodes: React.ReactNode[] = [];
-    let cursor = 0;
-    let mentionIndex = 0;
-    let match: RegExpExecArray | null;
+    )
+    const nodes: React.ReactNode[] = []
+    let cursor = 0
+    let mentionIndex = 0
+    let match: RegExpExecArray | null
 
     while ((match = mentionRegex.exec(content)) !== null) {
-      const fullMatch = match[0] ?? "";
-      const appLabel = match[1] ?? "";
-      const appSlug = match[2] ?? "";
-      const appAtRaw = match[3] ?? "";
-      const skillRaw = match[4] ?? "";
-      const integration =
-        appSlug ? integrationBySlug.get(appSlug) ?? integrationByName.get(appLabel.toLowerCase()) : null;
-      const appName = integration?.name || (appAtRaw ? appByLower.get(appAtRaw.toLowerCase()) ?? appAtRaw : appLabel);
+      const fullMatch = match[0] ?? ""
+      const appLabel = match[1] ?? ""
+      const appSlug = match[2] ?? ""
+      const appAtRaw = match[3] ?? ""
+      const skillRaw = match[4] ?? ""
+      const integration = appSlug
+        ? (integrationBySlug.get(appSlug) ??
+          integrationByName.get(appLabel.toLowerCase()))
+        : null
+      const appName =
+        integration?.name ||
+        (appAtRaw
+          ? (appByLower.get(appAtRaw.toLowerCase()) ?? appAtRaw)
+          : appLabel)
       const skillName = skillRaw
-        ? skillByLower.get(skillRaw.toLowerCase()) ?? skillRaw
-        : "";
-      const isSkillMention = skillName.length > 0;
+        ? (skillByLower.get(skillRaw.toLowerCase()) ?? skillRaw)
+        : ""
+      const isSkillMention = skillName.length > 0
       const isLockedSkillMention =
         isSkillMention &&
         !!options?.lockedSkillName &&
-        skillName.toLowerCase() === options.lockedSkillName.toLowerCase();
-      const start = match.index;
-      const end = start + fullMatch.length;
+        skillName.toLowerCase() === options.lockedSkillName.toLowerCase()
+      const start = match.index
+      const end = start + fullMatch.length
 
       if (start > cursor) {
-        nodes.push(content.slice(cursor, start));
+        nodes.push(content.slice(cursor, start))
       }
 
       if (useInlineMentionStyle) {
@@ -2330,9 +2557,9 @@ export default function AI_Prompt({
               className={cn(
                 isSkillMention
                   ? isLockedSkillMention
-                    ? "relative inline whitespace-nowrap align-baseline text-violet-600 font-normal leading-[inherit] tracking-normal dark:text-violet-300"
-                    : "relative inline whitespace-nowrap align-baseline text-pink-600 font-normal leading-[inherit] tracking-normal dark:text-pink-300"
-                  : "relative inline whitespace-nowrap align-baseline text-[#01a4f3] font-normal leading-[inherit] tracking-normal",
+                    ? "relative inline align-baseline leading-[inherit] font-normal tracking-normal whitespace-nowrap text-violet-600 dark:text-violet-300"
+                    : "relative inline align-baseline leading-[inherit] font-normal tracking-normal whitespace-nowrap text-pink-600 dark:text-pink-300"
+                  : "relative inline align-baseline leading-[inherit] font-normal tracking-normal whitespace-nowrap text-[#01a4f3]",
                 options?.badgeClassName
               )}
             >
@@ -2354,7 +2581,7 @@ export default function AI_Prompt({
                   <>
                     <span className="relative inline-block align-baseline">
                       <span className="opacity-0">@</span>
-                      <span className="pointer-events-none absolute inset-y-0 -left-[0.04em] inline-flex items-center [transform:translateY(0.01em)_scale(1.06)]">
+                      <span className="pointer-events-none absolute inset-y-0 -left-[0.04em] inline-flex [transform:translateY(0.01em)_scale(1.06)] items-center">
                         {renderAppLogo(appName, "mention")}
                       </span>
                     </span>
@@ -2363,7 +2590,7 @@ export default function AI_Prompt({
                 )}
               </span>
             </span>
-          );
+          )
         } else {
           if (isSkillMention) {
             nodes.push(
@@ -2371,27 +2598,27 @@ export default function AI_Prompt({
                 key={`${keyPrefix}-mention-${mentionIndex}`}
                 className={cn(
                   isLockedSkillMention
-                    ? "mx-[0.02em] inline-flex whitespace-nowrap items-center rounded-[min(var(--radius-sm),8px)] bg-violet-500/14 px-[0.24em] py-[0.08em] align-baseline text-violet-600 font-normal leading-[inherit] tracking-normal dark:bg-violet-400/16 dark:text-violet-300"
-                    : "mx-[0.02em] inline-flex whitespace-nowrap items-center rounded-[min(var(--radius-sm),8px)] bg-pink-500/12 px-[0.24em] py-[0.08em] align-baseline text-pink-600 font-normal leading-[inherit] tracking-normal dark:bg-pink-400/14 dark:text-pink-300",
+                    ? "mx-[0.02em] inline-flex items-center rounded-[min(var(--radius-sm),8px)] bg-violet-500/14 px-[0.24em] py-[0.08em] align-baseline leading-[inherit] font-normal tracking-normal whitespace-nowrap text-violet-600 dark:bg-violet-400/16 dark:text-violet-300"
+                    : "mx-[0.02em] inline-flex items-center rounded-[min(var(--radius-sm),8px)] bg-pink-500/12 px-[0.24em] py-[0.08em] align-baseline leading-[inherit] font-normal tracking-normal whitespace-nowrap text-pink-600 dark:bg-pink-400/14 dark:text-pink-300",
                   options?.badgeClassName
                 )}
               >
                 /{skillName}
               </span>
-            );
+            )
           } else {
             nodes.push(
-                <span
-                  key={`${keyPrefix}-mention-${mentionIndex}`}
-                  className={cn(
-                    "mx-[0.02em] inline-flex whitespace-nowrap items-center gap-[0.24em] rounded-[min(var(--radius-sm),8px)] bg-[#01a4f3]/12 px-[0.24em] py-[0.08em] align-baseline text-[#01a4f3] font-normal leading-[inherit] tracking-normal dark:bg-[#01a4f3]/16",
-                    options?.badgeClassName
-                  )}
-                >
+              <span
+                key={`${keyPrefix}-mention-${mentionIndex}`}
+                className={cn(
+                  "mx-[0.02em] inline-flex items-center gap-[0.24em] rounded-[min(var(--radius-sm),8px)] bg-[#01a4f3]/12 px-[0.24em] py-[0.08em] align-baseline leading-[inherit] font-normal tracking-normal whitespace-nowrap text-[#01a4f3] dark:bg-[#01a4f3]/16",
+                  options?.badgeClassName
+                )}
+              >
                 {renderAppLogo(appName, "mention")}
                 <span>{appName}</span>
               </span>
-            );
+            )
           }
         }
       } else {
@@ -2414,47 +2641,51 @@ export default function AI_Prompt({
             ) : null}
             <span>{isSkillMention ? `/${skillName}` : appName}</span>
           </span>
-        );
+        )
       }
 
-      mentionIndex += 1;
-      cursor = end;
+      mentionIndex += 1
+      cursor = end
     }
 
     if (cursor < content.length) {
-      nodes.push(content.slice(cursor));
+      nodes.push(content.slice(cursor))
     }
 
-    return nodes.length > 0 ? nodes : content;
-  };
+    return nodes.length > 0 ? nodes : content
+  }
 
-  const renderInlineAssistantMarkdown = (content: string, keyPrefix: string) => {
-    const nodes: React.ReactNode[] = [];
-    const inlineRegex = /(\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\))/g;
-    let cursor = 0;
-    let inlineIndex = 0;
-    let match: RegExpExecArray | null;
+  const renderInlineAssistantMarkdown = (
+    content: string,
+    keyPrefix: string
+  ) => {
+    const nodes: React.ReactNode[] = []
+    const inlineRegex =
+      /(\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\))/g
+    let cursor = 0
+    let inlineIndex = 0
+    let match: RegExpExecArray | null
 
     const pushMentionNodes = (value: string, key: string) => {
-      const rendered = renderTextWithAppMentions(value, key);
+      const rendered = renderTextWithAppMentions(value, key)
       if (Array.isArray(rendered)) {
-        nodes.push(...rendered);
+        nodes.push(...rendered)
       } else {
-        nodes.push(rendered);
+        nodes.push(rendered)
       }
-    };
+    }
 
     while ((match = inlineRegex.exec(content)) !== null) {
       if (match.index > cursor) {
         pushMentionNodes(
           content.slice(cursor, match.index),
           `${keyPrefix}-text-${inlineIndex}`
-        );
+        )
       }
 
-      const boldText = match[2];
-      const linkText = match[3];
-      const href = match[4];
+      const boldText = match[2]
+      const linkText = match[3]
+      const href = match[4]
 
       if (boldText) {
         nodes.push(
@@ -2462,9 +2693,12 @@ export default function AI_Prompt({
             key={`${keyPrefix}-bold-${inlineIndex}`}
             className="font-medium text-foreground"
           >
-            {renderTextWithAppMentions(boldText, `${keyPrefix}-bold-text-${inlineIndex}`)}
+            {renderTextWithAppMentions(
+              boldText,
+              `${keyPrefix}-bold-text-${inlineIndex}`
+            )}
           </strong>
-        );
+        )
       } else if (linkText && href) {
         nodes.push(
           <a
@@ -2474,95 +2708,112 @@ export default function AI_Prompt({
             rel="noreferrer"
             className="text-primary underline-offset-4 hover:underline"
           >
-            {renderTextWithAppMentions(linkText, `${keyPrefix}-link-text-${inlineIndex}`)}
+            {renderTextWithAppMentions(
+              linkText,
+              `${keyPrefix}-link-text-${inlineIndex}`
+            )}
           </a>
-        );
+        )
       }
 
-      inlineIndex += 1;
-      cursor = match.index + match[0].length;
+      inlineIndex += 1
+      cursor = match.index + match[0].length
     }
 
     if (cursor < content.length) {
-      pushMentionNodes(content.slice(cursor), `${keyPrefix}-text-${inlineIndex}`);
+      pushMentionNodes(
+        content.slice(cursor),
+        `${keyPrefix}-text-${inlineIndex}`
+      )
     }
 
-    return nodes.length > 0 ? nodes : renderTextWithAppMentions(content, keyPrefix);
-  };
+    return nodes.length > 0
+      ? nodes
+      : renderTextWithAppMentions(content, keyPrefix)
+  }
 
   const renderAssistantMarkdownText = (content: string, keyPrefix: string) => {
-    const lines = content.split("\n");
-    const blocks: React.ReactNode[] = [];
-    let paragraph: string[] = [];
-    let listItems: string[] = [];
+    const lines = content.split("\n")
+    const blocks: React.ReactNode[] = []
+    let paragraph: string[] = []
+    let listItems: string[] = []
 
     const flushParagraph = () => {
-      if (paragraph.length === 0) return;
-      const value = paragraph.join("\n");
+      if (paragraph.length === 0) return
+      const value = paragraph.join("\n")
       blocks.push(
         <p
           key={`${keyPrefix}-p-${blocks.length}`}
-          className="min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-0.5 py-1 text-sm text-foreground"
+          className="max-w-full min-w-0 px-0.5 py-1 text-sm [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-foreground"
         >
-          {renderInlineAssistantMarkdown(value, `${keyPrefix}-p-${blocks.length}`)}
+          {renderInlineAssistantMarkdown(
+            value,
+            `${keyPrefix}-p-${blocks.length}`
+          )}
         </p>
-      );
-      paragraph = [];
-    };
+      )
+      paragraph = []
+    }
 
     const flushList = () => {
-      if (listItems.length === 0) return;
+      if (listItems.length === 0) return
       blocks.push(
         <ul
           key={`${keyPrefix}-ul-${blocks.length}`}
           className="my-1 list-disc space-y-1 pl-5 text-sm text-foreground"
         >
           {listItems.map((item, index) => (
-            <li key={`${keyPrefix}-li-${blocks.length}-${index}`} className="pl-1">
-              {renderInlineAssistantMarkdown(item, `${keyPrefix}-li-${blocks.length}-${index}`)}
+            <li
+              key={`${keyPrefix}-li-${blocks.length}-${index}`}
+              className="pl-1"
+            >
+              {renderInlineAssistantMarkdown(
+                item,
+                `${keyPrefix}-li-${blocks.length}-${index}`
+              )}
             </li>
           ))}
         </ul>
-      );
-      listItems = [];
-    };
+      )
+      listItems = []
+    }
 
     lines.forEach((line) => {
-      const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+      const listMatch = line.match(/^\s*[-*]\s+(.+)$/)
 
       if (listMatch?.[1]) {
-        flushParagraph();
-        listItems.push(listMatch[1]);
-        return;
+        flushParagraph()
+        listItems.push(listMatch[1])
+        return
       }
 
       if (line.trim().length === 0) {
-        flushParagraph();
-        flushList();
-        return;
+        flushParagraph()
+        flushList()
+        return
       }
 
-      flushList();
-      paragraph.push(line);
-    });
+      flushList()
+      paragraph.push(line)
+    })
 
-    flushParagraph();
-    flushList();
+    flushParagraph()
+    flushList()
 
-    return <div className="space-y-1">{blocks}</div>;
-  };
+    return <div className="space-y-1">{blocks}</div>
+  }
 
   const renderComposerValue = () => {
     const hasOnlyLockedPrefix =
       !!lockedComposerPrefix &&
       value.startsWith(lockedComposerPrefix) &&
-      value.slice(lockedComposerPrefix.length).length === 0;
+      value.slice(lockedComposerPrefix.length).length === 0
 
     if (!value || hasOnlyLockedPrefix) {
       return (
         <>
           {lockedComposerPrefix ? (
-            <span className="mr-[0.08em] inline-flex whitespace-nowrap items-center rounded-[min(var(--radius-sm),8px)] bg-violet-500/14 px-[0.24em] py-[0.08em] align-baseline text-violet-600 font-normal leading-[inherit] tracking-normal dark:bg-violet-400/16 dark:text-violet-300">
+            <span className="mr-[0.08em] inline-flex items-center rounded-[min(var(--radius-sm),8px)] bg-violet-500/14 px-[0.24em] py-[0.08em] align-baseline leading-[inherit] font-normal tracking-normal whitespace-nowrap text-violet-600 dark:bg-violet-400/16 dark:text-violet-300">
               {lockedComposerPrefix.trim()}
             </span>
           ) : null}
@@ -2570,10 +2821,10 @@ export default function AI_Prompt({
             Use / to add a skill or @ to connect an app.
           </span>
         </>
-      );
+      )
     }
 
-    const displayValue = value.endsWith("\n") ? `${value}\u200b` : value;
+    const displayValue = value.endsWith("\n") ? `${value}\u200b` : value
 
     return renderTextWithAppMentions(displayValue, "composer-inline", {
       badgeClassName: "",
@@ -2581,8 +2832,8 @@ export default function AI_Prompt({
       plainInline: true,
       preserveComposerCaret: true,
       lockedSkillName: fixedSkillName,
-    });
-  };
+    })
+  }
 
   const renderThinkingIndicator = () => (
     <div className="flex items-center px-0.5 py-1">
@@ -2600,17 +2851,20 @@ export default function AI_Prompt({
         label="Thinking"
       />
     </div>
-  );
+  )
 
-  const renderAppApprovalCard = (approval: AppApprovalRequest, messageId: number) => {
+  const renderAppApprovalCard = (
+    approval: AppApprovalRequest,
+    messageId: number
+  ) => {
     const isGmailSendApproval =
       approval.appName.toLowerCase() === "gmail" &&
       /\b(send|compose|write)\b/i.test(approval.originalRequest) &&
-      /\b(email|mail|message)\b/i.test(approval.originalRequest);
+      /\b(email|mail|message)\b/i.test(approval.originalRequest)
     const approvalTitle = isGmailSendApproval
       ? `Approve ${approval.appName}?`
-      : `Add ${approval.appName}?`;
-    const approvalActionLabel = isGmailSendApproval ? "Approve" : "Add";
+      : `Add ${approval.appName}?`
+    const approvalActionLabel = isGmailSendApproval ? "Approve" : "Add"
 
     return (
       <div className="mx-auto w-full overflow-hidden rounded-t-2xl rounded-b-none border-x border-t border-b-0 border-black/10 bg-transparent shadow-none backdrop-blur-2xl dark:border-white/10">
@@ -2619,7 +2873,7 @@ export default function AI_Prompt({
             {renderAppLogo(approval.appName, "md")}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium leading-5 text-foreground">
+            <div className="text-sm leading-5 font-medium text-foreground">
               {approvalTitle}
             </div>
             <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
@@ -2631,14 +2885,14 @@ export default function AI_Prompt({
           <Button
             type="button"
             variant="ghost"
-            className="h-8 px-2.5 text-xs text-muted-foreground active:scale-[0.96] transition-transform"
+            className="h-8 px-2.5 text-xs text-muted-foreground transition-transform active:scale-[0.96]"
             onClick={() => rejectAppRequest(approval, messageId)}
           >
             Not now
           </Button>
           <Button
             type="button"
-            className="h-7 gap-1.5 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] active:scale-[0.96] transition-transform"
+            className="h-7 gap-1.5 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] transition-transform active:scale-[0.96]"
             onClick={() => void approveAppRequest(approval, messageId)}
             disabled={isResponding}
           >
@@ -2648,11 +2902,14 @@ export default function AI_Prompt({
         </div>
         <div className="h-[18px]" aria-hidden="true" />
       </div>
-    );
-  };
+    )
+  }
 
-  const renderAppMiniUiCard = (request: AppMiniUiRequest, messageId: number) => {
-    const values = getAppMiniUiValues(request, messageId);
+  const renderAppMiniUiCard = (
+    request: AppMiniUiRequest,
+    messageId: number
+  ) => {
+    const values = getAppMiniUiValues(request, messageId)
 
     return (
       <div className="mx-auto w-full">
@@ -2669,11 +2926,11 @@ export default function AI_Prompt({
           onAction={() => void submitAppMiniUiRequest(request, messageId)}
         />
       </div>
-    );
-  };
+    )
+  }
 
   const renderAssistantContent = (content: string, messageId: number) => {
-    const appApproval = parseAppApprovalRequest(content);
+    const appApproval = parseAppApprovalRequest(content)
     if (appApproval) {
       return (
         <div className="flex items-center gap-2 px-0.5 py-1 text-sm text-muted-foreground">
@@ -2686,10 +2943,10 @@ export default function AI_Prompt({
               : "Awaiting app approval"}
           </span>
         </div>
-      );
+      )
     }
 
-    const appMiniUi = parseAppMiniUiRequest(content);
+    const appMiniUi = parseAppMiniUiRequest(content)
     if (appMiniUi) {
       return (
         <div className="flex items-center gap-2 px-0.5 py-1 text-sm text-muted-foreground">
@@ -2702,93 +2959,103 @@ export default function AI_Prompt({
               : "Awaiting details"}
           </span>
         </div>
-      );
+      )
     }
 
-    const atmetUi = parseAtmetUiPayload(content);
+    const atmetUi = parseAtmetUiPayload(content)
     if (atmetUi) {
       return (
         <div className="w-full">
           <AtmetGenerativeUi
             payload={atmetUi}
-            logo={atmetUi.appName ? renderAppLogo(atmetUi.appName, "md") : undefined}
+            logo={
+              atmetUi.appName ? renderAppLogo(atmetUi.appName, "md") : undefined
+            }
             disabled={isResponding}
             compact
           />
         </div>
-      );
+      )
     }
 
-    const segments = parseAssistantContent(content);
-    const hasCodeSegment = segments.some((segment) => segment.type === "code");
+    const segments = parseAssistantContent(content)
+    const hasCodeSegment = segments.some((segment) => segment.type === "code")
 
     if (!hasCodeSegment) {
-      return renderAssistantMarkdownText(content, `assistant-inline-${messageId}`);
+      return renderAssistantMarkdownText(
+        content,
+        `assistant-inline-${messageId}`
+      )
     }
 
     return (
       <div className="w-full space-y-2">
         {segments.map((segment, index) => {
           if (segment.type === "text") {
-            if (segment.value.trim().length === 0) return null;
+            if (segment.value.trim().length === 0) return null
 
             return (
-              <div
-                key={`assistant-text-${messageId}-${index}`}
-              >
+              <div key={`assistant-text-${messageId}-${index}`}>
                 {renderAssistantMarkdownText(
                   segment.value,
                   `assistant-segment-${messageId}-${index}`
                 )}
               </div>
-            );
+            )
           }
 
           return (
-            <Artifact key={`assistant-code-${messageId}-${index}`} className="w-full max-w-3xl">
+            <Artifact
+              key={`assistant-code-${messageId}-${index}`}
+              className="w-full max-w-3xl"
+            >
               <ArtifactHeader>
                 <div className="min-w-0">
                   <ArtifactTitle>
-                    {segment.language ? `${segment.language} script` : "Code script"}
+                    {segment.language
+                      ? `${segment.language} script`
+                      : "Code script"}
                   </ArtifactTitle>
                   <ArtifactDescription>Runnable code block</ArtifactDescription>
                 </div>
                 <ArtifactActions>
                   {(() => {
-                    const artifactCopyKey = `artifact-copy-${messageId}-${index}`;
+                    const artifactCopyKey = `artifact-copy-${messageId}-${index}`
                     return (
                       <>
-                  <ArtifactAction
-                    icon={Play}
-                    tooltip="Run code"
-                    onClick={() =>
-                      runCodeBlock(
-                        segment.language,
-                        segment.value,
-                        `${messageId}-${index}`
-                      )
-                    }
-                  />
-                  <ArtifactAction
-                    tooltip="Copy code"
-                    onClick={() => copyWithFeedback(segment.value, artifactCopyKey)}
-                  >
-                    {renderCopyIcon(artifactCopyKey, "h-4 w-4")}
-                  </ArtifactAction>
-                  <ArtifactAction
-                    icon={Download}
-                    tooltip="Download code"
-                    onClick={() =>
-                      downloadCodeBlock(
-                        segment.language,
-                        segment.value,
-                        messageId,
-                        index
-                      )
-                    }
-                  />
+                        <ArtifactAction
+                          icon={Play}
+                          tooltip="Run code"
+                          onClick={() =>
+                            runCodeBlock(
+                              segment.language,
+                              segment.value,
+                              `${messageId}-${index}`
+                            )
+                          }
+                        />
+                        <ArtifactAction
+                          tooltip="Copy code"
+                          onClick={() =>
+                            copyWithFeedback(segment.value, artifactCopyKey)
+                          }
+                        >
+                          {renderCopyIcon(artifactCopyKey, "h-4 w-4")}
+                        </ArtifactAction>
+                        <ArtifactAction
+                          icon={Download}
+                          tooltip="Download code"
+                          onClick={() =>
+                            downloadCodeBlock(
+                              segment.language,
+                              segment.value,
+                              messageId,
+                              index
+                            )
+                          }
+                        />
                       </>
-                    );
+                    )
                   })()}
                 </ArtifactActions>
               </ArtifactHeader>
@@ -2810,20 +3077,20 @@ export default function AI_Prompt({
                 )}
               </ArtifactContent>
             </Artifact>
-          );
+          )
         })}
       </div>
-    );
-  };
+    )
+  }
 
   const editUserMessage = (messageId: number, content: string) => {
     const messageToEdit = messages.find(
       (message) => message.id === messageId && message.role === "user"
-    );
-    const messageAttachments = messageToEdit?.attachments ?? [];
+    )
+    const messageAttachments = messageToEdit?.attachments ?? []
 
-    setEditingMessageId(messageId);
-    setValue(content);
+    setEditingMessageId(messageId)
+    setValue(content)
     setAttachedFiles(
       messageAttachments.map((attachment) => ({
         id: attachment.id,
@@ -2831,30 +3098,30 @@ export default function AI_Prompt({
         kind: attachment.kind,
         previewUrl: attachment.previewUrl,
       }))
-    );
-    setCommandMenu(null);
+    )
+    setCommandMenu(null)
 
     requestAnimationFrame(() => {
-      if (!textareaRef.current) return;
-      textareaRef.current.focus();
-      const end = content.length;
-      textareaRef.current.setSelectionRange(end, end);
-      adjustHeight();
-    });
-  };
+      if (!textareaRef.current) return
+      textareaRef.current.focus()
+      const end = content.length
+      textareaRef.current.setSelectionRange(end, end)
+      adjustHeight()
+    })
+  }
 
   const cancelEditingMessage = () => {
-    setEditingMessageId(null);
-    setValue(lockedComposerPrefix);
-    setComposerScrollTop(0);
-    setAttachedFiles([]);
-    setCommandMenu(null);
+    setEditingMessageId(null)
+    setValue(lockedComposerPrefix)
+    setComposerScrollTop(0)
+    setAttachedFiles([])
+    setCommandMenu(null)
 
     requestAnimationFrame(() => {
-      adjustHeight(true);
-      textareaRef.current?.focus();
-    });
-  };
+      adjustHeight(true)
+      textareaRef.current?.focus()
+    })
+  }
 
   const setAssistantReaction = (
     messageId: number,
@@ -2862,121 +3129,133 @@ export default function AI_Prompt({
   ) => {
     setAssistantFeedback((prev) => {
       if (prev[messageId] === reaction) {
-        const next = { ...prev };
-        delete next[messageId];
-        return next;
+        const next = { ...prev }
+        delete next[messageId]
+        return next
       }
 
-      return { ...prev, [messageId]: reaction };
-    });
-  };
+      return { ...prev, [messageId]: reaction }
+    })
+  }
 
-  const retryAssistantMessage = useCallback(async (assistantMessageId: number) => {
-    const currentMessages = messagesRef.current;
-    const assistantIndex = currentMessages.findIndex(
-      (message) => message.id === assistantMessageId && message.role === "assistant"
-    );
-    if (assistantIndex === -1) return;
+  const retryAssistantMessage = useCallback(
+    async (assistantMessageId: number) => {
+      const currentMessages = messagesRef.current
+      const assistantIndex = currentMessages.findIndex(
+        (message) =>
+          message.id === assistantMessageId && message.role === "assistant"
+      )
+      if (assistantIndex === -1) return
 
-    const previousUserMessage = [...currentMessages]
-      .slice(0, assistantIndex)
-      .reverse()
-      .find((message) => message.role === "user");
-    if (!previousUserMessage) return;
+      const previousUserMessage = [...currentMessages]
+        .slice(0, assistantIndex)
+        .reverse()
+        .find((message) => message.role === "user")
+      if (!previousUserMessage) return
 
-    // Clear the assistant message content and re-stream
-    setMessages((prev) =>
-      prev.map((m) => (m.id === assistantMessageId ? { ...m, content: "" } : m))
-    );
-    setIsResponding(true);
-
-    const chatId = activeChatIdRef.current;
-    if (!chatId) {
-      setIsResponding(false);
-      return;
-    }
-
-    try {
-      const resp = await apiFetch(`/api/chats/${chatId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: previousUserMessage.content }),
-      });
-
-      if (!resp.ok || !resp.body) throw new Error("retry_failed");
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let completed = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          completed = true;
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (raw === "[DONE]") {
-            completed = true;
-            break;
-          }
-          try {
-            const chunk = JSON.parse(raw) as { content?: string };
-            if (chunk.content) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMessageId
-                    ? { ...m, content: m.content + chunk.content! }
-                    : m
-                )
-              );
-            }
-          } catch { /* ignore */ }
-        }
-      }
-      if (completed) {
-        play("success");
-      }
-    } catch {
+      // Clear the assistant message content and re-stream
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantMessageId
-            ? { ...m, content: "Something went wrong. Please try again." }
-            : m
+          m.id === assistantMessageId ? { ...m, content: "" } : m
         )
-      );
-    } finally {
-      setIsResponding(false);
-    }
-  }, [apiFetch]);
+      )
+      setIsResponding(true)
+
+      const chatId = activeChatIdRef.current
+      if (!chatId) {
+        setIsResponding(false)
+        return
+      }
+
+      try {
+        const resp = await apiFetch(`/api/chats/${chatId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: previousUserMessage.content }),
+        })
+
+        if (!resp.ok || !resp.body) throw new Error("retry_failed")
+
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+        let completed = false
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            completed = true
+            break
+          }
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() ?? ""
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue
+            const raw = line.slice(6).trim()
+            if (raw === "[DONE]") {
+              completed = true
+              break
+            }
+            try {
+              const chunk = JSON.parse(raw) as { content?: string }
+              if (chunk.content) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMessageId
+                      ? { ...m, content: m.content + chunk.content! }
+                      : m
+                  )
+                )
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        if (completed) {
+          play("success")
+        }
+      } catch {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMessageId
+              ? { ...m, content: "Something went wrong. Please try again." }
+              : m
+          )
+        )
+      } finally {
+        setIsResponding(false)
+      }
+    },
+    [apiFetch]
+  )
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (commandMenu && commandItems.length > 0) {
       if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setHighlightedCommandIndex((prev) => (prev + 1) % commandItems.length);
-        return;
+        e.preventDefault()
+        setHighlightedCommandIndex((prev) => (prev + 1) % commandItems.length)
+        return
       }
       if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setHighlightedCommandIndex((prev) => (prev - 1 + commandItems.length) % commandItems.length);
-        return;
+        e.preventDefault()
+        setHighlightedCommandIndex(
+          (prev) => (prev - 1 + commandItems.length) % commandItems.length
+        )
+        return
       }
       if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        selectCommandItem(commandItems[highlightedCommandIndex] ?? commandItems[0]);
-        return;
+        e.preventDefault()
+        selectCommandItem(
+          commandItems[highlightedCommandIndex] ?? commandItems[0]
+        )
+        return
       }
       if (e.key === "Escape") {
-        e.preventDefault();
-        setCommandMenu(null);
-        return;
+        e.preventDefault()
+        setCommandMenu(null)
+        return
       }
     }
 
@@ -2986,18 +3265,21 @@ export default function AI_Prompt({
       !e.ctrlKey &&
       !e.altKey
     ) {
-      const selectionStart = e.currentTarget.selectionStart ?? 0;
-      const selectionEnd = e.currentTarget.selectionEnd ?? selectionStart;
-      if (lockedComposerPrefix && selectionStart <= lockedComposerPrefix.length) {
-        e.preventDefault();
+      const selectionStart = e.currentTarget.selectionStart ?? 0
+      const selectionEnd = e.currentTarget.selectionEnd ?? selectionStart
+      if (
+        lockedComposerPrefix &&
+        selectionStart <= lockedComposerPrefix.length
+      ) {
+        e.preventDefault()
         requestAnimationFrame(() => {
-          if (!textareaRef.current) return;
+          if (!textareaRef.current) return
           textareaRef.current.setSelectionRange(
             lockedComposerPrefix.length,
             lockedComposerPrefix.length
-          );
-        });
-        return;
+          )
+        })
+        return
       }
 
       if (selectionStart === selectionEnd) {
@@ -3005,89 +3287,90 @@ export default function AI_Prompt({
           value,
           selectionStart,
           e.key as "Backspace" | "Delete"
-        );
+        )
 
         if (removal) {
-          e.preventDefault();
-          setValue(removal.nextValue);
-          setCommandMenu(null);
-          setHighlightedCommandIndex(0);
+          e.preventDefault()
+          setValue(removal.nextValue)
+          setCommandMenu(null)
+          setHighlightedCommandIndex(0)
 
           requestAnimationFrame(() => {
-            if (!textareaRef.current) return;
-            textareaRef.current.focus();
-            textareaRef.current.setSelectionRange(removal.nextCursor, removal.nextCursor);
-            adjustHeight();
-          });
-          return;
+            if (!textareaRef.current) return
+            textareaRef.current.focus()
+            textareaRef.current.setSelectionRange(
+              removal.nextCursor,
+              removal.nextCursor
+            )
+            adjustHeight()
+          })
+          return
         }
       }
     }
 
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void sendMessage();
+      e.preventDefault()
+      void sendMessage()
     }
-  };
+  }
 
-  const hasConversation = messages.length > 0 || isResponding;
+  const hasConversation = messages.length > 0 || isResponding
   const showTelegramAgentSetup =
-    enableCreateAgent && isTelegramMentioned && agentSetupMessageId !== null;
+    enableCreateAgent && isTelegramMentioned && agentSetupMessageId !== null
   const hasTelegramBotConnections =
-    Boolean(telegramIntegration?.connected) || telegramConnections.length > 0;
+    Boolean(telegramIntegration?.connected) || telegramConnections.length > 0
   const canCreateTelegramAgent =
     !isCreatingTelegramAgent &&
     (telegramBotSetupMode === "existing"
       ? Boolean(selectedTelegramConnectionId)
-      : Boolean(newTelegramBotToken.trim()));
-  const showGreeting = !hideGreeting && messages.length === 0 && !isResponding;
+      : Boolean(newTelegramBotToken.trim()))
+  const showGreeting = !hideGreeting && messages.length === 0 && !isResponding
   const lastAssistantMessageId = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
+      const message = messages[index]
       if (message?.role === "assistant" && message.content.trim().length > 0) {
-        return message.id;
+        return message.id
       }
     }
-    return null;
-  }, [messages]);
+    return null
+  }, [messages])
   const pendingAppAction = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (!message || message.role !== "assistant") continue;
+      const message = messages[index]
+      if (!message || message.role !== "assistant") continue
 
-      const approval = parseAppApprovalRequest(message.content);
+      const approval = parseAppApprovalRequest(message.content)
       if (approval && !isAppRequestResolved(message.id, approval.appName)) {
-        return { messageId: message.id, approval, miniUi: null };
+        return { messageId: message.id, approval, miniUi: null }
       }
 
-      const miniUi = parseAppMiniUiRequest(message.content);
+      const miniUi = parseAppMiniUiRequest(message.content)
       if (miniUi && !isAppRequestResolved(message.id, miniUi.appName)) {
-        return { messageId: message.id, approval: null, miniUi };
+        return { messageId: message.id, approval: null, miniUi }
       }
     }
 
-    return null;
-  }, [isAppRequestResolved, messages]);
+    return null
+  }, [isAppRequestResolved, messages])
   const glassLayerBack =
-    "bg-transparent backdrop-blur-xl supports-[backdrop-filter]:bg-transparent";
+    "bg-transparent backdrop-blur-xl supports-[backdrop-filter]:bg-transparent"
   const glassLayerFront =
-    "bg-transparent backdrop-blur-xl supports-[backdrop-filter]:bg-transparent";
-  const glassBorder = "border-sidebar-border";
+    "bg-transparent backdrop-blur-xl supports-[backdrop-filter]:bg-transparent"
+  const glassBorder = "border-sidebar-border"
 
   return (
     <div
       data-chatbot-scope="true"
       className={cn(
         "mx-auto w-full max-w-4xl [&_[data-slot=button]]:rounded-lg",
-        dockComposerToBottom
-          ? "flex h-full min-h-0 flex-col py-4"
-          : "py-4"
+        dockComposerToBottom ? "flex h-full min-h-0 flex-col py-4" : "py-4"
       )}
     >
       <Dialog
         open={Boolean(pendingEditConfirmation)}
         onOpenChange={(open) => {
-          if (!open) setPendingEditConfirmation(null);
+          if (!open) setPendingEditConfirmation(null)
         }}
       >
         <DialogContent>
@@ -3126,7 +3409,12 @@ export default function AI_Prompt({
         multiple
         onChange={handleFileInputChange}
       />
-      <div className={cn(dockComposerToBottom && "min-h-0 flex flex-1 flex-col overflow-visible")}>
+      <div
+        className={cn(
+          dockComposerToBottom &&
+            "flex min-h-0 flex-1 flex-col overflow-visible"
+        )}
+      >
         {showGreeting && (
           <div className="mb-5 flex flex-col items-center text-center">
             <h2 className="text-2xl font-semibold tracking-tight text-muted-foreground">
@@ -3146,319 +3434,346 @@ export default function AI_Prompt({
                 : glassComposer && "overflow-hidden"
             )}
           >
-          {glassComposer && (
-            <div
-              aria-hidden="true"
-              className={cn(
-                "pointer-events-none absolute inset-0 rounded-t-2xl border-x border-t border-b-0",
-                glassBorder,
-                glassLayerBack
-              )}
-            />
-          )}
-          <div
-            ref={messagesViewportRef}
-            className={cn(
-              "space-y-3",
-              glassComposer
-                ? cn(
-                    "scrollbar-hidden relative z-10 min-h-[9rem] overflow-y-auto rounded-t-2xl border-x border-t border-b-0 px-3 pt-3 pb-5",
-                    dockComposerToBottom ? "min-h-0 flex-1" : "max-h-[32vh]",
-                    glassBorder,
-                    glassLayerFront
-                  )
-                : "mb-4",
-              dockComposerToBottom && "scrollbar-hidden min-h-0 flex-1 overflow-y-auto pr-1"
-            )}
-          >
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn("flex min-w-0 max-w-full", {
-                "justify-end": message.role === "user",
-                "justify-start": message.role === "assistant",
-              })}
-            >
+            {glassComposer && (
               <div
+                aria-hidden="true"
                 className={cn(
-                  "flex min-w-0 flex-col",
-                  message.role === "user"
-                    ? "ml-auto max-w-[82%] items-end"
-                    : "w-full items-start"
+                  "pointer-events-none absolute inset-0 rounded-t-2xl border-x border-t border-b-0",
+                  glassBorder,
+                  glassLayerBack
                 )}
-              >
-                {message.role === "user" ? (
-                  <>
-                    <div className="min-w-0 max-w-full rounded-xl bg-muted px-3 py-2 text-sm text-foreground">
-                      <p className="origin-center max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                        {editingMessageId === message.id
-                          ? Array.from(message.content).map((char, index) => {
-                              if (char === "\n") {
-                                return <br key={`br-${message.id}-${index}`} />;
-                              }
-
-                              return (
-                                <motion.span
-                                  key={`char-${message.id}-${index}`}
-                                  className="inline-block will-change-transform"
-                                  animate={{
-                                    rotate: [0, -0.8, 0.8, -0.55, 0],
-                                    y: [0, -0.7, 0.45, -0.3, 0],
-                                    scale: [1, 1.004, 1],
-                                  }}
-                                  transition={{
-                                    duration: 0.95 + (index % 5) * 0.08,
-                                    ease: "easeInOut",
-                                    repeat: Number.POSITIVE_INFINITY,
-                                    delay:
-                                      (message.id % 7) * 0.03 + (index % 12) * 0.02,
-                                  }}
-                                >
-                                  {char === " " ? "\u00A0" : char}
-                                </motion.span>
-                              );
-                            })
-                          : renderTextWithAppMentions(
-                              message.content,
-                              `user-inline-${message.id}`
-                            )}
-                      </p>
-                    </div>
-                    {message.attachments && message.attachments.length > 0 && (
-                      <div className="mt-1.5 flex w-full flex-wrap gap-2">
-                        {message.attachments.map((attachment) => (
-                          <div
-                            key={attachment.id}
-                            className="w-32 overflow-hidden rounded-md border border-border/50 bg-background/85 sm:w-36"
-                          >
-                            {attachment.kind === "image" && attachment.previewUrl ? (
-                              <Image
-                                src={attachment.previewUrl}
-                                alt={attachment.name}
-                                width={144}
-                                height={80}
-                                unoptimized
-                                className="h-20 w-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-20 flex-col items-center justify-center gap-1 text-muted-foreground">
-                                {renderAttachmentPreviewAsset(attachment)}
-                                <span className="text-[10px]">
-                                  {getAttachmentKindLabel(attachment.kind)}
-                                </span>
-                              </div>
-                            )}
-                            <div className="truncate border-t border-border/50 px-1.5 py-1 text-[11px] text-muted-foreground">
-                              {attachment.name}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  isResponding && message.content.trim().length === 0
-                    ? renderThinkingIndicator()
-                    : renderAssistantContent(message.content, message.id)
-                )}
-
+              />
+            )}
+            <div
+              ref={messagesViewportRef}
+              className={cn(
+                "space-y-3",
+                glassComposer
+                  ? cn(
+                      "scrollbar-hidden relative z-10 min-h-[9rem] overflow-y-auto rounded-t-2xl border-x border-t border-b-0 px-3 pt-3 pb-5",
+                      dockComposerToBottom ? "min-h-0 flex-1" : "max-h-[32vh]",
+                      glassBorder,
+                      glassLayerFront
+                    )
+                  : "mb-4",
+                dockComposerToBottom &&
+                  "scrollbar-hidden min-h-0 flex-1 overflow-y-auto pr-1"
+              )}
+            >
+              {messages.map((message) => (
                 <div
-                  className={cn("mt-1 flex items-center gap-1", {
+                  key={message.id}
+                  className={cn("flex max-w-full min-w-0", {
                     "justify-end": message.role === "user",
                     "justify-start": message.role === "assistant",
                   })}
                 >
-                  {message.role === "user" ? (
-                    <>
-                      {editingMessageId === message.id ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <button
-                                type="button"
-                                aria-label="Cancel edit"
-                                onClick={cancelEditingMessage}
-                                className={cn(
-                                  outputActionButtonBase,
-                                  "text-red-500 hover:bg-red-500/10 hover:text-red-600"
+                  <div
+                    className={cn(
+                      "flex min-w-0 flex-col",
+                      message.role === "user"
+                        ? "ml-auto max-w-[82%] items-end"
+                        : "w-full items-start"
+                    )}
+                  >
+                    {message.role === "user" ? (
+                      <>
+                        <div className="max-w-full min-w-0 rounded-xl bg-muted px-3 py-2 text-sm text-foreground">
+                          <p className="max-w-full origin-center [overflow-wrap:anywhere] break-words whitespace-pre-wrap">
+                            {editingMessageId === message.id
+                              ? Array.from(message.content).map(
+                                  (char, index) => {
+                                    if (char === "\n") {
+                                      return (
+                                        <br key={`br-${message.id}-${index}`} />
+                                      )
+                                    }
+
+                                    return (
+                                      <motion.span
+                                        key={`char-${message.id}-${index}`}
+                                        className="inline-block will-change-transform"
+                                        animate={{
+                                          rotate: [0, -0.8, 0.8, -0.55, 0],
+                                          y: [0, -0.7, 0.45, -0.3, 0],
+                                          scale: [1, 1.004, 1],
+                                        }}
+                                        transition={{
+                                          duration: 0.95 + (index % 5) * 0.08,
+                                          ease: "easeInOut",
+                                          repeat: Number.POSITIVE_INFINITY,
+                                          delay:
+                                            (message.id % 7) * 0.03 +
+                                            (index % 12) * 0.02,
+                                        }}
+                                      >
+                                        {char === " " ? "\u00A0" : char}
+                                      </motion.span>
+                                    )
+                                  }
+                                )
+                              : renderTextWithAppMentions(
+                                  message.content,
+                                  `user-inline-${message.id}`
                                 )}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            }
-                          />
-                          <TooltipContent className="px-2 py-1 text-[10px] leading-none">
-                            Cancel edit
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <button
-                                type="button"
-                                aria-label="Edit message"
-                                onClick={() => editUserMessage(message.id, message.content)}
-                                className={cn(
-                                  outputActionButtonBase,
-                                  "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                                )}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            }
-                          />
-                          <TooltipContent className="px-2 py-1 text-[10px] leading-none">
-                            Edit message
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <button
-                              type="button"
-                              aria-label="Copy message"
-                              onClick={() =>
-                                copyWithFeedback(message.content, `user-copy-${message.id}`)
-                              }
-                              className={cn(
-                                outputActionButtonBase,
-                                "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                              )}
-                            >
-                              {renderCopyIcon(`user-copy-${message.id}`)}
-                            </button>
-                          }
-                        />
-                        <TooltipContent className="px-2 py-1 text-[10px] leading-none">
-                          Copy message
-                        </TooltipContent>
-                      </Tooltip>
-                    </>
-                  ) : (
-                    <>
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <button
-                              type="button"
-                              aria-label="Copy reply"
-                              onClick={() =>
-                                copyWithFeedback(message.content, `assistant-copy-${message.id}`)
-                              }
-                              className={cn(
-                                outputActionButtonBase,
-                                "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                              )}
-                            >
-                              {renderCopyIcon(`assistant-copy-${message.id}`)}
-                            </button>
-                          }
-                        />
-                        <TooltipContent className="px-2 py-1 text-[10px] leading-none">
-                          Copy reply
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <button
-                              type="button"
-                              aria-label="Like reply"
-                              onClick={() => setAssistantReaction(message.id, "like")}
-                              className={cn(
-                                outputActionButtonBase,
-                                assistantFeedback[message.id] === "like"
-                                  ? "text-foreground"
-                                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                              )}
-                            >
-                              <ThumbsUp className="h-3.5 w-3.5" />
-                            </button>
-                          }
-                        />
-                        <TooltipContent className="px-2 py-1 text-[10px] leading-none">
-                          Like reply
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <button
-                              type="button"
-                              aria-label="Dislike reply"
-                              onClick={() =>
-                                setAssistantReaction(message.id, "dislike")
-                              }
-                              className={cn(
-                                outputActionButtonBase,
-                                assistantFeedback[message.id] === "dislike"
-                                  ? "text-foreground"
-                                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                              )}
-                            >
-                              <ThumbsDown className="h-3.5 w-3.5" />
-                            </button>
-                          }
-                        />
-                        <TooltipContent className="px-2 py-1 text-[10px] leading-none">
-                          Dislike reply
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <button
-                              type="button"
-                              aria-label="Try again"
-                              onClick={() => void retryAssistantMessage(message.id)}
-                              className={cn(
-                                outputActionButtonBase,
-                                "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                              )}
-                            >
-                              <RefreshCcw className="h-3.5 w-3.5" />
-                            </button>
-                          }
-                        />
-                        <TooltipContent className="px-2 py-1 text-[10px] leading-none">
-                          Try again
-                        </TooltipContent>
-                      </Tooltip>
-                      {enableCreateAgent &&
-                      message.id === lastAssistantMessageId &&
-                      message.content.trim().length > 0 &&
-                      !parseAppApprovalRequest(message.content) &&
-                      !parseAppMiniUiRequest(message.content) &&
-                      !isResponding ? (
-                        <button
-                          type="button"
-                          onClick={() => openAgentSetupFromPlan(message)}
-                          disabled={creatingAgentMessageId !== null}
-                          className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-[min(var(--radius-md),12px)] bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-60"
-                        >
-                          {creatingAgentMessageId === message.id ? (
-                            <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Bot className="h-3.5 w-3.5" />
+                          </p>
+                        </div>
+                        {message.attachments &&
+                          message.attachments.length > 0 && (
+                            <div className="mt-1.5 flex w-full flex-wrap gap-2">
+                              {message.attachments.map((attachment) => (
+                                <div
+                                  key={attachment.id}
+                                  className="w-32 overflow-hidden rounded-md border border-border/50 bg-background/85 sm:w-36"
+                                >
+                                  {attachment.kind === "image" &&
+                                  attachment.previewUrl ? (
+                                    <Image
+                                      src={attachment.previewUrl}
+                                      alt={attachment.name}
+                                      width={144}
+                                      height={80}
+                                      unoptimized
+                                      className="h-20 w-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-20 flex-col items-center justify-center gap-1 text-muted-foreground">
+                                      {renderAttachmentPreviewAsset(attachment)}
+                                      <span className="text-[10px]">
+                                        {getAttachmentKindLabel(
+                                          attachment.kind
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="truncate border-t border-border/50 px-1.5 py-1 text-[11px] text-muted-foreground">
+                                    {attachment.name}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           )}
-                          Build Agent
-                        </button>
-                      ) : null}
-                    </>
-                  )}
+                      </>
+                    ) : isResponding && message.content.trim().length === 0 ? (
+                      renderThinkingIndicator()
+                    ) : (
+                      renderAssistantContent(message.content, message.id)
+                    )}
+
+                    <div
+                      className={cn("mt-1 flex items-center gap-1", {
+                        "justify-end": message.role === "user",
+                        "justify-start": message.role === "assistant",
+                      })}
+                    >
+                      {message.role === "user" ? (
+                        <>
+                          {editingMessageId === message.id ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    aria-label="Cancel edit"
+                                    onClick={cancelEditingMessage}
+                                    className={cn(
+                                      outputActionButtonBase,
+                                      "text-red-500 hover:bg-red-500/10 hover:text-red-600"
+                                    )}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                }
+                              />
+                              <TooltipContent className="px-2 py-1 text-[10px] leading-none">
+                                Cancel edit
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    aria-label="Edit message"
+                                    onClick={() =>
+                                      editUserMessage(
+                                        message.id,
+                                        message.content
+                                      )
+                                    }
+                                    className={cn(
+                                      outputActionButtonBase,
+                                      "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                                    )}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                }
+                              />
+                              <TooltipContent className="px-2 py-1 text-[10px] leading-none">
+                                Edit message
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  aria-label="Copy message"
+                                  onClick={() =>
+                                    copyWithFeedback(
+                                      message.content,
+                                      `user-copy-${message.id}`
+                                    )
+                                  }
+                                  className={cn(
+                                    outputActionButtonBase,
+                                    "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                                  )}
+                                >
+                                  {renderCopyIcon(`user-copy-${message.id}`)}
+                                </button>
+                              }
+                            />
+                            <TooltipContent className="px-2 py-1 text-[10px] leading-none">
+                              Copy message
+                            </TooltipContent>
+                          </Tooltip>
+                        </>
+                      ) : (
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  aria-label="Copy reply"
+                                  onClick={() =>
+                                    copyWithFeedback(
+                                      message.content,
+                                      `assistant-copy-${message.id}`
+                                    )
+                                  }
+                                  className={cn(
+                                    outputActionButtonBase,
+                                    "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                                  )}
+                                >
+                                  {renderCopyIcon(
+                                    `assistant-copy-${message.id}`
+                                  )}
+                                </button>
+                              }
+                            />
+                            <TooltipContent className="px-2 py-1 text-[10px] leading-none">
+                              Copy reply
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  aria-label="Like reply"
+                                  onClick={() =>
+                                    setAssistantReaction(message.id, "like")
+                                  }
+                                  className={cn(
+                                    outputActionButtonBase,
+                                    assistantFeedback[message.id] === "like"
+                                      ? "text-foreground"
+                                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                                  )}
+                                >
+                                  <ThumbsUp className="h-3.5 w-3.5" />
+                                </button>
+                              }
+                            />
+                            <TooltipContent className="px-2 py-1 text-[10px] leading-none">
+                              Like reply
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  aria-label="Dislike reply"
+                                  onClick={() =>
+                                    setAssistantReaction(message.id, "dislike")
+                                  }
+                                  className={cn(
+                                    outputActionButtonBase,
+                                    assistantFeedback[message.id] === "dislike"
+                                      ? "text-foreground"
+                                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                                  )}
+                                >
+                                  <ThumbsDown className="h-3.5 w-3.5" />
+                                </button>
+                              }
+                            />
+                            <TooltipContent className="px-2 py-1 text-[10px] leading-none">
+                              Dislike reply
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  aria-label="Try again"
+                                  onClick={() =>
+                                    void retryAssistantMessage(message.id)
+                                  }
+                                  className={cn(
+                                    outputActionButtonBase,
+                                    "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                                  )}
+                                >
+                                  <RefreshCcw className="h-3.5 w-3.5" />
+                                </button>
+                              }
+                            />
+                            <TooltipContent className="px-2 py-1 text-[10px] leading-none">
+                              Try again
+                            </TooltipContent>
+                          </Tooltip>
+                          {enableCreateAgent &&
+                          message.id === lastAssistantMessageId &&
+                          message.content.trim().length > 0 &&
+                          !parseAppApprovalRequest(message.content) &&
+                          !parseAppMiniUiRequest(message.content) &&
+                          !isResponding ? (
+                            <button
+                              type="button"
+                              onClick={() => openAgentSetupFromPlan(message)}
+                              disabled={creatingAgentMessageId !== null}
+                              className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-[min(var(--radius-md),12px)] bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-60"
+                            >
+                              {creatingAgentMessageId === message.id ? (
+                                <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Bot className="h-3.5 w-3.5" />
+                              )}
+                              Build Agent
+                            </button>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
+              {createAgentError ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {createAgentError}
+                </div>
+              ) : null}
+              <div ref={messagesEndRef} />
             </div>
-          ))}
-          {createAgentError ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {createAgentError}
-            </div>
-          ) : null}
-          <div ref={messagesEndRef} />
-          </div>
           </div>
         ) : (
           dockComposerToBottom && <div className="flex-1" />
@@ -3483,7 +3798,8 @@ export default function AI_Prompt({
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Customer messages go to this chat agent and replies return through your bot.
+                  Customer messages go to this chat agent and replies return
+                  through your bot.
                 </p>
               </div>
             </div>
@@ -3491,7 +3807,9 @@ export default function AI_Prompt({
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => window.open("https://t.me/BotFather", "_blank", "noreferrer")}
+              onClick={() =>
+                window.open("https://t.me/BotFather", "_blank", "noreferrer")
+              }
             >
               Open BotFather
             </Button>
@@ -3533,8 +3851,10 @@ export default function AI_Prompt({
                 </label>
                 <select
                   value={selectedTelegramConnectionId}
-                  onChange={(event) => setSelectedTelegramConnectionId(event.target.value)}
-                  className="h-8 min-w-0 rounded-md border border-sidebar-border bg-background/70 px-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                  onChange={(event) =>
+                    setSelectedTelegramConnectionId(event.target.value)
+                  }
+                  className="h-8 min-w-0 rounded-md border border-sidebar-border bg-background/70 px-2 text-sm text-foreground transition-colors outline-none focus:border-primary"
                 >
                   {telegramConnections.map((connection) => (
                     <option key={connection.id} value={connection.id}>
@@ -3575,33 +3895,39 @@ export default function AI_Prompt({
                       accept="image/*"
                       className="hidden"
                       onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null;
-                        void handleTelegramAvatarChange(file);
-                        event.target.value = "";
+                        const file = event.target.files?.[0] ?? null
+                        void handleTelegramAvatarChange(file)
+                        event.target.value = ""
                       }}
                     />
                   </div>
                   <div className="grid min-w-0 gap-2">
                     <Input
                       value={newTelegramBotToken}
-                      onChange={(event) => setNewTelegramBotToken(event.target.value)}
+                      onChange={(event) =>
+                        setNewTelegramBotToken(event.target.value)
+                      }
                       placeholder="BotFather token"
                       type="password"
                       className="h-8 bg-background/70"
                     />
                     <Input
                       value={newTelegramBotName}
-                      onChange={(event) => setNewTelegramBotName(event.target.value)}
+                      onChange={(event) =>
+                        setNewTelegramBotName(event.target.value)
+                      }
                       placeholder="Bot / brand name"
                       className="h-8 bg-background/70"
                     />
                     <p className="truncate text-[11px] text-muted-foreground">
-                      {newTelegramBotAvatarName || "Optional avatar for Atmet UI"}
+                      {newTelegramBotAvatarName ||
+                        "Optional avatar for Atmet UI"}
                     </p>
                   </div>
                 </div>
                 <p className="text-xs leading-5 text-muted-foreground">
-                  In Telegram, create the bot with @BotFather and paste its token here. Atmet will save it and use it for this agent.
+                  In Telegram, create the bot with @BotFather and paste its
+                  token here. Atmet will save it and use it for this agent.
                 </p>
               </div>
             )}
@@ -3653,7 +3979,9 @@ export default function AI_Prompt({
 
           <Textarea
             value={telegramAgentInstructions}
-            onChange={(event) => setTelegramAgentInstructions(event.target.value)}
+            onChange={(event) =>
+              setTelegramAgentInstructions(event.target.value)
+            }
             className="mt-2 min-h-24 resize-none bg-background/60 text-sm"
             placeholder="Agent instructions"
           />
@@ -3697,9 +4025,15 @@ export default function AI_Prompt({
         {pendingAppAction ? (
           <div className="pointer-events-auto absolute inset-x-0 bottom-full z-30 translate-y-4 px-0">
             {pendingAppAction.approval
-              ? renderAppApprovalCard(pendingAppAction.approval, pendingAppAction.messageId)
+              ? renderAppApprovalCard(
+                  pendingAppAction.approval,
+                  pendingAppAction.messageId
+                )
               : pendingAppAction.miniUi
-                ? renderAppMiniUiCard(pendingAppAction.miniUi, pendingAppAction.messageId)
+                ? renderAppMiniUiCard(
+                    pendingAppAction.miniUi,
+                    pendingAppAction.messageId
+                  )
                 : null}
           </div>
         ) : null}
@@ -3743,7 +4077,10 @@ export default function AI_Prompt({
                       </div>
                     )}
                     <div className="flex items-center justify-between gap-1 border-t border-sidebar-border px-2 py-1">
-                      <span className="truncate text-[11px] text-muted-foreground" title={attachment.name}>
+                      <span
+                        className="truncate text-[11px] text-muted-foreground"
+                        title={attachment.name}
+                      >
                         {attachment.name}
                       </span>
                       <button
@@ -3777,25 +4114,24 @@ export default function AI_Prompt({
               "relative z-10 flex flex-col overflow-hidden border",
               glassComposer
                 ? hasConversation
-                  ? cn(
-                      "rounded-b-2xl border",
-                      glassBorder,
-                      glassLayerFront
-                    )
+                  ? cn("rounded-b-2xl border", glassBorder, glassLayerFront)
                   : cn("rounded-xl border", glassBorder, glassLayerFront)
                 : "rounded-xl border border-sidebar-border bg-sidebar"
             )}
           >
-            <div className="scrollbar-hidden relative overflow-y-auto" style={{ maxHeight: "400px" }}>
+            <div
+              className="scrollbar-hidden relative overflow-y-auto"
+              style={{ maxHeight: "400px" }}
+            >
               <div
                 aria-hidden="true"
                 className={cn(
-                  "pointer-events-none absolute inset-0 z-0 overflow-hidden px-4 pb-3 text-base text-foreground font-normal leading-normal tracking-normal md:text-sm",
+                  "pointer-events-none absolute inset-0 z-0 overflow-hidden px-4 pb-3 text-base leading-normal font-normal tracking-normal text-foreground md:text-sm",
                   "pt-3"
                 )}
               >
                 <div
-                  className="whitespace-pre-wrap break-words"
+                  className="break-words whitespace-pre-wrap"
                   style={{ transform: `translateY(-${composerScrollTop}px)` }}
                 >
                   {renderComposerValue()}
@@ -3818,35 +4154,49 @@ export default function AI_Prompt({
               />
             </div>
 
-            <div className={cn("flex h-11 items-center", glassComposer ? "bg-transparent" : "bg-sidebar")}>
+            <div
+              className={cn(
+                "flex h-11 items-center",
+                glassComposer ? "bg-transparent" : "bg-sidebar"
+              )}
+            >
               <div className="absolute inset-x-2 bottom-1.5 flex items-center justify-between">
                 <div className="flex min-w-0 items-center gap-1 overflow-x-auto pr-2">
                   <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex h-8 items-center gap-1 rounded-md pe-1.5 ps-1 text-xs hover:bg-muted focus-visible:ring-1 focus-visible:ring-offset-0" variant="ghost" />}><AnimatePresence mode="wait">
-                                                                <motion.div
-                                                                  animate={{
-                                                                    opacity: 1,
-                                                                    y: 0,
-                                                                  }}
-                                                                  className="flex items-center gap-1"
-                                                                  exit={{
-                                                                    opacity: 0,
-                                                                    y: 5,
-                                                                  }}
-                                                                  initial={{
-                                                                    opacity: 0,
-                                                                    y: -5,
-                                                                  }}
-                                                                  key={selectedModel}
-                                                                  transition={{
-                                                                    duration: 0.15,
-                                                                  }}
-                                                                >
-                                                                  {MODEL_ICONS[selectedModel]}
-                                                                  {selectedModel}
-                                                                  <ChevronDown className="h-3 w-3 opacity-50" />
-                                                                </motion.div>
-                                                              </AnimatePresence></DropdownMenuTrigger>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          className="flex h-8 items-center gap-1 rounded-md ps-1 pe-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
+                          variant="ghost"
+                        />
+                      }
+                    >
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          animate={{
+                            opacity: 1,
+                            y: 0,
+                          }}
+                          className="flex items-center gap-1"
+                          exit={{
+                            opacity: 0,
+                            y: 5,
+                          }}
+                          initial={{
+                            opacity: 0,
+                            y: -5,
+                          }}
+                          key={selectedModel}
+                          transition={{
+                            duration: 0.15,
+                          }}
+                        >
+                          {MODEL_ICONS[selectedModel]}
+                          {selectedModel}
+                          <ChevronDown className="h-3 w-3 opacity-50" />
+                        </motion.div>
+                      </AnimatePresence>
+                    </DropdownMenuTrigger>
                     <DropdownMenuContent
                       className={cn(
                         "z-[100] min-w-[10rem]",
@@ -3873,7 +4223,7 @@ export default function AI_Prompt({
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <div className="bg-border mx-0.5 h-4 w-px" />
+                  <div className="mx-0.5 h-4 w-px bg-border" />
                   <AnimatePresence initial={false}>
                     {activeTab !== "chat" && (
                       <motion.div
@@ -3888,7 +4238,7 @@ export default function AI_Prompt({
                           <DropdownMenuTrigger
                             render={
                               <Button
-                                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex h-8 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-muted focus-visible:ring-1 focus-visible:ring-offset-0"
+                                className="flex h-8 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
                                 variant="ghost"
                               />
                             }
@@ -3897,10 +4247,16 @@ export default function AI_Prompt({
                             <Plus className="h-4 w-4 opacity-80" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
-                            className={cn("z-[100] min-w-[12rem]", "border-border bg-popover")}
+                            className={cn(
+                              "z-[100] min-w-[12rem]",
+                              "border-border bg-popover"
+                            )}
                           >
                             {availableIntegrations.length === 0 ? (
-                              <DropdownMenuItem disabled className="text-muted-foreground">
+                              <DropdownMenuItem
+                                disabled
+                                className="text-muted-foreground"
+                              >
                                 No apps connected
                               </DropdownMenuItem>
                             ) : (
@@ -3908,7 +4264,9 @@ export default function AI_Prompt({
                                 <DropdownMenuItem
                                   className="flex items-center justify-between gap-2"
                                   key={integration.slug}
-                                  onSelect={() => insertAppMention(integration.name)}
+                                  onSelect={() =>
+                                    insertAppMention(integration.name)
+                                  }
                                 >
                                   <div className="flex items-center gap-2">
                                     {renderAppLogo(integration.name, "md")}
@@ -3929,7 +4287,7 @@ export default function AI_Prompt({
                     <DropdownMenuTrigger
                       render={
                         <Button
-                          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex h-8 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-muted focus-visible:ring-1 focus-visible:ring-offset-0"
+                          className="flex h-8 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
                           variant="ghost"
                         />
                       }
@@ -3937,17 +4295,27 @@ export default function AI_Prompt({
                       <span>Skills</span>
                       <Plus className="h-4 w-4 opacity-80" />
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent className={cn("z-[100] min-w-[12rem]", "border-border bg-popover")}>
+                    <DropdownMenuContent
+                      className={cn(
+                        "z-[100] min-w-[12rem]",
+                        "border-border bg-popover"
+                      )}
+                    >
                       <DropdownMenuItem
                         className="flex items-center justify-between gap-2"
                         key="no-skill"
                         onSelect={() => setSelectedSkill("No skill")}
                       >
                         <span>No skill</span>
-                        {selectedSkill === "No skill" && <Check className="h-4 w-4 text-primary" />}
+                        {selectedSkill === "No skill" && (
+                          <Check className="h-4 w-4 text-primary" />
+                        )}
                       </DropdownMenuItem>
                       {availableSkillNames.length === 0 ? (
-                        <DropdownMenuItem disabled className="text-muted-foreground">
+                        <DropdownMenuItem
+                          disabled
+                          className="text-muted-foreground"
+                        >
                           No skills created yet
                         </DropdownMenuItem>
                       ) : (
@@ -3958,7 +4326,9 @@ export default function AI_Prompt({
                             onSelect={() => insertSkillMention(skill)}
                           >
                             <span>{skill}</span>
-                            {selectedSkill === skill && <Check className="h-4 w-4 text-primary" />}
+                            {selectedSkill === skill && (
+                              <Check className="h-4 w-4 text-primary" />
+                            )}
                           </DropdownMenuItem>
                         ))
                       )}
@@ -3972,7 +4342,7 @@ export default function AI_Prompt({
                         <Button
                           aria-label="Add options"
                           className={cn(
-                            "text-muted-foreground hover:text-foreground focus-visible:ring-ring flex h-8 items-center gap-1 rounded-md px-1.5 text-xs hover:bg-muted focus-visible:ring-1 focus-visible:ring-offset-0"
+                            "flex h-8 items-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
                           )}
                           variant="ghost"
                         />
@@ -3983,13 +4353,16 @@ export default function AI_Prompt({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
-                      className={cn("z-[100] min-w-[15rem]", "border-border bg-popover")}
+                      className={cn(
+                        "z-[100] min-w-[15rem]",
+                        "border-border bg-popover"
+                      )}
                     >
                       <DropdownMenuItem
                         onPointerDown={(e) => {
-                          if (e.button !== 0) return;
-                          e.preventDefault();
-                          openFilePicker();
+                          if (e.button !== 0) return
+                          e.preventDefault()
+                          openFilePicker()
                         }}
                         onSelect={(e) => e.preventDefault()}
                       >
@@ -4030,7 +4403,8 @@ export default function AI_Prompt({
                     )}
                     disabled={
                       lockedComposerPrefix
-                        ? value.slice(lockedComposerPrefix.length).trim().length === 0
+                        ? value.slice(lockedComposerPrefix.length).trim()
+                            .length === 0
                         : !value.trim()
                     }
                     type="button"
@@ -4041,7 +4415,9 @@ export default function AI_Prompt({
                     <Kbd
                       className={cn(
                         "h-4 rounded-[calc(min(var(--radius-md),12px)*4/7)] border-transparent bg-primary-foreground/15 px-1 text-[10px]",
-                        value.trim() ? "text-primary-foreground" : "text-primary-foreground/70"
+                        value.trim()
+                          ? "text-primary-foreground"
+                          : "text-primary-foreground/70"
                       )}
                     >
                       <CornerDownLeft className="h-2.5 w-2.5" />
@@ -4052,7 +4428,11 @@ export default function AI_Prompt({
             </div>
           </div>
           {commandMenu && commandItems.length > 0 && (
-            <div className="no-scrollbar absolute bottom-[calc(100%+0.375rem)] left-4 z-[140] max-h-44 w-[min(18rem,calc(100%-2rem))] overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/10">
+            <div
+              className={cn(
+                "absolute bottom-[calc(100%+0.5rem)] left-3 z-[140] no-scrollbar max-h-40 w-[min(22rem,calc(100%-1.5rem))] overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/10"
+              )}
+            >
               {commandItems.map((item, index) => (
                 <button
                   key={`${commandMenu.type}-${item}`}
@@ -4085,11 +4465,14 @@ export default function AI_Prompt({
                     ) : (
                       renderAppLogo(item)
                     )}
-                    <span>{commandMenu.type === "skill" ? `/${item}` : item}</span>
+                    <span>
+                      {commandMenu.type === "skill" ? `/${item}` : item}
+                    </span>
                   </span>
-                  {commandMenu.type === "app" && connectedApps.includes(item) && (
-                    <Check className="h-4 w-4 text-primary" />
-                  )}
+                  {commandMenu.type === "app" &&
+                    connectedApps.includes(item) && (
+                      <Check className="h-4 w-4 text-primary" />
+                    )}
                 </button>
               ))}
             </div>
@@ -4097,5 +4480,5 @@ export default function AI_Prompt({
         </div>
       </div>
     </div>
-  );
+  )
 }

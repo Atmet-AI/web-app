@@ -4,6 +4,7 @@ import { z } from "zod"
 
 import { getUser } from "@/lib/api/auth"
 import { ok, Errors } from "@/lib/api/response"
+import { getOpenAIClient } from "@/lib/openai"
 
 const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -14,6 +15,39 @@ const createAgentSchema = z.object({
   sourceMessageId: z.number().optional(),
   messages: z.array(chatMessageSchema).min(1).max(80).optional(),
 })
+
+const agentBuilderStepSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(120),
+  type: z.enum(["trigger", "action", "approval", "decision", "memory"]),
+  provider: z.string().max(80).nullable().optional(),
+  app: z.string().max(80).nullable().optional(),
+  trigger_slug: z.string().max(160).nullable().optional(),
+  prompt: z.string().max(1000),
+  status: z.enum(["draft", "needs_connection", "needs_input", "ready"]).default("draft"),
+})
+
+const agentBuilderBlueprintSchema = z.object({
+  name: z.string().min(1).max(72),
+  goal: z.string().min(1).max(1000),
+  summary: z.string().min(1).max(500),
+  trigger: z
+    .object({
+      type: z.string().max(80),
+      description: z.string().max(500),
+    })
+    .nullable(),
+  required_apps: z.array(z.string().min(1).max(80)).max(20).default([]),
+  steps: z.array(agentBuilderStepSchema).min(1).max(12),
+  approval_policy: z.object({
+    require_approval_for: z.array(z.string().min(1).max(120)).max(12),
+    mode: z.enum(["design_time", "per_run", "none"]),
+  }),
+  missing_inputs: z.array(z.string().min(1).max(160)).max(12).default([]),
+  safety_notes: z.array(z.string().min(1).max(200)).max(12).default([]),
+})
+
+type AgentBuilderBlueprint = z.infer<typeof agentBuilderBlueprintSchema>
 
 async function isChatParticipant(
   supabase: SupabaseClient,
@@ -51,6 +85,161 @@ function buildNodeDescription(
     `${messages.length} messages (${userMessages.length} user · ${assistantMessages.length} AI)`
   )
   return parts.join(" — ")
+}
+
+function buildTranscriptPreview(
+  messages: Array<{ role: "user" | "assistant"; content: string }>
+) {
+  return messages
+    .slice(-30)
+    .map((message) => ({
+      role: message.role,
+      content:
+        message.content.length > 3000
+          ? `${message.content.slice(0, 3000)}...`
+          : message.content,
+    }))
+}
+
+async function draftAgentBlueprintWithModel({
+  messages,
+  fallbackName,
+  detectedTrigger,
+}: {
+  messages: Array<{ role: "user" | "assistant"; content: string }>
+  fallbackName: string
+  detectedTrigger: ReturnType<typeof detectComposioTrigger>
+}): Promise<AgentBuilderBlueprint | null> {
+  try {
+    const completion = await getOpenAIClient().chat.completions.create({
+      model: process.env.OPENAI_MODEL ?? "gpt-4o",
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You are Atmet's Agent Builder.",
+            "Convert the user's conversation into a deployable workspace agent blueprint.",
+            "Return only valid JSON. Do not include markdown.",
+            "The agent is not a chatbot only: it needs goal, trigger, apps, steps, approvals, missing inputs, and safety notes.",
+            "Use short practical step names. Mark steps that need a connected app as needs_connection.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            fallbackName,
+            detectedTrigger,
+            expectedShape: {
+              name: "short agent name",
+              goal: "what this agent owns",
+              summary: "one sentence explanation",
+              trigger: {
+                type: "manual | schedule | webhook | app_event | none",
+                description: "when the agent should run",
+              },
+              required_apps: ["Gmail", "HubSpot"],
+              steps: [
+                {
+                  id: "step-1",
+                  name: "Watch for new invoices",
+                  type: "trigger",
+                  provider: "Gmail",
+                  app: "Gmail",
+                  trigger_slug: "GMAIL_NEW_GMAIL_MESSAGE",
+                  prompt: "What the step does",
+                  status: "needs_connection",
+                },
+              ],
+              approval_policy: {
+                require_approval_for: [
+                  "sending external messages",
+                  "updating CRM records",
+                ],
+                mode: "design_time",
+              },
+              missing_inputs: ["Which inbox should the agent watch?"],
+              safety_notes: ["Do not send external emails without approval."],
+            },
+            transcript: buildTranscriptPreview(messages),
+          }),
+        },
+      ],
+    })
+
+    const content = completion.choices[0]?.message?.content
+    if (!content) return null
+
+    const parsed = agentBuilderBlueprintSchema.safeParse(JSON.parse(content))
+    if (!parsed.success) {
+      console.error("Agent Builder returned invalid blueprint", parsed.error.issues)
+      return null
+    }
+
+    return parsed.data
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error"
+    console.error("Agent Builder model fallback used:", message)
+    return null
+  }
+}
+
+function buildFallbackAgentBlueprint({
+  agentName,
+  description,
+  firstUserMessage,
+  requiredApps,
+  steps,
+}: {
+  agentName: string
+  description: string
+  firstUserMessage: string
+  requiredApps: string[]
+  steps: Array<{
+    name: string
+    nodeType: "Trigger" | "Action"
+    provider: string
+    model?: string
+    prompt: string
+    usedApps: string[]
+  }>
+}): AgentBuilderBlueprint {
+  return {
+    name: agentName,
+    goal: firstUserMessage || agentName,
+    summary: description,
+    trigger: steps.some((step) => step.nodeType === "Trigger")
+      ? {
+          type: "app_event",
+          description: steps.find((step) => step.nodeType === "Trigger")?.prompt ?? "Run when the connected app event happens.",
+        }
+      : {
+          type: "manual",
+          description: "Run manually until a trigger is configured.",
+        },
+    required_apps: requiredApps,
+    steps: steps.map((step, index) => ({
+      id: `step-${index + 1}`,
+      name: step.name,
+      type: step.nodeType.toLowerCase() as "trigger" | "action",
+      provider: step.provider,
+      app: step.usedApps[0] ?? null,
+      trigger_slug: step.nodeType === "Trigger" ? step.model ?? null : null,
+      prompt: step.prompt,
+      status: step.usedApps.length > 0 ? "needs_connection" : "draft",
+    })),
+    approval_policy: {
+      require_approval_for: [
+        "external messages",
+        "record updates",
+        "destructive actions",
+      ],
+      mode: "design_time",
+    },
+    missing_inputs: [],
+    safety_notes: ["Review tool permissions before activating this agent."],
+  }
 }
 
 function detectComposioTrigger(
@@ -451,14 +640,51 @@ export async function POST(
     createdAt: new Date().toISOString(),
     steps,
   }
+  const description = buildNodeDescription(cleanedMessages)
+  const requiredApps = Array.from(
+    new Set(steps.flatMap((step) => step.usedApps ?? []))
+  )
+  const modelDraft = await draftAgentBlueprintWithModel({
+    messages: cleanedMessages,
+    fallbackName: agentName,
+    detectedTrigger: composioTrigger,
+  })
+  const builderSource = modelDraft ? "model" : "fallback"
+  const modelBlueprint =
+    modelDraft ??
+    buildFallbackAgentBlueprint({
+      agentName,
+      description,
+      firstUserMessage: firstUserMessage?.content ?? agentName,
+      requiredApps,
+      steps,
+    })
+
+  const finalAgentName = compactTitle(modelBlueprint.name, agentName)
+  const finalDescription = modelBlueprint.summary || description
+  const agentBlueprint = {
+    version: 1,
+    source: "chat-agent",
+    builderSource,
+    sourceChatId: chat.id,
+    sourceMessageId: parsed.data.sourceMessageId ?? null,
+    builder: modelBlueprint,
+    goal: modelBlueprint.goal,
+    trigger: modelBlueprint.trigger,
+    required_apps: modelBlueprint.required_apps,
+    steps: modelBlueprint.steps,
+    approval_policy: modelBlueprint.approval_policy,
+    missing_inputs: modelBlueprint.missing_inputs,
+    safety_notes: modelBlueprint.safety_notes,
+  }
 
   const { data: automation, error: automationError } = await supabase
     .from("automation")
     .insert({
       workspace_id: chat.workspace_id,
       created_by: user.id,
-      name: agentName,
-      description: buildNodeDescription(cleanedMessages),
+      name: finalAgentName,
+      description: finalDescription,
       script_key: JSON.stringify(blueprint),
       status: "draft",
     })
@@ -467,10 +693,42 @@ export async function POST(
 
   if (automationError || !automation) return Errors.internal()
 
+  const { data: agent, error: agentError } = await supabase
+    .from("agent")
+    .insert({
+      workspace_id: chat.workspace_id,
+      created_by: user.id,
+      legacy_automation_id: automation.id,
+      name: finalAgentName,
+      description: finalDescription,
+      goal: modelBlueprint.goal,
+      status: "draft",
+      instructions: [
+        modelBlueprint.goal,
+        "",
+        "Steps:",
+        ...modelBlueprint.steps.map((step, index) => `${index + 1}. ${step.name}: ${step.prompt}`),
+      ].join("\n"),
+      blueprint_json: agentBlueprint,
+      runtime_config_json: {
+        modelLayer: "atmet",
+        executionMode: "draft",
+        builder: builderSource,
+      },
+    })
+    .select()
+    .single()
+
+  if (agentError || !agent) {
+    console.error("Unable to create agent from chat", agentError)
+    await supabase.from("automation").delete().eq("id", automation.id)
+    return Errors.internal()
+  }
+
   await supabase.from("chats_automation").insert({
     chat_id: chat.id,
     automation_id: automation.id,
   })
 
-  return ok({ automation }, 201)
+  return ok({ automation, agent }, 201)
 }

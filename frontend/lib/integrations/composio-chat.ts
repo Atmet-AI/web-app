@@ -7,7 +7,7 @@ import {
 } from "@/lib/integrations/composio"
 import { getOpenAIClient } from "@/lib/openai"
 
-type ConnectedAppProvider =
+export type ConnectedAppProvider =
   | "gmail"
   | "google-contacts"
   | "telegram"
@@ -34,6 +34,17 @@ type ComposioChatToolResult =
       summary: string
       error: string
     }
+
+export type ComposioAgentCompiledTool = {
+  provider: ConnectedAppProvider
+  toolkit: string
+  label: string
+  toolSlug: string
+  description?: string
+  inputSchema?: unknown
+  reason?: string | null
+  question?: string | null
+}
 
 type SheetLookup = {
   id: string
@@ -768,6 +779,23 @@ function detectGenericConnectedApp(content: string) {
     .sort((left, right) => right.score - left.score)[0]?.app ?? null
 }
 
+function findGenericConnectedApp(value: string | null | undefined) {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")
+  return (
+    GENERIC_CONNECTED_APPS.find((app) => {
+      const provider = app.provider.replace(/[^a-z0-9]+/g, "-")
+      const label = app.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+      const toolkit = app.toolkit.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+      return (
+        normalized === provider ||
+        normalized === label ||
+        normalized === toolkit
+      )
+    }) ?? null
+  )
+}
+
 async function runGoogleCalendarChatTool(input: {
   workspaceId: string
   userId: string
@@ -1170,6 +1198,196 @@ async function runGenericComposioAppTool(input: {
     summary: `${input.app.label} tool execution completed through Composio.`,
     data: {
       tool: plan.toolSlug,
+      connectedAccountId: connected.activeAccount.id,
+      args: planArguments,
+      plannerReason: plan.reason ?? null,
+      result: result.data,
+    },
+  }
+}
+
+export async function compileComposioAgentTool(input: {
+  workspaceId: string
+  userId: string
+  provider: string
+  content: string
+}): Promise<
+  | {
+      ok: true
+      compiledTool: ComposioAgentCompiledTool
+    }
+  | {
+      ok: false
+      error: string
+      reason?: string
+      question?: string
+    }
+> {
+  const app = findGenericConnectedApp(input.provider)
+  if (!app) {
+    return {
+      ok: false,
+      error: `Atmet does not know how to compile ${input.provider} actions yet.`,
+    }
+  }
+
+  const connected = await getActiveComposioSession({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    toolkit: app.toolkit,
+  })
+
+  if (!connected.ok) {
+    return {
+      ok: false,
+      error: connected.error,
+      reason: `${app.label} is not connected for this workspace user.`,
+    }
+  }
+
+  const searchQuery = buildComposioToolSearchQuery(input.content, app)
+  const search = await connected.session.search({
+    query: searchQuery,
+    toolkits: [app.toolkit],
+  })
+  const schemas = Object.values(
+    (recordValue(search)?.toolSchemas ?? {}) as Record<string, ToolSchema>
+  )
+    .filter(
+      (schema) =>
+        schema?.toolSlug && schema.hasFullSchema !== false && schema.inputSchema
+    )
+    .sort(
+      (left, right) =>
+        rankToolSchemaForRequest(right, input.content) -
+        rankToolSchemaForRequest(left, input.content)
+    )
+    .slice(0, 10)
+
+  if (schemas.length === 0) {
+    return {
+      ok: false,
+      error: `Composio did not return executable ${app.label} tool schemas.`,
+      reason: "tool_discovery_failed",
+    }
+  }
+
+  const plan = await planComposioToolExecution({
+    userRequest: input.content,
+    app,
+    schemas,
+  })
+  const plannedSchema = plan.toolSlug
+    ? schemas.find((schema) => schema.toolSlug === plan.toolSlug)
+    : null
+  const selectedSchema = plannedSchema ?? schemas[0]
+
+  if (!selectedSchema?.toolSlug) {
+    return {
+      ok: false,
+      error: `Atmet could not choose a ${app.label} tool for this step.`,
+      reason: plan.reason,
+      question: plan.question,
+    }
+  }
+
+  return {
+    ok: true,
+    compiledTool: {
+      provider: app.provider,
+      toolkit: app.toolkit,
+      label: app.label,
+      toolSlug: selectedSchema.toolSlug,
+      description: selectedSchema.description,
+      inputSchema: selectedSchema.inputSchema,
+      reason: plan.reason ?? null,
+      question: plan.question ?? null,
+    },
+  }
+}
+
+export async function runCompiledComposioAgentTool(input: {
+  workspaceId: string
+  userId: string
+  content: string
+  compiledTool: ComposioAgentCompiledTool
+}): Promise<ComposioChatToolResult> {
+  const app = findGenericConnectedApp(input.compiledTool.provider)
+  if (!app) {
+    return {
+      ok: false,
+      provider: input.compiledTool.provider,
+      operation: "tool-planning",
+      summary: "This compiled tool provider is not supported yet.",
+      error: `Unsupported provider: ${input.compiledTool.provider}`,
+    }
+  }
+
+  const connected = await getActiveComposioSession({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    toolkit: input.compiledTool.toolkit,
+  })
+
+  if (!connected.ok) {
+    return {
+      ok: false,
+      provider: app.provider,
+      operation: "connection",
+      summary: `${app.label} is not connected for this workspace user.`,
+      error: connected.error,
+    }
+  }
+
+  const schema: ToolSchema = {
+    toolSlug: input.compiledTool.toolSlug,
+    description: input.compiledTool.description,
+    inputSchema: input.compiledTool.inputSchema,
+    hasFullSchema: true,
+  }
+  const plan = await planComposioToolExecution({
+    userRequest: input.content,
+    app,
+    schemas: [schema],
+  })
+
+  if (!plan.execute || plan.toolSlug !== input.compiledTool.toolSlug) {
+    return {
+      ok: false,
+      provider: app.provider,
+      operation: input.compiledTool.toolSlug,
+      summary:
+        plan.reason ??
+        `Atmet needs more information before using ${app.label}.`,
+      error:
+        plan.question ??
+        "The request did not include enough information to execute safely.",
+    }
+  }
+
+  const planArguments = sanitizeComposioToolArguments(plan.arguments ?? {})
+  const result = await connected.session.execute(
+    input.compiledTool.toolSlug,
+    planArguments
+  )
+
+  if (result.error) {
+    return {
+      ok: false,
+      provider: app.provider,
+      operation: input.compiledTool.toolSlug,
+      summary: `${app.label} tool execution ran but Composio returned an error.`,
+      error: result.error,
+    }
+  }
+
+  return {
+    ok: true,
+    provider: app.provider,
+    operation: input.compiledTool.toolSlug,
+    summary: `${app.label} tool execution completed through a compiled agent step.`,
+    data: {
+      tool: input.compiledTool.toolSlug,
       connectedAccountId: connected.activeAccount.id,
       args: planArguments,
       plannerReason: plan.reason ?? null,
