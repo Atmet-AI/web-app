@@ -126,15 +126,17 @@ export default async function RootLayout({
                       <Suspense fallback={null}>
                         <AppSidebar />
                       </Suspense>
-                      <SidebarInset className="h-full overflow-y-auto rounded-xl border border-border/80 bg-background bg-clip-padding shadow-[0_24px_90px_rgba(0,0,0,0.14)] peer-data-[state=expanded]:-ml-px peer-data-[state=expanded]:rounded-l-none peer-data-[state=expanded]:!border-l-0 peer-data-[state=expanded]:shadow-[18px_24px_90px_rgba(0,0,0,0.12)] dark:bg-sidebar dark:shadow-[0_24px_90px_rgba(0,0,0,0.46)] dark:peer-data-[state=expanded]:shadow-[18px_24px_90px_rgba(0,0,0,0.38)]">
-                        <Suspense
-                          fallback={
-                            <div className="h-10 border-b border-border" />
-                          }
-                        >
-                          <PlatformNavbar />
-                        </Suspense>
-                        {children}
+                      <SidebarInset className="isolate h-full overflow-hidden rounded-xl border border-border bg-background shadow-[0_24px_90px_rgba(0,0,0,0.14)] peer-data-[state=expanded]:rounded-l-none peer-data-[state=expanded]:shadow-[18px_24px_90px_rgba(0,0,0,0.12)] dark:bg-sidebar dark:shadow-[0_24px_90px_rgba(0,0,0,0.46)] dark:peer-data-[state=expanded]:shadow-[18px_24px_90px_rgba(0,0,0,0.38)]">
+                        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[inherit] bg-background dark:bg-sidebar">
+                          <Suspense
+                            fallback={
+                              <div className="h-10 border-b border-border" />
+                            }
+                          >
+                            <PlatformNavbar />
+                          </Suspense>
+                          {children}
+                        </div>
                       </SidebarInset>
                     </SidebarProvider>
                   </PlatformAppShell>

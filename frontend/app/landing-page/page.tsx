@@ -49,9 +49,9 @@ export default function LandingPage() {
 function LandingPageContent() {
   const { theme, language, dir, t } = useLandingPage()
   const landingRootStyle = {
-    "--background": theme === "dark" ? "oklch(0.075 0 0)" : "oklch(1 0 0)",
-    "--foreground": theme === "dark" ? "oklch(0.985 0 0)" : "oklch(0.145 0 0)",
-    backgroundColor: theme === "dark" ? "oklch(0.075 0 0)" : "#ffffff",
+    "--background": theme === "dark" ? "oklch(0.147 0.004 49.25)" : "oklch(1 0 0)",
+    "--foreground": theme === "dark" ? "oklch(0.985 0.001 106.423)" : "oklch(0.147 0.004 49.25)",
+    backgroundColor: theme === "dark" ? "oklch(0.147 0.004 49.25)" : "#ffffff",
     colorScheme: theme,
   } as CSSProperties
 

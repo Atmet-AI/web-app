@@ -92,6 +92,24 @@ function appLinkPattern(appName: string) {
   )
 }
 
+export function hasNaturalAppMention(content: string, slug: string, appName: string) {
+  const aliases = APP_ALIASES[slug] ?? [
+    new RegExp(`\\b${escapeRegExp(appName)}\\b`, "i"),
+  ]
+  return aliases.some((alias) => alias.test(content))
+}
+
+export function hasNamedAppMention(content: string, appName: string) {
+  const integration = INTEGRATIONS_CATALOG.find(
+    (item) => item.name.toLowerCase() === appName.toLowerCase()
+  )
+  return hasNaturalAppMention(
+    content,
+    integration?.slug ?? appName.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    appName
+  )
+}
+
 export function hasExplicitAppMention(content: string, appName: string) {
   return appLinkPattern(appName).test(content)
 }
@@ -148,23 +166,18 @@ export function detectAppApprovalRequest(input: {
   if (!content || !hasActionIntent(content)) return null
 
   for (const integration of prioritizeCatalogForContent(content)) {
-    const aliases = APP_ALIASES[integration.slug] ?? [
-      new RegExp(`\\b${escapeRegExp(integration.name)}\\b`, "i"),
-    ]
-    const isMentioned = aliases.some((alias) => alias.test(content))
+    const isMentioned = hasNaturalAppMention(
+      content,
+      integration.slug,
+      integration.name
+    )
 
     if (!isMentioned) continue
-    if (hasExplicitAppMention(content, integration.name)) continue
-    if (hasAppInConversation(input.conversationMessages, integration.name))
-      continue
 
-    return {
-      type: "app_approval",
-      appName: integration.name,
-      appSlug: integration.slug,
-      originalRequest: content,
-      reason: `This needs access to ${integration.name}.`,
-    }
+    // If the user already named the app in the request, that is design-time
+    // permission to include it in the chat/agent plan. OAuth connection and
+    // risky live actions are handled by their own flows.
+    return null
   }
 
   return null

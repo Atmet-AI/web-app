@@ -18,12 +18,41 @@ const createAgentSchema = z.object({
 
 const agentBuilderStepSchema = z.object({
   id: z.string().min(1),
+  node_id: z.string().min(1).optional(),
+  action_id: z.string().min(1).optional(),
   name: z.string().min(1).max(120),
   type: z.enum(["trigger", "action", "approval", "decision", "memory"]),
   provider: z.string().max(80).nullable().optional(),
   app: z.string().max(80).nullable().optional(),
   trigger_slug: z.string().max(160).nullable().optional(),
   prompt: z.string().max(1000),
+  runtime_ms: z.number().int().positive().max(900000).optional(),
+  status: z.enum(["draft", "needs_connection", "needs_input", "ready"]).default("draft"),
+})
+
+const agentBuilderNodeActionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(120),
+  prompt: z.string().max(1000),
+  tool_hint: z.string().max(160).nullable().optional(),
+  runtime_ms: z.number().int().positive().max(900000).default(30000),
+})
+
+const agentBuilderNodeSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(120),
+  type: z.enum(["trigger", "action"]),
+  app: z.string().max(80).nullable().optional(),
+  provider: z.string().max(80).nullable().optional(),
+  trigger_slug: z.string().max(160).nullable().optional(),
+  prompt: z.string().max(1000),
+  runtime: z
+    .object({
+      expected_ms: z.number().int().positive().max(900000).default(30000),
+      timeout_ms: z.number().int().positive().max(900000).default(120000),
+    })
+    .default({ expected_ms: 30000, timeout_ms: 120000 }),
+  actions: z.array(agentBuilderNodeActionSchema).min(1).max(2),
   status: z.enum(["draft", "needs_connection", "needs_input", "ready"]).default("draft"),
 })
 
@@ -38,16 +67,21 @@ const agentBuilderBlueprintSchema = z.object({
     })
     .nullable(),
   required_apps: z.array(z.string().min(1).max(80)).max(20).default([]),
-  steps: z.array(agentBuilderStepSchema).min(1).max(12),
+  nodes: z.array(agentBuilderNodeSchema).max(8).default([]),
+  steps: z.array(agentBuilderStepSchema).max(12).default([]),
   approval_policy: z.object({
     require_approval_for: z.array(z.string().min(1).max(120)).max(12),
     mode: z.enum(["design_time", "per_run", "none"]),
   }),
   missing_inputs: z.array(z.string().min(1).max(160)).max(12).default([]),
   safety_notes: z.array(z.string().min(1).max(200)).max(12).default([]),
+}).refine((blueprint) => blueprint.nodes.length > 0 || blueprint.steps.length > 0, {
+  message: "Blueprint needs at least one node or step.",
 })
 
 type AgentBuilderBlueprint = z.infer<typeof agentBuilderBlueprintSchema>
+type AgentBuilderNode = z.infer<typeof agentBuilderNodeSchema>
+type AgentBuilderStep = z.infer<typeof agentBuilderStepSchema>
 
 async function isChatParticipant(
   supabase: SupabaseClient,
@@ -101,6 +135,88 @@ function buildTranscriptPreview(
     }))
 }
 
+function estimateRuntimeMs(type: "trigger" | "action", prompt: string) {
+  const words = prompt.split(/\s+/).filter(Boolean).length
+  if (type === "trigger") return 5000
+  if (/\b(send|create|update|append|post|message|email)\b/i.test(prompt)) {
+    return 30000
+  }
+  return Math.min(60000, Math.max(15000, words * 700))
+}
+
+function stepsToNodes(steps: AgentBuilderStep[]): AgentBuilderNode[] {
+  return steps.map((step, index) => {
+    const type = step.type === "trigger" ? "trigger" : "action"
+    const runtimeMs = step.runtime_ms ?? estimateRuntimeMs(type, step.prompt)
+    return {
+      id: step.node_id ?? `node-${index + 1}`,
+      name: step.name,
+      type,
+      app: step.app ?? step.provider ?? null,
+      provider: step.provider ?? step.app ?? null,
+      trigger_slug: step.trigger_slug ?? null,
+      prompt: step.prompt,
+      runtime: {
+        expected_ms: runtimeMs,
+        timeout_ms: Math.max(60000, runtimeMs * 3),
+      },
+      actions: [
+        {
+          id: step.action_id ?? `action-${index + 1}`,
+          name: step.name,
+          prompt: step.prompt,
+          tool_hint: step.trigger_slug ?? null,
+          runtime_ms: runtimeMs,
+        },
+      ],
+      status: step.status,
+    }
+  })
+}
+
+function nodesToSteps(nodes: AgentBuilderNode[]): AgentBuilderStep[] {
+  return nodes.flatMap((node, nodeIndex) =>
+    node.actions.map((action, actionIndex) => ({
+      id: `${node.id}-${action.id}`,
+      node_id: node.id,
+      action_id: action.id,
+      name:
+        node.actions.length > 1
+          ? `${node.name}: ${action.name}`
+          : node.name,
+      type: node.type,
+      provider: node.provider ?? node.app ?? null,
+      app: node.app ?? node.provider ?? null,
+      trigger_slug: node.type === "trigger" ? node.trigger_slug ?? null : null,
+      prompt: action.prompt || node.prompt,
+      runtime_ms: action.runtime_ms ?? node.runtime.expected_ms,
+      status: node.status,
+    }))
+  )
+}
+
+function normalizeAgentBuilderBlueprint(
+  blueprint: AgentBuilderBlueprint
+): AgentBuilderBlueprint {
+  const nodes =
+    blueprint.nodes.length > 0 ? blueprint.nodes : stepsToNodes(blueprint.steps)
+  return {
+    ...blueprint,
+    nodes,
+    steps: nodesToSteps(nodes),
+    required_apps:
+      blueprint.required_apps.length > 0
+        ? blueprint.required_apps
+        : Array.from(
+            new Set(
+              nodes
+                .map((node) => node.app ?? node.provider)
+                .filter((value): value is string => Boolean(value))
+            )
+          ),
+  }
+}
+
 async function draftAgentBlueprintWithModel({
   messages,
   fallbackName,
@@ -123,7 +239,11 @@ async function draftAgentBlueprintWithModel({
             "Convert the user's conversation into a deployable workspace agent blueprint.",
             "Return only valid JSON. Do not include markdown.",
             "The agent is not a chatbot only: it needs goal, trigger, apps, steps, approvals, missing inputs, and safety notes.",
-            "Use short practical step names. Mark steps that need a connected app as needs_connection.",
+            "Model the workflow as app-grouped nodes. Each node represents one app, is either trigger or action, has runtime estimates, and contains one or two app actions.",
+            "For example: Gmail received email to Telegram message should be exactly two nodes: Gmail trigger, Telegram action.",
+            "If the user already mentioned an app or skill, include it directly in the node model. Do not add a missing input, approval rule, or safety note just to ask whether the mentioned app or skill may be used.",
+            "Only use missing_inputs for required operational details like inbox, channel, recipient, spreadsheet, or schedule. OAuth connection can be represented by needs_connection status.",
+            "Use short practical node names. Mark nodes that need a connected app as needs_connection.",
           ].join(" "),
         },
         {
@@ -140,18 +260,32 @@ async function draftAgentBlueprintWithModel({
                 description: "when the agent should run",
               },
               required_apps: ["Gmail", "HubSpot"],
-              steps: [
+              nodes: [
                 {
-                  id: "step-1",
+                  id: "node-1",
                   name: "Watch for new invoices",
                   type: "trigger",
                   provider: "Gmail",
                   app: "Gmail",
                   trigger_slug: "GMAIL_NEW_GMAIL_MESSAGE",
-                  prompt: "What the step does",
+                  prompt: "What this app node does",
+                  runtime: {
+                    expected_ms: 5000,
+                    timeout_ms: 60000,
+                  },
+                  actions: [
+                    {
+                      id: "action-1",
+                      name: "Detect matching email",
+                      prompt: "Read the incoming Gmail event and identify invoices.",
+                      tool_hint: "Gmail trigger",
+                      runtime_ms: 5000,
+                    },
+                  ],
                   status: "needs_connection",
                 },
               ],
+              steps: [],
               approval_policy: {
                 require_approval_for: [
                   "sending external messages",
@@ -160,7 +294,7 @@ async function draftAgentBlueprintWithModel({
                 mode: "design_time",
               },
               missing_inputs: ["Which inbox should the agent watch?"],
-              safety_notes: ["Do not send external emails without approval."],
+              safety_notes: ["Review risky external writes before activation."],
             },
             transcript: buildTranscriptPreview(messages),
           }),
@@ -205,7 +339,22 @@ function buildFallbackAgentBlueprint({
     usedApps: string[]
   }>
 }): AgentBuilderBlueprint {
-  return {
+  const fallbackSteps = steps.map((step, index) => ({
+    id: `step-${index + 1}`,
+    name: step.name,
+    type: step.nodeType.toLowerCase() as "trigger" | "action",
+    provider: step.provider,
+    app: step.usedApps[0] ?? null,
+    trigger_slug: step.nodeType === "Trigger" ? step.model ?? null : null,
+    prompt: step.prompt,
+    runtime_ms: estimateRuntimeMs(
+      step.nodeType.toLowerCase() as "trigger" | "action",
+      step.prompt
+    ),
+    status: step.usedApps.length > 0 ? "needs_connection" as const : "draft" as const,
+  }))
+
+  return normalizeAgentBuilderBlueprint({
     name: agentName,
     goal: firstUserMessage || agentName,
     summary: description,
@@ -219,16 +368,8 @@ function buildFallbackAgentBlueprint({
           description: "Run manually until a trigger is configured.",
         },
     required_apps: requiredApps,
-    steps: steps.map((step, index) => ({
-      id: `step-${index + 1}`,
-      name: step.name,
-      type: step.nodeType.toLowerCase() as "trigger" | "action",
-      provider: step.provider,
-      app: step.usedApps[0] ?? null,
-      trigger_slug: step.nodeType === "Trigger" ? step.model ?? null : null,
-      prompt: step.prompt,
-      status: step.usedApps.length > 0 ? "needs_connection" : "draft",
-    })),
+    nodes: stepsToNodes(fallbackSteps),
+    steps: fallbackSteps,
     approval_policy: {
       require_approval_for: [
         "external messages",
@@ -239,7 +380,7 @@ function buildFallbackAgentBlueprint({
     },
     missing_inputs: [],
     safety_notes: ["Review tool permissions before activating this agent."],
-  }
+  })
 }
 
 function detectComposioTrigger(
@@ -650,15 +791,16 @@ export async function POST(
     detectedTrigger: composioTrigger,
   })
   const builderSource = modelDraft ? "model" : "fallback"
-  const modelBlueprint =
+  const modelBlueprint = normalizeAgentBuilderBlueprint(
     modelDraft ??
-    buildFallbackAgentBlueprint({
+      buildFallbackAgentBlueprint({
       agentName,
       description,
       firstUserMessage: firstUserMessage?.content ?? agentName,
       requiredApps,
       steps,
-    })
+      })
+  )
 
   const finalAgentName = compactTitle(modelBlueprint.name, agentName)
   const finalDescription = modelBlueprint.summary || description
@@ -672,6 +814,7 @@ export async function POST(
     goal: modelBlueprint.goal,
     trigger: modelBlueprint.trigger,
     required_apps: modelBlueprint.required_apps,
+    nodes: modelBlueprint.nodes,
     steps: modelBlueprint.steps,
     approval_policy: modelBlueprint.approval_policy,
     missing_inputs: modelBlueprint.missing_inputs,
@@ -706,8 +849,11 @@ export async function POST(
       instructions: [
         modelBlueprint.goal,
         "",
-        "Steps:",
-        ...modelBlueprint.steps.map((step, index) => `${index + 1}. ${step.name}: ${step.prompt}`),
+        "Nodes:",
+        ...modelBlueprint.nodes.map((node, index) => {
+          const runtimeSeconds = Math.round(node.runtime.expected_ms / 1000)
+          return `${index + 1}. ${node.name} (${node.type}, ${node.app ?? node.provider ?? "Atmet"}, ~${runtimeSeconds}s): ${node.prompt}`
+        }),
       ].join("\n"),
       blueprint_json: agentBlueprint,
       runtime_config_json: {

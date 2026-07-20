@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 
 import AvatarGroupTooltipTransitionDemo, {
   type ChatParticipant,
@@ -44,28 +44,20 @@ import {
 } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 import {
-  AppWindow,
-  Brain,
   Check,
   ChevronDown,
   ChevronRight,
   Clock3,
   FileClock,
-  GitBranch,
   Loader2,
   Play,
-  Plus,
-  RefreshCw,
   Rocket,
-  Settings,
-  ShieldCheck,
   X,
 } from "lucide-react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { SidebarLeftIcon } from "@hugeicons/core-free-icons"
 
 const OPEN_MANAGE_CHAT_USERS_EVENT = "open-manage-chat-users"
-const CHANGELOGS_EXTERNAL_URL = "https://chanaloge.com"
 const WORKFLOW_PROJECT_PARTICIPANTS_STORAGE_KEY =
   "workflow-project-participants"
 type WorkspaceUser = ChatParticipant & {
@@ -132,7 +124,6 @@ function getAutoRunLabel(runSchedule: WorkflowRunSchedule) {
 export function PlatformNavbar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const { activeWorkspaceId, apiFetch } = useWorkspace()
   const { state: sidebarState, toggleSidebar } = useSidebar()
   const userPickerCardRef = useRef<HTMLDivElement>(null)
@@ -200,10 +191,6 @@ export function PlatformNavbar() {
       window.removeEventListener(ATMET_USER_UPDATED_EVENT, refreshLiveUser)
     }
   }, [refreshLiveUser])
-  const isPlatformAdmin =
-    liveUser?.platform_role === "super_admin" ||
-    liveUser?.platform_role === "admin"
-
   useEffect(() => {
     if (!activeWorkspaceId) {
       setWorkspaceUserRows([])
@@ -375,40 +362,6 @@ export function PlatformNavbar() {
   )
   const shouldShowParticipantsTrigger = isWorkflowProject || isAiCore
   const shouldShowWorkflowActionsInNavbar = false
-  const platformNavItems = useMemo(
-    () => [
-      { title: "Build Project", url: "/ai-core", icon: Plus },
-      { title: "Agents", url: "/workflow", icon: GitBranch },
-      { title: "Skills", url: "/skills", icon: Brain },
-      { title: "Apps", url: "/integrations", icon: AppWindow },
-    ],
-    []
-  )
-  const utilityNavItems = useMemo(
-    () => [
-      {
-        title: "Changelogs",
-        icon: RefreshCw,
-        onClick: () =>
-          window.open(CHANGELOGS_EXTERNAL_URL, "_blank", "noopener,noreferrer"),
-      },
-      {
-        title: "Settings",
-        icon: Settings,
-        onClick: () => router.push("/settings"),
-      },
-      ...(isPlatformAdmin
-        ? [
-            {
-              title: "Admin",
-              icon: ShieldCheck,
-              onClick: () => router.push("/admin-console"),
-            },
-          ]
-        : []),
-    ],
-    [isPlatformAdmin, router]
-  )
   const [workflowControlStateByProject, setWorkflowControlStateByProject] =
     useState<Record<string, WorkflowControlState>>({})
   const activeWorkflowControlState = useMemo<WorkflowControlState>(() => {
@@ -909,7 +862,7 @@ export function PlatformNavbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex h-10 shrink-0 items-center justify-between gap-1 rounded-t-[inherit] border-b bg-background px-3 dark:bg-sidebar">
+      <header className="sticky top-0 z-40 flex h-10 shrink-0 items-center justify-between gap-1 rounded-t-xl bg-background px-3 dark:bg-sidebar peer-data-[state=expanded]:rounded-tl-none">
         <div className="flex min-w-0 items-center gap-1.5">
           <button
             type="button"
@@ -932,48 +885,8 @@ export function PlatformNavbar() {
               )}
             />
           </button>
-          <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
-            {platformNavItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname.startsWith(item.url)
-
-              return (
-                <button
-                  key={item.title}
-                  type="button"
-                  onClick={() => router.push(item.url)}
-                  className={cn(
-                    "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors",
-                    isActive
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{item.title}</span>
-                </button>
-              )
-            })}
-          </nav>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="hidden items-center gap-1 md:flex">
-            {utilityNavItems.map((item) => {
-              const Icon = item.icon
-
-              return (
-                <button
-                  key={item.title}
-                  type="button"
-                  onClick={item.onClick}
-                  className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{item.title}</span>
-                </button>
-              )
-            })}
-          </div>
           {shouldShowWorkflowActionsInNavbar && isWorkflowProject && (
             <>
               <Button

@@ -7,6 +7,8 @@ import { compileComposioAgentTool } from "@/lib/integrations/composio-chat"
 
 type AgentBlueprintStep = {
   id?: string
+  node_id?: string
+  action_id?: string
   name?: string
   type?: string
   provider?: string | null
@@ -15,10 +17,35 @@ type AgentBlueprintStep = {
   triggerSlug?: string | null
   model?: string | null
   prompt?: string
+  runtime_ms?: number
+  status?: string
+}
+
+type AgentBlueprintNode = {
+  id?: string
+  name?: string
+  type?: string
+  provider?: string | null
+  app?: string | null
+  trigger_slug?: string | null
+  triggerSlug?: string | null
+  prompt?: string
+  runtime?: {
+    expected_ms?: number
+    timeout_ms?: number
+  }
+  actions?: Array<{
+    id?: string
+    name?: string
+    prompt?: string
+    tool_hint?: string | null
+    runtime_ms?: number
+  }>
   status?: string
 }
 
 type AgentBlueprint = {
+  nodes?: AgentBlueprintNode[]
   steps?: AgentBlueprintStep[]
   required_apps?: string[]
   approval_policy?: {
@@ -34,6 +61,41 @@ function normalizeProviderName(value: string) {
 function getBlueprintSteps(value: unknown): AgentBlueprintStep[] {
   if (!value || typeof value !== "object") return []
   const blueprint = value as AgentBlueprint
+  if (Array.isArray(blueprint.nodes) && blueprint.nodes.length > 0) {
+    return blueprint.nodes.flatMap((node, nodeIndex) => {
+      const actions =
+        Array.isArray(node.actions) && node.actions.length > 0
+          ? node.actions
+          : [
+              {
+                id: "action-1",
+                name: node.name,
+                prompt: node.prompt,
+                runtime_ms: node.runtime?.expected_ms,
+              },
+            ]
+
+      return actions.map((action, actionIndex) => ({
+        id: `${node.id ?? `node-${nodeIndex + 1}`}-${action.id ?? `action-${actionIndex + 1}`}`,
+        node_id: node.id ?? `node-${nodeIndex + 1}`,
+        action_id: action.id ?? `action-${actionIndex + 1}`,
+        name:
+          actions.length > 1
+            ? `${node.name ?? `Node ${nodeIndex + 1}`}: ${action.name ?? `Action ${actionIndex + 1}`}`
+            : node.name ?? action.name ?? `Node ${nodeIndex + 1}`,
+        type: node.type ?? "action",
+        provider: node.provider ?? node.app ?? null,
+        app: node.app ?? node.provider ?? null,
+        trigger_slug:
+          node.type === "trigger"
+            ? node.trigger_slug ?? node.triggerSlug ?? null
+            : null,
+        prompt: action.prompt ?? node.prompt,
+        runtime_ms: action.runtime_ms ?? node.runtime?.expected_ms,
+        status: node.status,
+      }))
+    })
+  }
   return Array.isArray(blueprint.steps) ? blueprint.steps : []
 }
 
@@ -241,8 +303,11 @@ export async function POST(
         connection_id: connection?.id ?? null,
         permissions_json: {
           stepId: step.id ?? `step-${index + 1}`,
+          nodeId: step.node_id ?? null,
+          actionId: step.action_id ?? null,
           stepName: step.name ?? `Step ${index + 1}`,
           prompt: step.prompt ?? null,
+          runtimeMs: step.runtime_ms ?? null,
           status: providerName && !connection ? "missing_connection" : "ready",
           connectorProvider: connection?.connector_provider ?? null,
           externalConnectionId: connection?.external_connection_id ?? null,
@@ -281,10 +346,13 @@ export async function POST(
         status: "inactive",
         config_json: {
           stepId: step.id ?? `trigger-${index + 1}`,
+          nodeId: step.node_id ?? null,
+          actionId: step.action_id ?? null,
           stepName: step.name ?? `Trigger ${index + 1}`,
           provider: providerName,
           triggerSlug,
           prompt: step.prompt ?? null,
+          runtimeMs: step.runtime_ms ?? null,
           connectionId: connection?.id ?? null,
           connectorProvider: connection?.connector_provider ?? null,
           externalConnectionId: connection?.external_connection_id ?? null,

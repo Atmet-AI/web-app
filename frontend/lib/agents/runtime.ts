@@ -20,15 +20,42 @@ export class AgentRuntimeError extends Error {
 
 type AgentBlueprintStep = {
   id?: string
+  node_id?: string
+  action_id?: string
   name?: string
   type?: string
   provider?: string | null
   app?: string | null
+  trigger_slug?: string | null
   prompt?: string
+  runtime_ms?: number
+  status?: string
+}
+
+type AgentBlueprintNode = {
+  id?: string
+  name?: string
+  type?: "trigger" | "action" | string
+  provider?: string | null
+  app?: string | null
+  trigger_slug?: string | null
+  prompt?: string
+  runtime?: {
+    expected_ms?: number
+    timeout_ms?: number
+  }
+  actions?: Array<{
+    id?: string
+    name?: string
+    prompt?: string
+    tool_hint?: string | null
+    runtime_ms?: number
+  }>
   status?: string
 }
 
 type AgentBlueprint = {
+  nodes?: AgentBlueprintNode[]
   steps?: AgentBlueprintStep[]
   required_apps?: string[]
   approval_policy?: {
@@ -79,6 +106,38 @@ export type RunAgentResult = {
 function getBlueprintSteps(value: unknown): AgentBlueprintStep[] {
   if (!value || typeof value !== "object") return []
   const blueprint = value as AgentBlueprint
+  if (Array.isArray(blueprint.nodes) && blueprint.nodes.length > 0) {
+    return blueprint.nodes.flatMap((node, nodeIndex) => {
+      const actions =
+        Array.isArray(node.actions) && node.actions.length > 0
+          ? node.actions
+          : [
+              {
+                id: "action-1",
+                name: node.name,
+                prompt: node.prompt,
+                runtime_ms: node.runtime?.expected_ms,
+              },
+            ]
+
+      return actions.map((action, actionIndex) => ({
+        id: `${node.id ?? `node-${nodeIndex + 1}`}-${action.id ?? `action-${actionIndex + 1}`}`,
+        node_id: node.id ?? `node-${nodeIndex + 1}`,
+        action_id: action.id ?? `action-${actionIndex + 1}`,
+        name:
+          actions.length > 1
+            ? `${node.name ?? `Node ${nodeIndex + 1}`}: ${action.name ?? `Action ${actionIndex + 1}`}`
+            : node.name ?? action.name ?? `Node ${nodeIndex + 1}`,
+        type: node.type ?? "action",
+        provider: node.provider ?? node.app ?? null,
+        app: node.app ?? node.provider ?? null,
+        trigger_slug: node.type === "trigger" ? node.trigger_slug ?? null : null,
+        prompt: action.prompt ?? node.prompt,
+        runtime_ms: action.runtime_ms ?? node.runtime?.expected_ms,
+        status: node.status,
+      }))
+    })
+  }
   return Array.isArray(blueprint.steps) ? blueprint.steps : []
 }
 
@@ -155,18 +214,15 @@ function stepRequiresApproval(input: {
   const riskyActionPattern =
     /\b(send|reply|email|message|post|publish|delete|remove|archive|update|edit|write|create|charge|refund|payment|invoice|crm|external)\b/i
 
-  if (mode === "per_run") return riskyActionPattern.test(stepText) || true
+  if (mode === "per_run") return true
 
-  return (
-    riskyActionPattern.test(stepText) ||
-    approvalItems.some((item) => {
-      const words = item
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .filter((word) => word.length >= 4)
-      return words.some((word) => stepText.includes(word))
-    })
-  )
+  return approvalItems.some((item) => {
+    const words = item
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word.length >= 4)
+    return words.some((word) => stepText.includes(word))
+  })
 }
 
 function shouldUseAgentBrain(agent: Record<string, unknown>) {
@@ -222,10 +278,13 @@ function buildToolCatalog(input: {
     return {
       stepIndex,
       stepId: step.id ?? `step-${stepIndex + 1}`,
+      nodeId: step.node_id ?? null,
+      actionId: step.action_id ?? null,
       name: step.name ?? `Step ${stepIndex + 1}`,
       type: step.type ?? "action",
       appName,
       instruction: step.prompt ?? null,
+      runtimeMs: step.runtime_ms ?? null,
       provider: compiledTool?.provider ?? appName ?? "Atmet",
       toolName: compiledTool?.tool_name ?? null,
       connectionId: compiledTool?.connection_id ?? null,
@@ -257,6 +316,8 @@ async function decideNextAgentAction(input: {
     toolIndex: index,
     stepIndex: tool.stepIndex,
     name: tool.name,
+    nodeId: tool.nodeId,
+    actionId: tool.actionId,
     type: tool.type,
     appName: tool.appName,
     provider: tool.provider,
@@ -264,6 +325,7 @@ async function decideNextAgentAction(input: {
     status: tool.status,
     hasConnection: Boolean(tool.connectionId),
     canExecuteLiveTool: tool.canExecuteLiveTool,
+    runtimeMs: tool.runtimeMs,
     instruction: tool.instruction,
     compiledTool: tool.compiledComposio
       ? {
@@ -287,7 +349,8 @@ async function decideNextAgentAction(input: {
           "Return JSON only with this shape:",
           '{"decision":"call_tool|request_approval|remember|finish|fail","toolIndex":0,"stepIndex":0,"title":"short action name","reasoning":"short reason","actionPrompt":"specific instruction for the selected tool","memoryWrites":[{"scope":"runtime","key":"short_key","value":{}}],"finalAnswer":"summary","error":"failure reason"}',
           "Use call_tool when an available connected tool should be used.",
-          "Use request_approval before externally visible or destructive actions if approval is appropriate.",
+          "Do not request approval merely because the user mentioned or selected an app/skill; that is already design-time permission to include it.",
+          "Use request_approval only before externally visible, destructive, or sensitive live actions when the agent approval policy requires it.",
           "Use remember to store durable information, then continue next turn.",
           "Use finish only when the workflow goal is complete.",
           "Use fail only when the agent cannot proceed without missing connections or required details.",

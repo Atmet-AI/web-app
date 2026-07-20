@@ -66,6 +66,7 @@ export default function WorkflowPage() {
   const { activeWorkspaceId, apiFetch } = useWorkspace()
   const [projects, setProjects] = useState<WorkflowProject[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isCreatingAgent, setIsCreatingAgent] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectStatus>("all")
 
@@ -131,6 +132,44 @@ export default function WorkflowPage() {
     })
   }, [projects, search, statusFilter])
 
+  const handleCreateAgent = async () => {
+    if (!activeWorkspaceId || isCreatingAgent) return
+
+    setIsCreatingAgent(true)
+    try {
+      const response = await apiFetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Untitled agent",
+          description: "Build this agent from the playground.",
+          goal: "Describe what this agent should automate.",
+          instructions: "Use the first node chat to describe the workflow Atmet should build.",
+          status: "draft",
+        }),
+      })
+      const payload = (await response.json().catch(() => null)) as {
+        data?: {
+          agent?: {
+            id: string
+            legacy_automation_id: string | null
+          }
+        }
+        error?: { message?: string }
+      } | null
+
+      if (!response.ok || !payload?.data?.agent) {
+        throw new Error(payload?.error?.message ?? "Unable to create agent.")
+      }
+
+      const agent = payload.data.agent
+      router.push(`/workflow/${agent.legacy_automation_id ?? agent.id}`)
+    } catch (error) {
+      console.error("Unable to create agent", error)
+      setIsCreatingAgent(false)
+    }
+  }
+
   return (
     <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 flex-col bg-background">
       <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
@@ -147,11 +186,16 @@ export default function WorkflowPage() {
             <Button
               type="button"
               size="sm"
-              onClick={() => router.push("/ai-core")}
+              onClick={() => void handleCreateAgent()}
+              disabled={!activeWorkspaceId || isCreatingAgent}
               className="h-8 w-fit gap-1.5"
             >
-              <Plus className="h-3.5 w-3.5" />
-              Create agent
+              {isCreatingAgent ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              {isCreatingAgent ? "Creating..." : "Create agent"}
             </Button>
           </header>
 
@@ -161,7 +205,7 @@ export default function WorkflowPage() {
             </div>
           ) : projects.length === 0 ? (
             <div className="flex h-full min-h-[50vh] items-center justify-center">
-              <EmptyProjectsPattern onCreateAutomation={() => router.push("/ai-core")} />
+              <EmptyProjectsPattern onCreateAutomation={() => void handleCreateAgent()} />
             </div>
           ) : (
             <>

@@ -16,12 +16,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -30,7 +24,13 @@ import {
 import { ContextMenu5Wrapper } from "@/components/examples/c-context-menu-5"
 import { Badge } from "@/registry/spell-ui/badge"
 import { cn } from "@/lib/utils"
+import {
+  ATMET_APPEARANCE_SETTINGS_CHANGED_EVENT,
+  ATMET_APPEARANCE_SETTINGS_STORAGE_KEY,
+  readPlaygroundDotsEnabled,
+} from "@/lib/sound-preferences"
 import { useWorkspace } from "@/lib/workspace-context"
+import { listIntegrations } from "@/lib/integrations-store"
 import {
   getWorkflowProject,
   type WorkflowProject,
@@ -48,16 +48,14 @@ import {
 } from "@/lib/workflow-events"
 import {
   Check,
+  Clock3,
   ExternalLink,
-  Files,
   PlayCircle,
   Pencil,
   Plus,
   RefreshCcw,
-  Trash2,
   X,
   Zap,
-  ChevronDown,
 } from "lucide-react"
 
 type WorkflowNode = {
@@ -76,8 +74,24 @@ type WorkflowNode = {
   usedSkills: string[]
   files: string[]
   chatId?: string
+  runtimeMs?: number
   x: number
   y: number
+}
+
+type WorkflowPlannerNode = {
+  type: "trigger" | "action"
+  name: string
+  app: string
+  provider?: string
+  prompt: string
+  runtimeMs: number
+  triggerSlug?: string | null
+  actions: Array<{
+    name: string
+    prompt: string
+    runtimeMs: number
+  }>
 }
 
 type ComposioTriggerRegistration = {
@@ -87,13 +101,90 @@ type ComposioTriggerRegistration = {
   triggerConfig: Record<string, unknown>
 }
 
+type AppearanceSettingsChangedDetail = {
+  playgroundDotsEnabled?: unknown
+}
+
+const WORKFLOW_INTEGRATIONS = listIntegrations()
+const ATMET_APP_LOGO_SRC = "/Logos/Favicon%20Atmet.png"
+
+function normalizeAppLookup(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function getAppInitials(value: string) {
+  const initials = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("")
+
+  return initials || "A"
+}
+
+function getWorkflowNodeAppIdentity(node: WorkflowNode) {
+  const candidates = [
+    node.usedApps[0],
+    node.provider,
+    node.owner,
+    node.model,
+  ].filter((value): value is string => Boolean(value?.trim()))
+  const normalizedCandidates = candidates.map(normalizeAppLookup)
+  const integration = WORKFLOW_INTEGRATIONS.find((entry) => {
+    const normalizedName = normalizeAppLookup(entry.name)
+    const normalizedSlug = normalizeAppLookup(entry.slug)
+    return normalizedCandidates.some(
+      (candidate) =>
+        candidate === normalizedName ||
+        candidate === normalizedSlug ||
+        normalizedName.includes(candidate) ||
+        candidate.includes(normalizedName)
+    )
+  })
+  const fallbackName = candidates[0] ?? "Atmet"
+  const isAtmet = normalizeAppLookup(fallbackName) === "atmet"
+
+  return {
+    name: integration?.name ?? fallbackName,
+    logo: integration?.logo ?? (isAtmet ? ATMET_APP_LOGO_SRC : null),
+    initials: getAppInitials(integration?.name ?? fallbackName),
+  }
+}
+
 type AgentPlanStep = {
   id?: string
+  node_id?: string
+  action_id?: string
   name?: string
   type?: string
   provider?: string | null
   app?: string | null
   prompt?: string
+  runtime_ms?: number
+  status?: string
+}
+
+type AgentPlanNode = {
+  id?: string
+  name?: string
+  type?: string
+  provider?: string | null
+  app?: string | null
+  trigger_slug?: string | null
+  prompt?: string
+  runtime?: {
+    expected_ms?: number
+    timeout_ms?: number
+  }
+  actions?: Array<{
+    id?: string
+    name?: string
+    prompt?: string
+    runtime_ms?: number
+    tool_hint?: string | null
+  }>
   status?: string
 }
 
@@ -105,6 +196,7 @@ type AgentPlanBlueprint = {
     description?: string
   } | null
   required_apps?: string[]
+  nodes?: AgentPlanNode[]
   steps?: AgentPlanStep[]
   approval_policy?: {
     require_approval_for?: string[]
@@ -344,8 +436,8 @@ type TelegramWebhookStatus = {
 
 type AnchorSide = "top" | "right" | "bottom" | "left"
 
-const NODE_WIDTH = 392
-const DEFAULT_NODE_HEIGHT = 176
+const NODE_WIDTH = 320
+const DEFAULT_NODE_HEIGHT = 116
 const CANVAS_GRID_STEP = 12
 const WIRE_GRID_STEP = CANVAS_GRID_STEP
 const WORKSPACE_WIDTH = 10000
@@ -661,6 +753,32 @@ function getStepsFromAutomationBlueprint(scriptKey: string | null | undefined) {
 }
 
 function getStepsFromAgentPlan(agent: AgentPlan | null) {
+  const nodes = getNodesFromAgentPlan(agent)
+  if (nodes.length > 0) {
+    return nodes.map((node, index) => {
+      const isTrigger = node.type === "trigger"
+      const status =
+        agent?.status === "active"
+          ? "Done"
+          : node.status === "ready"
+            ? "Pending"
+            : "In review"
+
+      return {
+        name: node.name || `Node ${index + 1}`,
+        status: status as "Done" | "In review" | "Pending",
+        nodeType: isTrigger ? ("Trigger" as const) : ("Action" as const),
+        owner: node.provider || node.app || "Atmet",
+        provider: node.provider || node.app || "Atmet",
+        model: node.app || node.provider || "",
+        prompt: node.prompt || "Agent node generated by Atmet.",
+        usedApps: node.app ? [node.app] : [],
+        usedSkills: [],
+        files: [],
+      }
+    })
+  }
+
   const steps = agent?.blueprint_json?.steps
   if (!Array.isArray(steps) || steps.length === 0) return null
 
@@ -688,6 +806,49 @@ function getStepsFromAgentPlan(agent: AgentPlan | null) {
   })
 }
 
+function getNodesFromAgentPlan(agent: AgentPlan | null): AgentPlanNode[] {
+  const nodes = agent?.blueprint_json?.nodes
+  if (Array.isArray(nodes) && nodes.length > 0) return nodes
+
+  const steps = agent?.blueprint_json?.steps
+  if (!Array.isArray(steps) || steps.length === 0) return []
+
+  return steps.map((step, index) => ({
+    id: step.node_id ?? `node-${index + 1}`,
+    name: step.name ?? `Node ${index + 1}`,
+    type: step.type === "trigger" ? "trigger" : "action",
+    provider: step.provider ?? step.app ?? null,
+    app: step.app ?? step.provider ?? null,
+    trigger_slug: step.type === "trigger" ? null : undefined,
+    prompt: step.prompt,
+    runtime: {
+      expected_ms: step.runtime_ms ?? (step.type === "trigger" ? 5000 : 30000),
+      timeout_ms: Math.max(
+        60000,
+        (step.runtime_ms ?? (step.type === "trigger" ? 5000 : 30000)) * 3
+      ),
+    },
+    actions: [
+      {
+        id: step.action_id ?? `action-${index + 1}`,
+        name: step.name ?? `Action ${index + 1}`,
+        prompt: step.prompt,
+        runtime_ms: step.runtime_ms,
+      },
+    ],
+    status: step.status,
+  }))
+}
+
+function formatRuntimeMs(value: number | undefined) {
+  if (!value || value <= 0) return null
+  if (value < 1000) return `${value}ms`
+  const seconds = Math.round(value / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.round(seconds / 60)
+  return `${minutes}m`
+}
+
 function formatAgentMemoryValue(value: Record<string, unknown> | null) {
   if (!value) return "Empty"
   const text = JSON.stringify(value)
@@ -709,6 +870,10 @@ export default function WorkflowProjectPage() {
   const projectId = Array.isArray(params?.projectId)
     ? params.projectId[0]
     : params?.projectId
+  const [appearanceUserKey, setAppearanceUserKey] = useState<string | null>(
+    null
+  )
+  const [showPlaygroundDots, setShowPlaygroundDots] = useState(false)
 
   const fixtureProject = useMemo(
     () => (projectId ? getWorkflowProject(projectId) : undefined),
@@ -745,6 +910,82 @@ export default function WorkflowProjectPage() {
   )
   const [isLoadingProject, setIsLoadingProject] = useState(false)
   const project = fixtureProject ?? databaseProject
+
+  useEffect(() => {
+    let isCancelled = false
+
+    apiFetch("/api/users/me")
+      .then((response) => response.json().catch(() => null))
+      .then(
+        (
+          payload:
+            | {
+                data?: {
+                  user?: {
+                    id?: string | null
+                    email?: string | null
+                  } | null
+                }
+              }
+            | null
+        ) => {
+          if (isCancelled) return
+          const user = payload?.data?.user
+          setAppearanceUserKey(user?.id ?? user?.email ?? null)
+        }
+      )
+      .catch(() => {
+        if (!isCancelled) setAppearanceUserKey(null)
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [apiFetch])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const readPreference = () => {
+      setShowPlaygroundDots(readPlaygroundDotsEnabled(appearanceUserKey))
+    }
+
+    readPreference()
+
+    const handleAppearanceSettingsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<AppearanceSettingsChangedDetail>)
+        .detail
+      if (typeof detail?.playgroundDotsEnabled === "boolean") {
+        setShowPlaygroundDots(detail.playgroundDotsEnabled)
+        return
+      }
+      readPreference()
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key &&
+        !event.key.startsWith(ATMET_APPEARANCE_SETTINGS_STORAGE_KEY)
+      ) {
+        return
+      }
+      readPreference()
+    }
+
+    window.addEventListener(
+      ATMET_APPEARANCE_SETTINGS_CHANGED_EVENT,
+      handleAppearanceSettingsChanged
+    )
+    window.addEventListener("storage", handleStorage)
+
+    return () => {
+      window.removeEventListener(
+        ATMET_APPEARANCE_SETTINGS_CHANGED_EVENT,
+        handleAppearanceSettingsChanged
+      )
+      window.removeEventListener("storage", handleStorage)
+    }
+  }, [appearanceUserKey])
 
   const [nodes, setNodes] = useState<WorkflowNode[]>([])
   const [edges, setEdges] = useState<WorkflowEdge[]>([])
@@ -1005,6 +1246,7 @@ export default function WorkflowProjectPage() {
   const showTelegramAgentPanel = Boolean(telegramAgentBlueprint && selectedNode)
   const showAgentPlanPanel = Boolean(agentPlan && !telegramAgentBlueprint)
   const agentBlueprint = agentPlan?.blueprint_json
+  const agentBlueprintNodes = getNodesFromAgentPlan(agentPlan)
   const hasCompiledAgentTools = (agentPlan?.tools?.length ?? 0) > 0
   const hasAgentAppTriggers =
     (agentPlan?.triggers?.some((trigger) => trigger.type === "app_event") ??
@@ -1960,6 +2202,102 @@ export default function WorkflowProjectPage() {
     activateNodeChat(node.id)
   }
 
+  const attachChatToNode = useCallback((nodeId: string, chatId: string) => {
+    markProjectChanged()
+    setNodes((previous) =>
+      previous.map((node) =>
+        node.id === nodeId ? { ...node, chatId } : node
+      )
+    )
+  }, [markProjectChanged])
+
+  const applyWorkflowNodePlan = useCallback(
+    (
+      sourceNodeId: string,
+      plannedNodes: WorkflowPlannerNode[],
+      _reply: string
+    ) => {
+      if (plannedNodes.length === 0) return
+      const sourceNode =
+        nodesRef.current.find((node) => node.id === sourceNodeId) ??
+        nodesRef.current[0]
+      const baseX = sourceNode?.x ?? WORKSPACE_OFFSET_X
+      const baseY = sourceNode?.y ?? WORKSPACE_OFFSET_Y
+      const sourceHeight = sourceNode
+        ? nodeHeights[sourceNode.id] ?? DEFAULT_NODE_HEIGHT
+        : DEFAULT_NODE_HEIGHT
+      const projectKey = project?.id ?? "workflow"
+      const stamp = Date.now().toString(36)
+      const nextNodes = plannedNodes.map((plannedNode, index) => {
+        const runtimeLabel = formatRuntimeMs(plannedNode.runtimeMs)
+        const actionSummary = plannedNode.actions
+          .map((action) => `- ${action.name}: ${action.prompt}`)
+          .join("\n")
+        return {
+          id: `${projectKey}-node-${stamp}-${index + 1}`,
+          nodeType:
+            plannedNode.type === "trigger"
+              ? ("Trigger" as const)
+              : ("Action" as const),
+          stepName: plannedNode.name,
+          status: "Pending" as const,
+          executionStatus: "idle" as const,
+          owner: "Atmet AI",
+          provider: plannedNode.provider ?? plannedNode.app,
+          model: plannedNode.triggerSlug ?? plannedNode.provider ?? plannedNode.app,
+          prompt: [
+            plannedNode.prompt,
+            actionSummary ? `\nActions:\n${actionSummary}` : null,
+          ]
+            .filter(Boolean)
+            .join(""),
+          tokenCount: 0,
+          lastRan: runtimeLabel ? `~${runtimeLabel}` : "Never",
+          runtimeMs: plannedNode.runtimeMs,
+          usedApps: [plannedNode.app],
+          usedSkills: ["Action Planner"],
+          files: [],
+          x: snapCanvasCoord(baseX),
+          y: snapCanvasCoord(baseY + index * (sourceHeight + 72)),
+        } satisfies WorkflowNode
+      })
+
+      pushHistorySnapshot()
+      markProjectChanged()
+      setNodes((previous) => {
+        const replaceIndex = previous.findIndex((node) => node.id === sourceNodeId)
+        if (replaceIndex === -1) return [...previous, ...nextNodes]
+        return [
+          ...previous.slice(0, replaceIndex),
+          ...nextNodes,
+          ...previous.slice(replaceIndex + 1),
+        ]
+      })
+      setEdges((previous) => {
+        const keptEdges = previous.filter(
+          (edge) => edge.sourceId !== sourceNodeId && edge.targetId !== sourceNodeId
+        )
+        const plannedEdges = nextNodes.slice(0, -1).map((node, index) => ({
+          id: `${node.id}:bottom->${nextNodes[index + 1].id}:top`,
+          sourceId: node.id,
+          targetId: nextNodes[index + 1].id,
+          sourceHandle: "bottom" as const,
+          targetHandle: "top" as const,
+        }))
+        return [...keptEdges, ...plannedEdges]
+      })
+      setSelectedNodeId(nextNodes[0].id)
+      setActiveChatNodeId(nextNodes[0].id)
+      setMountedChatNodeIds((previous) =>
+        Array.from(new Set([...previous.filter((id) => id !== sourceNodeId), nextNodes[0].id]))
+      )
+      setEditingTitleNodeId(null)
+      setTitleDraft("")
+      clearWireDraft()
+    },
+    [markProjectChanged, nodeHeights, project?.id, pushHistorySnapshot]
+  )
+
   const commitTitleEdit = (nodeId: string) => {
     const nextTitle = titleDraft.trim()
     if (!nextTitle) {
@@ -2875,10 +3213,14 @@ export default function WorkflowProjectPage() {
         className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
         style={{
           backgroundColor: "var(--background)",
-          backgroundImage:
-            "radial-gradient(color-mix(in srgb, var(--border) 82%, transparent) 0.85px, transparent 0.85px)",
-          backgroundSize: `${CANVAS_GRID_STEP}px ${CANVAS_GRID_STEP}px`,
-          backgroundPosition: "0 0",
+          ...(showPlaygroundDots
+            ? {
+                backgroundImage:
+                  "radial-gradient(color-mix(in srgb, var(--border) 82%, transparent) 0.85px, transparent 0.85px)",
+                backgroundSize: `${CANVAS_GRID_STEP}px ${CANVAS_GRID_STEP}px`,
+                backgroundPosition: "0 0",
+              }
+            : undefined),
         }}
       >
         <section
@@ -3050,6 +3392,7 @@ export default function WorkflowProjectPage() {
                   isSelected || isHovered || connectingSourceId === node.id
                 const executionState =
                   EXECUTION_STATUS_META[node.executionStatus]
+                const appIdentity = getWorkflowNodeAppIdentity(node)
                 const handleConfig: Array<{
                   side: AnchorSide
                   className: string
@@ -3123,7 +3466,7 @@ export default function WorkflowProjectPage() {
                       }
                     }}
                     className={cn(
-                      "absolute touch-none !rounded-[12px] border bg-card p-2.5 text-left transition-colors select-none",
+                      "absolute touch-none !rounded-[16px] border bg-card p-2.5 text-left transition-colors select-none",
                       executionState.borderClass,
                       "hover:border-border",
                       connectingSourceId &&
@@ -3199,169 +3542,106 @@ export default function WorkflowProjectPage() {
                         )
                       })}
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      {editingTitleNodeId === node.id ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={titleDraft}
+                            onChange={(event) =>
+                              setTitleDraft(event.target.value)
+                            }
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => event.stopPropagation()}
+                            onBlur={() => commitTitleEdit(node.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault()
+                                commitTitleEdit(node.id)
+                              }
+                              if (event.key === "Escape") {
+                                event.preventDefault()
+                                setEditingTitleNodeId(null)
+                                setTitleDraft("")
+                              }
+                            }}
+                            className="h-7 rounded-[10px] border-input bg-transparent px-2 text-sm font-semibold focus-visible:border-ring"
+                            autoFocus
+                          />
                           <button
                             type="button"
                             onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => event.stopPropagation()}
-                            className={cn(
-                              "absolute -top-[26px] left-0 inline-flex h-5 items-center gap-1 rounded-[8px] border px-1.5 py-0.5 text-xs font-medium transition-colors",
-                              node.nodeType === "Action"
-                                ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-500/40 dark:bg-blue-500/12 dark:text-blue-300 dark:hover:bg-blue-500/22"
-                                : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/12 dark:text-emerald-300 dark:hover:bg-emerald-500/22"
-                            )}
-                            aria-label={`Node type for ${node.stepName}`}
-                          />
-                        }
-                      >
-                        {node.nodeType === "Action" ? (
-                          <PlayCircle className="h-2.5 w-2.5 fill-current/25" />
-                        ) : (
-                          <Zap className="h-2.5 w-2.5" />
-                        )}
-                        {node.nodeType}
-                        <ChevronDown className="h-2.5 w-2.5" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="min-w-36">
-                        <DropdownMenuItem
-                          onClick={() => setNodeType(node.id, "Action")}
-                          className="justify-between"
-                        >
-                          <span className="inline-flex items-center gap-1.5 text-blue-700 dark:text-blue-300">
-                            <PlayCircle className="h-3.5 w-3.5 fill-current/25" />
-                            Action
-                          </span>
-                          {node.nodeType === "Action" && (
-                            <Check className="h-3.5 w-3.5" />
-                          )}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setNodeType(node.id, "Trigger")}
-                          className="justify-between"
-                        >
-                          <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
-                            <Zap className="h-3.5 w-3.5" />
-                            Trigger
-                          </span>
-                          {node.nodeType === "Trigger" && (
-                            <Check className="h-3.5 w-3.5" />
-                          )}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        {editingTitleNodeId === node.id ? (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              value={titleDraft}
-                              onChange={(event) =>
-                                setTitleDraft(event.target.value)
-                              }
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onClick={(event) => event.stopPropagation()}
-                              onBlur={() => commitTitleEdit(node.id)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault()
-                                  commitTitleEdit(node.id)
-                                }
-                                if (event.key === "Escape") {
-                                  event.preventDefault()
-                                  setEditingTitleNodeId(null)
-                                  setTitleDraft("")
-                                }
-                              }}
-                              className="h-6 rounded-md border-input bg-transparent px-2 text-sm font-semibold focus-visible:border-ring"
-                              autoFocus
-                            />
-                            <button
-                              type="button"
-                              onPointerDown={(event) => event.stopPropagation()}
-                              onMouseDown={(event) => {
-                                event.preventDefault()
-                                event.stopPropagation()
-                              }}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                commitTitleEdit(node.id)
-                              }}
-                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-input bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-                              aria-label={`Save title for ${node.stepName}`}
-                            >
-                              <Check className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div
-                            className="flex items-center gap-1"
-                            onDoubleClick={(event) => {
+                            onMouseDown={(event) => {
+                              event.preventDefault()
                               event.stopPropagation()
-                              startTitleEdit(node)
                             }}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              commitTitleEdit(node.id)
+                            }}
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] border border-input bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            aria-label={`Save title for ${node.stepName}`}
                           >
-                            <p className="line-clamp-1 text-base leading-none font-semibold text-foreground">
-                              {node.stepName}
-                            </p>
-                            <span
-                              className={cn(
-                                "inline-flex h-2.5 w-2.5 rounded-full",
-                                executionState.dotClass
-                              )}
-                              title={`Status: ${executionState.label}`}
-                              aria-label={`Status: ${executionState.label}`}
+                            <Check className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          onDoubleClick={(event) => {
+                            event.stopPropagation()
+                            startTitleEdit(node)
+                          }}
+                          className="w-full rounded-[10px] text-left"
+                        >
+                          <p className="line-clamp-1 text-base font-semibold leading-tight text-foreground">
+                            {node.stepName}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-[4px] bg-muted/35 text-[9px] font-semibold text-muted-foreground shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]">
+                          {appIdentity.logo ? (
+                            <img
+                              src={appIdentity.logo}
+                              alt=""
+                              className="h-3 w-3 object-contain"
+                              loading="lazy"
                             />
-                          </div>
-                        )}
+                          ) : (
+                            appIdentity.initials
+                          )}
+                        </span>
+                        <span className="truncate">
+                          {appIdentity.name}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col items-start gap-1 text-xs font-medium text-muted-foreground">
+                        <Badge
+                          variant={node.nodeType === "Action" ? "blue" : "green"}
+                          size="default"
+                        >
+                          {node.nodeType}
+                        </Badge>
+
+                        <span
+                          className="inline-flex min-w-0 items-center gap-1.5"
+                          title={`Status: ${executionState.label}`}
+                          aria-label={`Status: ${executionState.label}`}
+                        >
+                          <Clock3
+                            className={cn(
+                              "h-3.5 w-3.5 shrink-0",
+                              node.executionStatus === "running" &&
+                                "animate-pulse text-sky-500"
+                            )}
+                          />
+                          <span className="truncate tabular-nums">
+                            {node.lastRan}
+                          </span>
+                        </span>
                       </div>
                     </div>
-
-                    <div className="mt-1.5 !rounded-[8px] bg-muted/40 p-2">
-                      <p className="line-clamp-4 text-[13px] leading-[1.45] text-muted-foreground">
-                        {node.prompt}
-                      </p>
-                    </div>
-
-                    {isSelected && (
-                      <div className="absolute -top-[34px] right-0 z-10 flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          className="h-7 bg-background shadow-sm"
-                          onClick={() => addNodeNextTo(node.id)}
-                          aria-label="Add node"
-                        >
-                          <Plus className="h-3 w-3" />
-                          Add
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          className="h-7 bg-background shadow-sm"
-                          onClick={() => setFilesDialogOpen(true)}
-                          aria-label="Open node files"
-                        >
-                          <Files className="h-3 w-3" />
-                          Files
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          className="h-7 border-destructive/30 bg-background text-destructive shadow-sm hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => deleteNode(node.id)}
-                          aria-label="Delete node"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          Delete
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 )
               })}
@@ -3598,38 +3878,97 @@ export default function WorkflowProjectPage() {
               <div className="rounded-lg border border-border bg-background px-3 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Plan steps
+                    Agent nodes
                   </p>
                   <span className="text-xs text-muted-foreground">
-                    {agentBlueprint?.steps?.length ?? 0}
+                    {agentBlueprintNodes.length}
                   </span>
                 </div>
                 <div className="mt-3 space-y-3">
-                  {(agentBlueprint?.steps ?? []).map((step, index) => (
-                    <div key={step.id ?? `${step.name}-${index}`} className="flex gap-2">
+                  {agentBlueprintNodes.map((node, index) => {
+                    const runtimeLabel = formatRuntimeMs(
+                      node.runtime?.expected_ms
+                    )
+                    const actions =
+                      Array.isArray(node.actions) && node.actions.length > 0
+                        ? node.actions
+                        : [
+                            {
+                              id: "action-1",
+                              name: node.name,
+                              prompt: node.prompt,
+                              runtime_ms: node.runtime?.expected_ms,
+                            },
+                          ]
+
+                    return (
+                    <div key={node.id ?? `${node.name}-${index}`} className="flex gap-2">
                       <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-medium text-muted-foreground">
                         {index + 1}
                       </span>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <p className="text-sm font-medium text-foreground">
-                            {step.name || `Step ${index + 1}`}
+                            {node.name || `Node ${index + 1}`}
                           </p>
-                          {step.status ? (
+                          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] capitalize text-muted-foreground">
+                            {node.type ?? "action"}
+                          </span>
+                          {(node.app ?? node.provider) ? (
+                            <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700">
+                              {node.app ?? node.provider}
+                            </span>
+                          ) : null}
+                          {runtimeLabel ? (
                             <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                              {step.status.replaceAll("_", " ")}
+                              ~{runtimeLabel}
+                            </span>
+                          ) : null}
+                          {node.status ? (
+                            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                              {node.status.replaceAll("_", " ")}
                             </span>
                           ) : null}
                         </div>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                          {step.prompt || "No step description yet."}
+                          {node.prompt || "No node description yet."}
                         </p>
+                        <div className="mt-2 space-y-1">
+                          {actions.slice(0, 2).map((action, actionIndex) => {
+                            const actionRuntime = formatRuntimeMs(
+                              action.runtime_ms
+                            )
+                            return (
+                              <div
+                                key={action.id ?? `${action.name}-${actionIndex}`}
+                                className="rounded-md border border-border bg-card px-2 py-1.5"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="truncate text-xs font-medium text-foreground">
+                                    {action.name || `Action ${actionIndex + 1}`}
+                                  </p>
+                                  {actionRuntime ? (
+                                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                                      ~{actionRuntime}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {action.prompt ? (
+                                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                                    {action.prompt}
+                                  </p>
+                                ) : null}
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
                     </div>
-                  ))}
-                  {!agentBlueprint?.steps?.length ? (
+                    )
+                  })}
+                  {!agentBlueprintNodes.length ? (
                     <p className="text-xs text-muted-foreground">
-                      No plan steps captured yet.
+                      No agent nodes captured yet.
                     </p>
                   ) : null}
                 </div>
@@ -4072,17 +4411,33 @@ export default function WorkflowProjectPage() {
                     </div>
                     <div className="pt-5">
                       <AIPrompt
-                        chatId={
-                          chatNode.chatId ??
-                          (projectId
-                            ? `workflow-node-chat-${projectId}-${nodeId}`
-                            : `workflow-node-chat-${nodeId}`)
-                        }
+                        chatId={chatNode.chatId ?? null}
                         persistChatListEntry={false}
                         hideGreeting
                         glassComposer
                         userFullName={chatNode.owner}
                         enableCreateAgent={false}
+                        onChatCreated={(chatId) =>
+                          attachChatToNode(nodeId, chatId)
+                        }
+                        workflowPlannerContext={{
+                          projectId,
+                          activeNode: {
+                            name: chatNode.stepName,
+                            type: chatNode.nodeType,
+                            app: chatNode.provider,
+                            prompt: chatNode.prompt,
+                          },
+                          currentNodes: nodes.map((node) => ({
+                            name: node.stepName,
+                            type: node.nodeType,
+                            app: node.provider,
+                            prompt: node.prompt,
+                          })),
+                        }}
+                        onWorkflowNodesPlanned={(plannedNodes, reply) =>
+                          applyWorkflowNodePlan(nodeId, plannedNodes, reply)
+                        }
                       />
                     </div>
                   </div>

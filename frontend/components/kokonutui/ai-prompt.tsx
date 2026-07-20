@@ -35,6 +35,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { GradientSpin } from "gradient-spin"
 import { play } from "cuelume"
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -192,6 +193,14 @@ type CommandMenuState = {
   end: number
 }
 
+type CommandMenuPosition = {
+  left: number
+  top: number
+  width: number
+  maxHeight: number
+  placement: "above" | "below"
+}
+
 type AssistantContentSegment =
   | { type: "text"; value: string }
   | { type: "code"; language: string; value: string }
@@ -209,6 +218,39 @@ type AIPromptProps = {
   onAutomationConversationStart?: () => void
   onConversationActivityChange?: (isActive: boolean) => void
   onAddUserToChat?: () => void
+  onChatCreated?: (chatId: string) => void
+  workflowPlannerContext?: {
+    projectId?: string | null
+    activeNode?: {
+      name?: string
+      type?: string
+      app?: string
+      prompt?: string
+    }
+    currentNodes?: Array<{
+      name: string
+      type: string
+      app: string
+      prompt?: string
+    }>
+  }
+  onWorkflowNodesPlanned?: (
+    nodes: Array<{
+      type: "trigger" | "action"
+      name: string
+      app: string
+      provider?: string
+      prompt: string
+      runtimeMs: number
+      triggerSlug?: string | null
+      actions: Array<{
+        name: string
+        prompt: string
+        runtimeMs: number
+      }>
+    }>,
+    reply: string
+  ) => void
   userFullName?: string
   enableCreateAgent?: boolean
 }
@@ -306,6 +348,9 @@ export default function AI_Prompt({
   onAutomationConversationStart,
   onConversationActivityChange,
   onAddUserToChat,
+  onChatCreated,
+  workflowPlannerContext,
+  onWorkflowNodesPlanned,
   userFullName = "there",
   enableCreateAgent = true,
 }: AIPromptProps) {
@@ -376,11 +421,14 @@ export default function AI_Prompt({
   const [heroLine1, setHeroLine1] = useState("")
   const [heroTypingLine, setHeroTypingLine] = useState<0 | 1>(0)
   const [commandMenu, setCommandMenu] = useState<CommandMenuState | null>(null)
+  const [commandMenuPosition, setCommandMenuPosition] =
+    useState<CommandMenuPosition | null>(null)
   const [highlightedCommandIndex, setHighlightedCommandIndex] = useState(0)
   const instanceId = useId().replace(/:/g, "")
   const fileInputId = `ai-upload-input-${instanceId}`
   const textareaId = `ai-input-${instanceId}`
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const composerShellRef = useRef<HTMLDivElement>(null)
   const telegramAvatarInputRef = useRef<HTMLInputElement>(null)
   const attachedFilesRef = useRef<AttachmentDraft[]>([])
   const messagesRef = useRef<ChatMessage[]>([])
@@ -714,6 +762,52 @@ export default function AI_Prompt({
         return a.localeCompare(b)
       })
   }, [commandMenu, mentionableSkills, appNames])
+
+  const updateCommandMenuPosition = useCallback(() => {
+    if (!commandMenu || commandItems.length === 0) {
+      setCommandMenuPosition(null)
+      return
+    }
+
+    const anchor = composerShellRef.current
+    if (!anchor || typeof window === "undefined") return
+
+    const rect = anchor.getBoundingClientRect()
+    const viewportPadding = 12
+    const gap = 8
+    const aboveSpace = rect.top - viewportPadding
+    const placement = "above"
+    const maxHeight = Math.max(96, Math.min(176, aboveSpace - gap))
+    const width = Math.max(220, Math.min(352, rect.width - 24))
+    const left = Math.min(
+      Math.max(viewportPadding, rect.left + 12),
+      Math.max(viewportPadding, window.innerWidth - width - viewportPadding)
+    )
+    const top = rect.top - gap
+
+    setCommandMenuPosition({ left, top, width, maxHeight, placement })
+  }, [commandItems.length, commandMenu])
+
+  useEffect(() => {
+    if (!commandMenu || commandItems.length === 0) {
+      setCommandMenuPosition(null)
+      return
+    }
+
+    updateCommandMenuPosition()
+
+    const handleLayoutChange = () => {
+      window.requestAnimationFrame(updateCommandMenuPosition)
+    }
+
+    window.addEventListener("resize", handleLayoutChange)
+    window.addEventListener("scroll", handleLayoutChange, true)
+
+    return () => {
+      window.removeEventListener("resize", handleLayoutChange)
+      window.removeEventListener("scroll", handleLayoutChange, true)
+    }
+  }, [commandItems.length, commandMenu, updateCommandMenuPosition, value])
 
   const MODEL_ICONS: Record<string, React.ReactNode> = {
     Atmet: (
@@ -2187,6 +2281,7 @@ export default function AI_Prompt({
               activeChatIdRef.current = chatId
               locallyStreamingChatIdRef.current = chatId
               setResolvedChatId(chatId)
+              onChatCreated?.(chatId)
               activeChatTitleRef.current = chatTitle
               if (
                 typeof window !== "undefined" &&
@@ -2258,6 +2353,82 @@ export default function AI_Prompt({
         }
       }
 
+      if (workflowPlannerContext && onWorkflowNodesPlanned) {
+        try {
+          const plannerResponse = await apiFetch("/api/workflow/plan-nodes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              request: submittedContent,
+              projectId: workflowPlannerContext.projectId ?? undefined,
+              activeNode: workflowPlannerContext.activeNode,
+              currentNodes: workflowPlannerContext.currentNodes ?? [],
+            }),
+          })
+          const plannerPayload = (await plannerResponse.json().catch(() => null)) as {
+            data?: {
+              plan?: {
+                shouldBuildWorkflow?: boolean
+                reply?: string
+                nodes?: Array<{
+                  type: "trigger" | "action"
+                  name: string
+                  app: string
+                  provider?: string
+                  prompt: string
+                  runtimeMs: number
+                  triggerSlug?: string | null
+                  actions: Array<{
+                    name: string
+                    prompt: string
+                    runtimeMs: number
+                  }>
+                }>
+              }
+            }
+            error?: { message?: string }
+          } | null
+
+          if (!plannerResponse.ok) {
+            throw new Error(
+              plannerPayload?.error?.message ?? "Unable to plan workflow nodes."
+            )
+          }
+
+          const plan = plannerPayload?.data?.plan
+          if (plan?.shouldBuildWorkflow && plan.nodes?.length) {
+            const reply =
+              plan.reply ??
+              `I planned ${plan.nodes.length} workflow node${plan.nodes.length === 1 ? "" : "s"}.`
+            onWorkflowNodesPlanned(plan.nodes, reply)
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: createClientMessageId(),
+                role: "assistant",
+                content: reply,
+              },
+            ])
+            setIsResponding(false)
+            return
+          }
+        } catch (error) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: createClientMessageId(),
+              role: "assistant",
+              content:
+                error instanceof Error
+                  ? error.message
+                  : "Unable to plan workflow nodes.",
+            },
+          ])
+          setIsResponding(false)
+          return
+        }
+      }
+
       await streamReply(chatId, submittedContent, savedAttachments)
     },
     [
@@ -2277,6 +2448,8 @@ export default function AI_Prompt({
       createClientMessageId,
       uploadMessageAttachments,
       messages,
+      workflowPlannerContext,
+      onWorkflowNodesPlanned,
     ]
   )
 
@@ -3358,6 +3531,70 @@ export default function AI_Prompt({
   const glassLayerFront =
     "bg-transparent backdrop-blur-xl supports-[backdrop-filter]:bg-transparent"
   const glassBorder = "border-sidebar-border"
+  const commandMenuPortal =
+    commandMenu &&
+    commandItems.length > 0 &&
+    commandMenuPosition &&
+    typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="fixed isolate no-scrollbar overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-background p-1.5 text-foreground shadow-[0_18px_48px_rgba(0,0,0,0.18)] dark:bg-popover dark:text-popover-foreground"
+            style={{
+              left: commandMenuPosition.left,
+              top: commandMenuPosition.top,
+              width: commandMenuPosition.width,
+              maxHeight: commandMenuPosition.maxHeight,
+              zIndex: 2147483647,
+              transform:
+                commandMenuPosition.placement === "above"
+                  ? "translateY(-100%)"
+                  : undefined,
+              isolation: "isolate",
+            }}
+          >
+            {commandItems.map((item, index) => (
+              <button
+                key={`${commandMenu.type}-${item}`}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectCommandItem(item)}
+                className={cn(
+                  "relative flex h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2 text-sm outline-hidden transition-colors",
+                  index === highlightedCommandIndex
+                    ? "bg-accent text-accent-foreground"
+                    : "text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  {commandMenu.type === "skill" ? (
+                    <span
+                      className={cn(
+                        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md",
+                        item.toLowerCase() === CREATE_SKILL_COMMAND
+                          ? "bg-primary/12 text-primary"
+                          : "bg-pink-500/12 text-pink-600 dark:bg-pink-400/14 dark:text-pink-300"
+                      )}
+                    >
+                      {item.toLowerCase() === CREATE_SKILL_COMMAND ? (
+                        <Plus className="h-3.5 w-3.5" />
+                      ) : (
+                        <Bot className="h-3.5 w-3.5" />
+                      )}
+                    </span>
+                  ) : (
+                    renderAppLogo(item)
+                  )}
+                  <span>{commandMenu.type === "skill" ? `/${item}` : item}</span>
+                </span>
+                {commandMenu.type === "app" && connectedApps.includes(item) && (
+                  <Check className="h-4 w-4 text-primary" />
+                )}
+              </button>
+            ))}
+          </div>,
+          document.body
+        )
+      : null
 
   return (
     <div
@@ -3367,6 +3604,7 @@ export default function AI_Prompt({
         dockComposerToBottom ? "flex h-full min-h-0 flex-col py-4" : "py-4"
       )}
     >
+      {commandMenuPortal}
       <Dialog
         open={Boolean(pendingEditConfirmation)}
         onOpenChange={(open) => {
@@ -4038,6 +4276,7 @@ export default function AI_Prompt({
           </div>
         ) : null}
         <div
+          ref={composerShellRef}
           className={cn(
             "relative z-50 overflow-visible transition-transform duration-300 ease-out",
             attachedFiles.length > 0 && "translate-y-[-10px]",
@@ -4427,56 +4666,6 @@ export default function AI_Prompt({
               </div>
             </div>
           </div>
-          {commandMenu && commandItems.length > 0 && (
-            <div
-              className={cn(
-                "absolute bottom-[calc(100%+0.5rem)] left-3 z-[140] no-scrollbar max-h-40 w-[min(22rem,calc(100%-1.5rem))] overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg shadow-black/10"
-              )}
-            >
-              {commandItems.map((item, index) => (
-                <button
-                  key={`${commandMenu.type}-${item}`}
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => selectCommandItem(item)}
-                  className={cn(
-                    "relative flex h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2 text-sm outline-hidden transition-colors",
-                    index === highlightedCommandIndex
-                      ? "bg-accent text-accent-foreground"
-                      : "text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    {commandMenu.type === "skill" ? (
-                      <span
-                        className={cn(
-                          "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md",
-                          item.toLowerCase() === CREATE_SKILL_COMMAND
-                            ? "bg-primary/12 text-primary"
-                            : "bg-pink-500/12 text-pink-600 dark:bg-pink-400/14 dark:text-pink-300"
-                        )}
-                      >
-                        {item.toLowerCase() === CREATE_SKILL_COMMAND ? (
-                          <Plus className="h-3.5 w-3.5" />
-                        ) : (
-                          <Bot className="h-3.5 w-3.5" />
-                        )}
-                      </span>
-                    ) : (
-                      renderAppLogo(item)
-                    )}
-                    <span>
-                      {commandMenu.type === "skill" ? `/${item}` : item}
-                    </span>
-                  </span>
-                  {commandMenu.type === "app" &&
-                    connectedApps.includes(item) && (
-                      <Check className="h-4 w-4 text-primary" />
-                    )}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>

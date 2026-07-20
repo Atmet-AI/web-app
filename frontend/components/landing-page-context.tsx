@@ -434,7 +434,7 @@ export function LandingPageProvider({ children }: { children: React.ReactNode })
         const previousRootBackground = root.style.backgroundColor
         const previousBodyBackground = body.style.backgroundColor
         const previousColorScheme = root.style.colorScheme
-        const background = theme === 'dark' ? 'oklch(0.075 0 0)' : '#ffffff'
+        const background = theme === 'dark' ? 'oklch(0.147 0.004 49.25)' : '#ffffff'
 
         root.style.backgroundColor = background
         body.style.backgroundColor = background

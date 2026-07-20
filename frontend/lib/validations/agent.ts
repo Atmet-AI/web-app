@@ -5,8 +5,45 @@ const jsonObjectSchema = z.record(z.string(), z.unknown())
 export const agentStatusSchema = z.enum(["draft", "active", "paused", "archived"])
 
 export const defaultAgentBlueprint = {
-  version: 1,
-  steps: [],
+  version: 2,
+  source: "playground",
+  nodes: [
+    {
+      id: "node-1",
+      name: "New node",
+      type: "action",
+      app: "Atmet",
+      provider: "Atmet",
+      prompt: "Describe what this agent should do.",
+      runtime: {
+        expected_ms: 15000,
+        timeout_ms: 60000,
+      },
+      actions: [
+        {
+          id: "action-1",
+          name: "Plan this node",
+          prompt: "Describe the task for this node or ask Atmet to build the workflow.",
+          runtime_ms: 15000,
+        },
+      ],
+      status: "ready",
+    },
+  ],
+  steps: [
+    {
+      id: "node-1-action-1",
+      node_id: "node-1",
+      action_id: "action-1",
+      name: "New node",
+      type: "action",
+      provider: "Atmet",
+      app: "Atmet",
+      prompt: "Describe what this agent should do.",
+      runtime_ms: 15000,
+      status: "ready",
+    },
+  ],
   required_apps: [],
   approval_policy: {},
 } as const

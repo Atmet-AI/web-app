@@ -2,6 +2,7 @@ import { INTEGRATIONS_CATALOG } from "@/lib/integrations-catalog"
 import {
   hasAppInConversation,
   hasExplicitAppMention,
+  hasNamedAppMention,
 } from "@/lib/integrations/app-approval"
 
 export type AppMiniUiField = {
@@ -39,6 +40,7 @@ function appEnabled(input: {
   appName: string
 }) {
   return (
+    hasNamedAppMention(input.content, input.appName) ||
     hasExplicitAppMention(input.content, input.appName) ||
     hasAppInConversation(input.conversationMessages, input.appName)
   )

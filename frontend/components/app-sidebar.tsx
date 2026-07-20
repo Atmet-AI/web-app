@@ -12,6 +12,7 @@ import {
 } from "@/lib/workspace-context"
 import {
   ATMET_APPEARANCE_SETTINGS_STORAGE_KEY,
+  announceAppearanceSettingsChanged,
   announceSoundsEnabled,
   appearanceSettingsStorageKey,
 } from "@/lib/sound-preferences"
@@ -113,6 +114,7 @@ import {
   Briefcase,
   Camera,
   Check,
+  CircleDotDashed,
   Clock3,
   Copy,
   Gift,
@@ -187,7 +189,6 @@ const baseSettingsSections = [
   "Notifications",
   "Members",
   "Integrations",
-  "Usage and limits",
   "Data controls",
   "Refer and earn",
   "Billing",
@@ -468,7 +469,6 @@ const settingsContent: Record<SettingsSection, string[]> = {
   Workspace: ["Workspace name", "Default workflow", "Country"],
   Members: ["Members", "Roles and permissions", "Invites"],
   Integrations: ["Workspace apps", "Member access", "Enforcement policy"],
-  "Usage and limits": ["Usage summary", "Rate limits", "Quota alerts"],
   "Data controls": ["Retention policy", "Data export", "Delete requests"],
   "Refer and earn": ["Referral link", "Rewards", "Payout value"],
   Billing: ["Payment methods", "Invoices", "Billing history"],
@@ -486,7 +486,6 @@ const settingsSectionIcons: Record<
   Workspace: IconBuilding,
   Members: IconUsers,
   Integrations: IconApps,
-  "Usage and limits": IconChartBar,
   "Data controls": IconShield,
   "Refer and earn": Gift,
   Billing: IconCreditCard,
@@ -560,7 +559,7 @@ const OPEN_SETTINGS_PANEL_EVENT = "open-settings-panel"
 const PLATFORM_ADMIN_WORKSPACE_ID = "__platform_admin__"
 
 type OpenSettingsPanelDetail = {
-  section?: SettingsSection
+  section?: SettingsSection | "Usage and limits"
   memberId?: string
   memberQuery?: string
   membersAction?: "invite"
@@ -580,6 +579,7 @@ type AppearanceSettings = {
   language: string
   fontScale: FontScale
   soundsEnabled: boolean
+  playgroundDotsEnabled: boolean
 }
 
 function applyFixedPrimaryColor() {
@@ -1435,6 +1435,7 @@ function GeneralSettingsContent({
       language: "English",
       fontScale: "default",
       soundsEnabled: true,
+      playgroundDotsEnabled: false,
     })
   const [savedAppearanceSettings, setSavedAppearanceSettings] =
     React.useState<AppearanceSettings>({
@@ -1443,6 +1444,7 @@ function GeneralSettingsContent({
       language: "English",
       fontScale: "default",
       soundsEnabled: true,
+      playgroundDotsEnabled: false,
     })
 
   React.useEffect(() => {
@@ -1461,6 +1463,7 @@ function GeneralSettingsContent({
       language: "English",
       fontScale: "default",
       soundsEnabled: true,
+      playgroundDotsEnabled: false,
     }
 
     if (typeof window === "undefined") {
@@ -1498,7 +1501,9 @@ function GeneralSettingsContent({
     appearanceSettings.timezone !== savedAppearanceSettings.timezone ||
     appearanceSettings.language !== savedAppearanceSettings.language ||
     appearanceSettings.fontScale !== savedAppearanceSettings.fontScale ||
-    appearanceSettings.soundsEnabled !== savedAppearanceSettings.soundsEnabled
+    appearanceSettings.soundsEnabled !== savedAppearanceSettings.soundsEnabled ||
+    appearanceSettings.playgroundDotsEnabled !==
+      savedAppearanceSettings.playgroundDotsEnabled
 
   const themePreviewImageById: Record<"light" | "dark" | "system", string> = {
     light: "/white.png",
@@ -1646,6 +1651,29 @@ function GeneralSettingsContent({
               }
             />
           </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/20 px-3 py-2.5">
+            <div className="flex min-w-0 items-start gap-2">
+              <CircleDotDashed className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  Playground points
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Show the dotted background behind workflow nodes.
+                </p>
+              </div>
+            </div>
+            <AdminToggle
+              checked={appearanceSettings.playgroundDotsEnabled}
+              onChange={(playgroundDotsEnabled) =>
+                setAppearanceSettings((prev) => ({
+                  ...prev,
+                  playgroundDotsEnabled,
+                }))
+              }
+            />
+          </div>
         </section>
 
         <section className="space-y-2">
@@ -1752,6 +1780,7 @@ function GeneralSettingsContent({
             applyFixedPrimaryColor()
             applyGlobalFontScale(appearanceSettings.fontScale)
             announceSoundsEnabled(appearanceSettings.soundsEnabled)
+            announceAppearanceSettingsChanged(appearanceSettings)
             if (typeof window !== "undefined") {
               window.localStorage.setItem(
                 appearanceSettingsStorageKey(userPreferenceKey),
@@ -3637,6 +3666,29 @@ function UsageLimitsSettingsContent() {
   )
 }
 
+export function UsageLimitsPageContent() {
+  return (
+    <div className="flex min-h-[calc(100vh-2.5rem)] flex-1 flex-col bg-background text-foreground dark:bg-sidebar">
+      <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="space-y-5">
+          <header className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Usage and limits
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Monitor workspace usage, quotas, and member limits.
+            </p>
+          </header>
+
+          <div data-settings-scope="true">
+            <UsageLimitsSettingsContent />
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function IntegrationsSettingsContent() {
   const { activeWorkspaceId, apiFetch } = useWorkspace()
   const [nameFilter, setNameFilter] = React.useState("")
@@ -4959,8 +5011,14 @@ function AdminOverviewConsoleContent({
         ))}
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-border bg-background">
-        <div className="border-b border-border px-3 py-2.5">
+      <section
+        data-platform-table-list="true"
+        className="overflow-hidden rounded-xl border border-border bg-background"
+      >
+        <div
+          data-platform-table-toolbar="true"
+          className="border-b border-border px-3 py-2.5"
+        >
           <p className="text-sm font-medium text-foreground">Recent activity</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_150px_150px_150px]">
             <div className="relative">
@@ -4995,9 +5053,13 @@ function AdminOverviewConsoleContent({
             />
           </div>
         </div>
-        <div className="divide-y divide-border">
+        <div
+          data-platform-table-body="true"
+          className="divide-y divide-border"
+        >
           {filteredActivityRows.map((row) => (
             <div
+              data-platform-table-row="true"
               key={row.id}
               onClick={() => openUserProfile(row.actor, "Admin overview")}
               className={cn(
@@ -10169,6 +10231,10 @@ function parseStoredAppearanceSettings(
         typeof parsed.soundsEnabled === "boolean"
           ? parsed.soundsEnabled
           : fallbackSettings.soundsEnabled,
+      playgroundDotsEnabled:
+        typeof parsed.playgroundDotsEnabled === "boolean"
+          ? parsed.playgroundDotsEnabled
+          : fallbackSettings.playgroundDotsEnabled,
     } satisfies AppearanceSettings
   } catch {
     return fallbackSettings
@@ -10177,6 +10243,7 @@ function parseStoredAppearanceSettings(
 
 export function SettingsPageContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { theme, setTheme } = useTheme()
   const {
     workspaces,
@@ -10224,13 +10291,18 @@ export function SettingsPageContent() {
   }, [])
 
   React.useEffect(() => {
+    if (requestedSection === "Usage and limits") {
+      router.replace("/usage-limits")
+      return
+    }
+
     if (
       requestedSection &&
       (baseSettingsSections as readonly string[]).includes(requestedSection)
     ) {
       setActiveSettingsSection(requestedSection as SettingsSection)
     }
-  }, [requestedSection])
+  }, [requestedSection, router])
 
   const isPlatformAdmin =
     liveUser?.platform_role === "super_admin" ||
@@ -10370,8 +10442,6 @@ export function SettingsPageContent() {
       />
     ) : activeSettingsSection === "Integrations" ? (
       <IntegrationsSettingsContent />
-    ) : activeSettingsSection === "Usage and limits" ? (
-      <UsageLimitsSettingsContent />
     ) : activeSettingsSection === "Data controls" ? (
       <DataControlsSettingsContent />
     ) : activeSettingsSection === "Refer and earn" ? (
@@ -10379,7 +10449,7 @@ export function SettingsPageContent() {
     ) : activeSettingsSection === "Billing" ? (
       <BillingSettingsContent
         onGoToMembers={() => setActiveSettingsSection("Members")}
-        onGoToUsageLimits={() => setActiveSettingsSection("Usage and limits")}
+        onGoToUsageLimits={() => router.push("/usage-limits")}
       />
     ) : (
       <>
@@ -10546,6 +10616,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         language: "English",
         fontScale: "default",
         soundsEnabled: true,
+        playgroundDotsEnabled: false,
       }
       const storageKey = appearanceSettingsStorageKey(userPreferenceKey)
       const rawSettings =
@@ -10575,6 +10646,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       language: "English",
       fontScale: "default",
       soundsEnabled: true,
+      playgroundDotsEnabled: false,
     }
     const rawSettings =
       window.localStorage.getItem(
@@ -11066,6 +11138,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const handleOpenSettingsPanel = (event: Event) => {
       const detail = (event as CustomEvent<OpenSettingsPanelDetail>).detail
       const requestedSection = detail?.section
+      if (requestedSection === "Usage and limits") {
+        setSettingsOpen(false)
+        router.push("/usage-limits")
+        return
+      }
       if (requestedSection === "Refer and earn") return
       const hasMemberTarget = Boolean(detail?.memberId || detail?.memberQuery)
       const fallbackSection = hasMemberTarget ? "Members" : undefined
@@ -11103,7 +11180,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         OPEN_SETTINGS_PANEL_EVENT,
         handleOpenSettingsPanel as EventListener
       )
-  }, [])
+  }, [router])
 
   const renderSettingsSectionButton = (section: SettingsSection) => {
     const SectionIcon = settingsSectionIcons[section]
@@ -11180,7 +11257,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       {...props}
     >
       <SidebarContent>
-        <SidebarGroup className="hidden pt-0">
+        <SidebarGroup className="px-0 pt-2 pb-1">
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
@@ -11502,7 +11579,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </div>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="hidden">
+      <SidebarFooter className="border-t border-sidebar-border/70 px-0 py-2">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -11517,6 +11594,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <RefreshCw className="h-3.5 w-3.5 shrink-0 opacity-80" />
               <span>Changelogs</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname.startsWith("/usage-limits")}
+              className="group-data-[collapsible=icon]:justify-center"
+              render={<Link href="/usage-limits" />}
+            >
+              <IconChartBar className="h-3.5 w-3.5 shrink-0 opacity-80" />
+              <span>Usage</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           {isPlatformAdmin ? (
@@ -11682,8 +11769,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         />
                       ) : activeSettingsSection === "Integrations" ? (
                         <IntegrationsSettingsContent />
-                      ) : activeSettingsSection === "Usage and limits" ? (
-                        <UsageLimitsSettingsContent />
                       ) : activeSettingsSection === "Data controls" ? (
                         <DataControlsSettingsContent />
                       ) : activeSettingsSection === "Refer and earn" ? (
@@ -11693,9 +11778,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           onGoToMembers={() =>
                             setActiveSettingsSection("Members")
                           }
-                          onGoToUsageLimits={() =>
-                            setActiveSettingsSection("Usage and limits")
-                          }
+                          onGoToUsageLimits={() => {
+                            setSettingsOpen(false)
+                            router.push("/usage-limits")
+                          }}
                         />
                       ) : (
                         <>

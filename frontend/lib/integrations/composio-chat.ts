@@ -18,6 +18,7 @@ export type ConnectedAppProvider =
   | "google-sheets"
   | "google-docs"
   | "chatgpt"
+  | "x"
 
 type ComposioChatToolResult =
   | {
@@ -178,6 +179,22 @@ const GENERIC_CONNECTED_APPS: GenericConnectedApp[] = [
       /\bopenai\b/i,
       /\bgpt\b/i,
       /\bvector\s*store(s)?\b/i,
+      /\bimage\s*generation\b/i,
+      /\bgenerate\s+(an?\s+)?image\b/i,
+      /\bcontent\s+generation\b/i,
+    ],
+  },
+  {
+    provider: "x",
+    toolkit: "x",
+    label: "X",
+    aliases: [
+      /\bx\b/i,
+      /\btwitter\b/i,
+      /\btweet(s|ing)?\b/i,
+      /\bpost\s+on\s+x\b/i,
+      /\bpost\s+to\s+x\b/i,
+      /\bsocial\s+post\b/i,
     ],
   },
 ]
@@ -1039,6 +1056,30 @@ function rankToolSchemaForRequest(schema: ToolSchema, content: string) {
     if (/\b(search|list|find|get)\b/.test(text)) score += 4
   }
 
+  if (/\b(generate|create|draft|write|summari[sz]e|classify|extract|image|picture|visual|caption|content)\b/.test(request)) {
+    if (/\b(openai|chatgpt|gpt|image|responses?|completion|generation)\b/.test(text)) {
+      score += 4
+    }
+    if (/\b(image|picture|visual|dall|generate)\b/.test(request)) {
+      if (/\b(image|dall|vision|generate)\b/.test(text)) score += 6
+      if (/\bfile|upload|vector|delete|list\b/.test(text)) score -= 3
+    }
+    if (/\b(content|caption|draft|write|text|copy)\b/.test(request)) {
+      if (/\b(chat|completion|response|text|message)\b/.test(text)) score += 5
+    }
+  }
+
+  if (/\b(x|twitter|tweet|post|publish)\b/.test(request)) {
+    if (/\b(x|twitter|tweet|post|status|media|upload)\b/.test(text)) score += 5
+    if (/\b(post|tweet|create|publish)\b/.test(request)) {
+      if (/\b(create|post|tweet|publish|status)\b/.test(text)) score += 7
+      if (/\b(delete|remove|timeline|search|lookup|user)\b/.test(text)) score -= 3
+    }
+    if (/\b(image|media|photo|picture|file|url)\b/.test(request)) {
+      if (/\b(media|image|upload|photo|file)\b/.test(text)) score += 4
+    }
+  }
+
   return score
 }
 
@@ -1069,6 +1110,10 @@ async function planComposioToolExecution(input: {
           "For Google Calendar event creation, prefer QUICK_ADD when the schema is available and the user gave a natural-language meeting request. Include attendee email, date/time, duration, title, and timezone in the quick-add text.",
           "For Google Calendar list/search requests like today's meetings, use the current date/time from context to build time_min/time_max or timeMin/timeMax for that day.",
           "For Google Calendar follow-up answers with numbered fields, combine them with the earlier calendar request in the conversation context and execute when title, date/time, attendee, duration, and calendar are known.",
+          "For ChatGPT/OpenAI image generation, use the previous workflow output as prompt context when present. If the request says to use an email title or subject, build the image prompt from that title/subject.",
+          "For ChatGPT/OpenAI content generation, return generated text or structured content that downstream workflow nodes can use.",
+          "For X/Twitter posting, use the previous workflow output as media/text context when present. If the previous output contains an image URL, file URL, generated image, or media id, attach it when the selected schema supports media.",
+          "For X/Twitter create post actions, do not ask for another approval just because the app was mentioned. Ask only for truly missing required fields like post text or media when the schema requires them and no previous output provides them.",
         ].join(" "),
       },
       {

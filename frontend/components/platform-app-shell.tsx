@@ -99,6 +99,7 @@ type StoredAppearanceSettings = {
   language?: string
   fontScale?: "smaller" | "default" | "bigger"
   soundsEnabled?: boolean
+  playgroundDotsEnabled?: boolean
 }
 
 function buildInitials(value: string | null | undefined, fallback = "U") {
@@ -305,6 +306,7 @@ export function PlatformAppShell({ children }: { children: React.ReactNode }) {
       language: "English",
       fontScale: "default",
       soundsEnabled: true,
+      playgroundDotsEnabled: false,
       ...currentSettings,
       theme: nextTheme,
     }
@@ -335,7 +337,10 @@ export function PlatformAppShell({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <div className="flex h-svh min-h-0 flex-col bg-sidebar px-3 pt-1 pb-3 text-foreground dark:bg-black">
+    <div
+      data-platform-scope="true"
+      className="flex h-svh min-h-0 flex-col bg-sidebar px-3 pt-1 pb-3 text-foreground dark:bg-black"
+    >
       <header className="relative mx-auto flex h-9 w-full shrink-0 items-center justify-between gap-3 px-1">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex shrink-0 items-center gap-2">
